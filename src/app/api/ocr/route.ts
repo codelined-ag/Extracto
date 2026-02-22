@@ -560,13 +560,38 @@ function parseJsonCandidate(rawText: string): unknown | null {
     return null;
   }
 
+  const directCandidates = [
+    trimmed,
+    trimmed.replace(/^json\s*/iu, "").trim(),
+    trimmed.replace(/^['"]+|['"]+$/g, "").trim(),
+  ];
+
   const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
-  const candidate = (fencedMatch?.[1] || trimmed).trim();
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    return null;
+  if (fencedMatch?.[1]) {
+    directCandidates.unshift(fencedMatch[1].trim());
   }
+
+  for (const candidate of directCandidates) {
+    if (!candidate) continue;
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // keep trying fallbacks
+    }
+  }
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    const bracketCandidate = trimmed.slice(start, end + 1).trim();
+    try {
+      return JSON.parse(bracketCandidate);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 function normalizeStructuredMarkdownPayload(

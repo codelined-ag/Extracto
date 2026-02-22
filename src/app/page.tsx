@@ -225,6 +225,46 @@ const formatEta = (value?: number | null): string => {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 };
 
+function getMarkdownFromJsonPayload(payload: unknown, fallback = ""): string {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return fallback;
+  }
+
+  const typed = payload as Record<string, unknown>;
+  if (typeof typed.markdown === "string" && typed.markdown.trim()) {
+    return typed.markdown;
+  }
+
+  if (
+    typed.structured &&
+    typeof typed.structured === "object" &&
+    !Array.isArray(typed.structured) &&
+    typeof (typed.structured as Record<string, unknown>).markdown === "string" &&
+    ((typed.structured as Record<string, unknown>).markdown as string).trim()
+  ) {
+    return (typed.structured as Record<string, unknown>).markdown as string;
+  }
+
+  if (typeof typed.text === "string" && typed.text.trim()) {
+    return typed.text;
+  }
+
+  return fallback;
+}
+
+function getStructuredJsonPayload(payload: unknown): Record<string, unknown> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return {};
+  }
+
+  const typed = payload as Record<string, unknown>;
+  if (typed.structured && typeof typed.structured === "object" && !Array.isArray(typed.structured)) {
+    return typed.structured as Record<string, unknown>;
+  }
+
+  return typed;
+}
+
 const PDF_RENDER_SCALE = 1.5;
 const PDF_MAX_DIMENSION = 1600;
 const PDFJS_MODULE_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
@@ -401,6 +441,18 @@ export default function EstractoPage() {
   });
 
   const selectedFile = files.find((f) => f.id === selectedFileId);
+  const selectedFileMarkdown = selectedFile?.result
+    ? getMarkdownFromJsonPayload(selectedFile.result.json, selectedFile.result.text)
+    : "";
+  const selectedFileStructuredJson = selectedFile?.result
+    ? getStructuredJsonPayload(selectedFile.result.json)
+    : {};
+  const selectedHistoryMarkdown = selectedHistoryJob
+    ? getMarkdownFromJsonPayload(selectedHistoryJob.result, selectedHistoryJob.extractedText || "")
+    : "";
+  const selectedHistoryStructuredJson = selectedHistoryJob
+    ? getStructuredJsonPayload(selectedHistoryJob.result)
+    : {};
   const completedCount = files.filter((f) => f.status === "completed").length;
   const errorCount = files.filter((f) => f.status === "error").length;
   const pendingCount = files.filter((f) => f.status === "pending").length;
@@ -645,7 +697,7 @@ export default function EstractoPage() {
     const fileStem = selectedHistoryJob.fileName.replace(/\.[^/.]+$/, "") || "ocr-result";
 
     if (type === "md") {
-      const markdown = selectedHistoryJob.extractedText || "";
+      const markdown = selectedHistoryMarkdown;
       const blob = new Blob([markdown], { type: "text/markdown" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -656,7 +708,7 @@ export default function EstractoPage() {
       return;
     }
 
-    const jsonValue = selectedHistoryJob.result ?? {};
+    const jsonValue = selectedHistoryStructuredJson;
     const blob = new Blob([JSON.stringify(jsonValue, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -758,7 +810,9 @@ export default function EstractoPage() {
   const copyToClipboard = async (type: "md" | "json") => {
     if (!selectedFile?.result) return;
 
-    const text = type === "md" ? selectedFile.result.text : JSON.stringify(selectedFile.result.json, null, 2);
+    const text = type === "md"
+      ? selectedFileMarkdown
+      : JSON.stringify(selectedFileStructuredJson, null, 2);
     await navigator.clipboard.writeText(text);
     setCopied(type);
     setTimeout(() => setCopied(null), 2000);
@@ -773,7 +827,9 @@ export default function EstractoPage() {
   const downloadResult = (type: "md" | "json") => {
     if (!selectedFile?.result) return;
 
-    const text = type === "md" ? selectedFile.result.text : JSON.stringify(selectedFile.result.json, null, 2);
+    const text = type === "md"
+      ? selectedFileMarkdown
+      : JSON.stringify(selectedFileStructuredJson, null, 2);
     const blob = new Blob([text], { type: type === "md" ? "text/markdown" : "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -811,8 +867,8 @@ export default function EstractoPage() {
     completedFiles.forEach((file) => {
       if (file.result) {
         const baseName = file.name.replace(/\.[^/.]+$/, "");
-        mdFolder?.file(`${baseName}.md`, file.result.text);
-        jsonFolder?.file(`${baseName}.json`, JSON.stringify(file.result.json, null, 2));
+        mdFolder?.file(`${baseName}.md`, getMarkdownFromJsonPayload(file.result.json, file.result.text));
+        jsonFolder?.file(`${baseName}.json`, JSON.stringify(getStructuredJsonPayload(file.result.json), null, 2));
       }
     });
 
@@ -1567,20 +1623,28 @@ export default function EstractoPage() {
                         <div className="px-3 pt-2 border-b">
                           <TabsList className="h-8">
                             <TabsTrigger value="markdown" className="text-xs h-6">Markdown</TabsTrigger>
+                            <TabsTrigger value="markdown-raw" className="text-xs h-6">Markdown raw</TabsTrigger>
                             <TabsTrigger value="json" className="text-xs h-6">JSON</TabsTrigger>
                           </TabsList>
                         </div>
                         <TabsContent value="markdown" className="flex-1 m-0 min-h-0">
                           <ScrollArea className="h-full">
                             <div className="prose prose-sm dark:prose-invert max-w-none p-4">
-                              <ReactMarkdown>{selectedHistoryJob.extractedText || ""}</ReactMarkdown>
+                              <ReactMarkdown>{selectedHistoryMarkdown}</ReactMarkdown>
                             </div>
+                          </ScrollArea>
+                        </TabsContent>
+                        <TabsContent value="markdown-raw" className="flex-1 m-0 min-h-0">
+                          <ScrollArea className="h-full">
+                            <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                              {selectedHistoryMarkdown}
+                            </pre>
                           </ScrollArea>
                         </TabsContent>
                         <TabsContent value="json" className="flex-1 m-0 min-h-0">
                           <ScrollArea className="h-full">
-                            <pre className="p-4 text-xs font-mono overflow-x-auto">
-                              {JSON.stringify(selectedHistoryJob.result ?? {}, null, 2)}
+                            <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                              {JSON.stringify(selectedHistoryStructuredJson, null, 2)}
                             </pre>
                           </ScrollArea>
                         </TabsContent>
@@ -2214,6 +2278,10 @@ export default function EstractoPage() {
                                   <FileText className="h-3 w-3" />
                                   Markdown
                                 </TabsTrigger>
+                                <TabsTrigger value="markdown-raw" className="text-xs gap-1.5 h-6">
+                                  <FileText className="h-3 w-3" />
+                                  Markdown raw
+                                </TabsTrigger>
                                 <TabsTrigger value="json" className="text-xs gap-1.5 h-6">
                                   <Code className="h-3 w-3" />
                                   JSON
@@ -2224,15 +2292,23 @@ export default function EstractoPage() {
                             <TabsContent value="markdown" className="flex-1 m-0 min-h-0">
                               <ScrollArea className="h-full">
                                 <div className="prose prose-sm dark:prose-invert max-w-none p-4">
-                                  <ReactMarkdown>{selectedFile.result.text}</ReactMarkdown>
+                                  <ReactMarkdown>{selectedFileMarkdown}</ReactMarkdown>
                                 </div>
+                              </ScrollArea>
+                            </TabsContent>
+
+                            <TabsContent value="markdown-raw" className="flex-1 m-0 min-h-0">
+                              <ScrollArea className="h-full">
+                                <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                                  {selectedFileMarkdown}
+                                </pre>
                               </ScrollArea>
                             </TabsContent>
 
                             <TabsContent value="json" className="flex-1 m-0 min-h-0">
                               <ScrollArea className="h-full">
-                                <pre className="p-4 text-xs font-mono overflow-x-auto">
-                                  {JSON.stringify(selectedFile.result.json, null, 2)}
+                                <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                                  {JSON.stringify(selectedFileStructuredJson, null, 2)}
                                 </pre>
                               </ScrollArea>
                             </TabsContent>
