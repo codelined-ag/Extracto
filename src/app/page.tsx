@@ -415,6 +415,7 @@ export default function EstractoPage() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [isLoadingModels, setIsLoadingModels] = React.useState(false);
   const [isSavingApiSettings, setIsSavingApiSettings] = React.useState(false);
+  const [isSigningOut, setIsSigningOut] = React.useState(false);
   const [modelError, setModelError] = React.useState("");
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyJobs, setHistoryJobs] = React.useState<HistoryJobSummary[]>([]);
@@ -454,6 +455,7 @@ export default function EstractoPage() {
     ? getStructuredJsonPayload(selectedHistoryJob.result)
     : {};
   const completedCount = files.filter((f) => f.status === "completed").length;
+  const canExportZip = Boolean(completedCount > 0 || selectedFile?.status === "completed");
   const errorCount = files.filter((f) => f.status === "error").length;
   const pendingCount = files.filter((f) => f.status === "pending").length;
   const activeProcessingFile = files.find((f) => f.status === "processing") || null;
@@ -1279,6 +1281,7 @@ export default function EstractoPage() {
   };
 
   const signOut = async () => {
+    setIsSigningOut(true);
     try {
       const response = await fetch("/api/auth/signout", { method: "POST" });
       if (!response.ok) {
@@ -1292,6 +1295,8 @@ export default function EstractoPage() {
         description: error instanceof Error ? error.message : "Please try again",
         variant: "destructive",
       });
+    } finally {
+      setIsSigningOut(false);
     }
   };
 
@@ -1347,29 +1352,31 @@ export default function EstractoPage() {
 
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
               onClick={openHistoryModal}
+              aria-label="Past OCR"
+              title="Past OCR"
             >
-              <History className="h-4 w-4 mr-1.5" />
-              Past OCR
+              <History className="h-4 w-4" />
             </Button>
 
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
               onClick={() => {
                 setApiSettingsDraft(apiSettings);
                 setApiSettingsOpen(true);
               }}
+              aria-label="Settings"
+              title="Settings"
             >
-              <Settings2 className="h-4 w-4 mr-1.5" />
-              API Settings
+              <Settings2 className="h-4 w-4" />
             </Button>
 
             {modelError ? <p className="text-xs text-destructive max-w-[180px] truncate">{modelError}</p> : null}
 
             {/* Export All Button */}
-            {completedCount > 0 && (
+            {canExportZip && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -1380,11 +1387,6 @@ export default function EstractoPage() {
                 </Button>
               </motion.div>
             )}
-
-            <Button variant="outline" size="sm" onClick={signOut}>
-              <LogOut className="h-4 w-4 mr-1.5" />
-              Sign out
-            </Button>
 
             <ThemeToggle />
           </div>
@@ -1404,7 +1406,7 @@ export default function EstractoPage() {
           <DialogHeader>
             <DialogTitle>API Endpoint Settings</DialogTitle>
             <DialogDescription>
-              Configure model host and API key used for fetching available models.
+              Configure provider access and account actions.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -1473,6 +1475,23 @@ export default function EstractoPage() {
                 }
                 placeholder="sk-..."
               />
+            </div>
+            <Separator />
+            <div className="space-y-2">
+              <Label>Account</Label>
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={signOut}
+                disabled={isSigningOut}
+              >
+                {isSigningOut ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <LogOut className="h-4 w-4 mr-1.5" />
+                )}
+                Sign out
+              </Button>
             </div>
           </div>
           <DialogFooter>
@@ -2235,7 +2254,7 @@ export default function EstractoPage() {
                         <div
                           className={cn(
                             "flex flex-col min-h-0",
-                            viewMode === "split" ? "w-1/2 border-r" : "flex-1"
+                            viewMode === "split" ? "w-[58%] border-r" : "flex-1"
                           )}
                         >
                           <div className="px-3 py-2 border-b bg-muted/30">
@@ -2249,7 +2268,7 @@ export default function EstractoPage() {
                                   animate={{ opacity: 1, scale: 1 }}
                                   src={selectedFile.preview}
                                   alt={selectedFile.name}
-                                  className="max-w-full max-h-[500px] object-contain rounded-md shadow-sm"
+                                  className="max-w-full max-h-[78vh] object-contain rounded-md shadow-sm"
                                 />
                               ) : (
                                 <div className="flex flex-col items-center text-muted-foreground">
@@ -2268,7 +2287,7 @@ export default function EstractoPage() {
                         <div
                           className={cn(
                             "flex flex-col min-h-0",
-                            viewMode === "split" ? "w-1/2" : "flex-1"
+                            viewMode === "split" ? "w-[42%]" : "flex-1"
                           )}
                         >
                           <Tabs defaultValue="markdown" className="flex-1 flex flex-col min-h-0">
