@@ -1402,7 +1402,7 @@ export default function EstractoPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>API Endpoint Settings</DialogTitle>
             <DialogDescription>
@@ -1523,7 +1523,7 @@ export default function EstractoPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-5xl h-[85vh] flex flex-col">
+        <DialogContent className="w-[min(96vw,1200px)] max-w-[96vw] h-[min(90vh,860px)] flex flex-col overflow-hidden p-4 sm:p-5">
           <DialogHeader>
             <DialogTitle>Past OCR Runs</DialogTitle>
             <DialogDescription>
@@ -1531,8 +1531,8 @@ export default function EstractoPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid md:grid-cols-[300px_1fr] gap-4 flex-1 min-h-0">
-            <Card className="min-h-0 flex flex-col">
+          <div className="grid md:grid-cols-[280px_minmax(0,1fr)] gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
+            <Card className="min-h-0 min-w-0 flex flex-col">
               <CardHeader className="py-3 px-4 border-b">
                 <CardTitle className="text-sm">History</CardTitle>
               </CardHeader>
@@ -1587,7 +1587,7 @@ export default function EstractoPage() {
               </CardContent>
             </Card>
 
-            <Card className="min-h-0 flex flex-col">
+            <Card className="min-h-0 min-w-0 flex flex-col">
               <CardHeader className="py-3 px-4 border-b">
                 <CardTitle className="text-sm">Run Details</CardTitle>
               </CardHeader>
@@ -1601,7 +1601,7 @@ export default function EstractoPage() {
                     <p className="text-sm text-muted-foreground">Select a run to view details.</p>
                   </div>
                 ) : (
-                  <div className="h-full flex flex-col min-h-0">
+                  <div className="h-full flex flex-col min-h-0 min-w-0">
                     <div className="p-4 border-b space-y-2">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-medium truncate">{selectedHistoryJob.fileName}</p>
@@ -1623,7 +1623,7 @@ export default function EstractoPage() {
                       </p>
                     </div>
 
-                    <div className="grid md:grid-cols-[220px_1fr] flex-1 min-h-0">
+                    <div className="grid md:grid-cols-[220px_minmax(0,1fr)] flex-1 min-h-0 min-w-0">
                       <div className="border-r p-3 flex items-center justify-center bg-muted/20">
                         {selectedHistoryJob.sourcePreview ? (
                           <img
@@ -1638,30 +1638,30 @@ export default function EstractoPage() {
                           </div>
                         )}
                       </div>
-                      <Tabs defaultValue="markdown" className="flex-1 flex flex-col min-h-0">
+                      <Tabs defaultValue="markdown" className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
                         <div className="px-3 pt-2 border-b">
-                          <TabsList className="h-8">
-                            <TabsTrigger value="markdown" className="text-xs h-6">Markdown</TabsTrigger>
-                            <TabsTrigger value="markdown-raw" className="text-xs h-6">Markdown raw</TabsTrigger>
-                            <TabsTrigger value="json" className="text-xs h-6">JSON</TabsTrigger>
+                          <TabsList className="h-8 w-full justify-start overflow-x-auto">
+                            <TabsTrigger value="markdown" className="text-xs h-6 shrink-0">Markdown</TabsTrigger>
+                            <TabsTrigger value="markdown-raw" className="text-xs h-6 shrink-0">Markdown raw</TabsTrigger>
+                            <TabsTrigger value="json" className="text-xs h-6 shrink-0">JSON</TabsTrigger>
                           </TabsList>
                         </div>
-                        <TabsContent value="markdown" className="flex-1 m-0 min-h-0">
-                          <ScrollArea className="h-full">
-                            <div className="prose prose-sm dark:prose-invert max-w-none p-4">
+                        <TabsContent value="markdown" className="flex-1 m-0 min-h-0 min-w-0">
+                          <ScrollArea className="h-full w-full">
+                            <div className="prose prose-sm dark:prose-invert max-w-none p-4 break-words [overflow-wrap:anywhere] [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:[overflow-wrap:anywhere] [&_code]:break-words">
                               <ReactMarkdown>{selectedHistoryMarkdown}</ReactMarkdown>
                             </div>
                           </ScrollArea>
                         </TabsContent>
-                        <TabsContent value="markdown-raw" className="flex-1 m-0 min-h-0">
-                          <ScrollArea className="h-full">
+                        <TabsContent value="markdown-raw" className="flex-1 m-0 min-h-0 min-w-0">
+                          <ScrollArea className="h-full w-full">
                             <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                               {selectedHistoryMarkdown}
                             </pre>
                           </ScrollArea>
                         </TabsContent>
-                        <TabsContent value="json" className="flex-1 m-0 min-h-0">
-                          <ScrollArea className="h-full">
+                        <TabsContent value="json" className="flex-1 m-0 min-h-0 min-w-0">
+                          <ScrollArea className="h-full w-full">
                             <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                               {JSON.stringify(selectedHistoryStructuredJson, null, 2)}
                             </pre>
@@ -2290,42 +2290,42 @@ export default function EstractoPage() {
                             viewMode === "split" ? "w-[42%]" : "flex-1"
                           )}
                         >
-                          <Tabs defaultValue="markdown" className="flex-1 flex flex-col min-h-0">
+                          <Tabs defaultValue="markdown" className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
                             <div className="px-3 pt-2 border-b">
-                              <TabsList className="h-8">
-                                <TabsTrigger value="markdown" className="text-xs gap-1.5 h-6">
+                              <TabsList className="h-8 w-full justify-start overflow-x-auto">
+                                <TabsTrigger value="markdown" className="text-xs gap-1.5 h-6 shrink-0">
                                   <FileText className="h-3 w-3" />
                                   Markdown
                                 </TabsTrigger>
-                                <TabsTrigger value="markdown-raw" className="text-xs gap-1.5 h-6">
+                                <TabsTrigger value="markdown-raw" className="text-xs gap-1.5 h-6 shrink-0">
                                   <FileText className="h-3 w-3" />
                                   Markdown raw
                                 </TabsTrigger>
-                                <TabsTrigger value="json" className="text-xs gap-1.5 h-6">
+                                <TabsTrigger value="json" className="text-xs gap-1.5 h-6 shrink-0">
                                   <Code className="h-3 w-3" />
                                   JSON
                                 </TabsTrigger>
                               </TabsList>
                             </div>
 
-                            <TabsContent value="markdown" className="flex-1 m-0 min-h-0">
-                              <ScrollArea className="h-full">
-                                <div className="prose prose-sm dark:prose-invert max-w-none p-4">
+                            <TabsContent value="markdown" className="flex-1 m-0 min-h-0 min-w-0">
+                              <ScrollArea className="h-full w-full">
+                                <div className="prose prose-sm dark:prose-invert max-w-none p-4 break-words [overflow-wrap:anywhere] [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:[overflow-wrap:anywhere] [&_code]:break-words">
                                   <ReactMarkdown>{selectedFileMarkdown}</ReactMarkdown>
                                 </div>
                               </ScrollArea>
                             </TabsContent>
 
-                            <TabsContent value="markdown-raw" className="flex-1 m-0 min-h-0">
-                              <ScrollArea className="h-full">
+                            <TabsContent value="markdown-raw" className="flex-1 m-0 min-h-0 min-w-0">
+                              <ScrollArea className="h-full w-full">
                                 <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                                   {selectedFileMarkdown}
                                 </pre>
                               </ScrollArea>
                             </TabsContent>
 
-                            <TabsContent value="json" className="flex-1 m-0 min-h-0">
-                              <ScrollArea className="h-full">
+                            <TabsContent value="json" className="flex-1 m-0 min-h-0 min-w-0">
+                              <ScrollArea className="h-full w-full">
                                 <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                                   {JSON.stringify(selectedFileStructuredJson, null, 2)}
                                 </pre>
