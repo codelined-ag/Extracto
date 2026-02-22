@@ -2024,25 +2024,10 @@ export default function EstractoPage() {
                 onValueChange={(value) =>
                   setApiSettingsDraft((prev) => {
                     const nextProvider = normalizeProvider(value);
-                    const trimmedEndpoint = prev.apiEndpoint.trim();
-                    const shouldResetToMistral =
-                      nextProvider === "mistral" &&
-                      (!trimmedEndpoint ||
-                        trimmedEndpoint === DEFAULT_OLLAMA_ENDPOINT ||
-                        trimmedEndpoint === "http://127.0.0.1:11434");
-                    const shouldResetToOllama =
-                      nextProvider === "ollama" &&
-                      (!trimmedEndpoint ||
-                        trimmedEndpoint === DEFAULT_MISTRAL_ENDPOINT ||
-                        trimmedEndpoint === "https://api.mistral.ai");
                     return {
                       ...prev,
                       provider: nextProvider,
-                      apiEndpoint: shouldResetToMistral
-                        ? DEFAULT_MISTRAL_ENDPOINT
-                        : shouldResetToOllama
-                          ? DEFAULT_OLLAMA_ENDPOINT
-                          : prev.apiEndpoint,
+                      apiEndpoint: defaultEndpointForProvider(nextProvider),
                     };
                   })
                 }
