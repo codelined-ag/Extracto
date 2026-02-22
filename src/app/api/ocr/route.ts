@@ -4,8 +4,9 @@ import { chmod, chown, mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { ApiProviderSettings, getApiSettings } from "@/lib/settings-store";
-import { getAuthCookieName, verifySessionToken } from "@/lib/auth/token";
+import { getAuthenticatedUserId } from "@/lib/auth/request";
 import { db } from "@/lib/db";
+import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
 import {
   clearOcrJobRunning,
   clearOcrJobStop,
@@ -19,6 +20,8 @@ import {
   normalizeHostEndpoint,
   resolveOllamaHostEndpoint,
 } from "@/lib/host-normalization";
+import { consumeRateLimit } from "@/lib/rate-limit";
+import { getClientIpAddress, isTrustedMutationRequest } from "@/lib/request-security";
 
 interface AdvancedSettings {
   language: string;
@@ -269,6 +272,8 @@ const MAX_OBSIDIAN_KEYWORDS = 12;
 const MAX_OBSIDIAN_ENTITIES = 8;
 const MAX_OBSIDIAN_SUMMARY_LENGTH = 320;
 const MAX_OBSIDIAN_PAGE_CONTEXT_CHARS = 2400;
+const OCR_RATE_LIMIT_WINDOW_MS = 60_000;
+const OCR_RATE_LIMIT_MAX = 6;
 const OLLAMA_DISCOVERY_FALLBACK_HOST =
   APP_NETWORK_MODE === "host" ? "http://127.0.0.1:11434" : FALLBACK_OLLAMA_HOST;
 const OLLAMA_DISCOVERY_PATHS = ["/api/tags", "/v1/models"] as const;
@@ -293,7 +298,20 @@ interface OllamaModelCatalogResult {
 }
 
 function getOllamaHostCandidates(rawEndpoint: string): string[] {
-  return buildOllamaHostCandidates(rawEndpoint, OLLAMA_DISCOVERY_FALLBACK_HOST);
+  const rawCandidates = buildOllamaHostCandidates(rawEndpoint, OLLAMA_DISCOVERY_FALLBACK_HOST);
+  const safeCandidates = rawCandidates
+    .map((candidate) => {
+      try {
+        return enforceProviderEndpointPolicy("ollama", candidate, OLLAMA_DISCOVERY_FALLBACK_HOST);
+      } catch {
+        return "";
+      }
+    })
+    .filter(Boolean);
+
+  return safeCandidates.length > 0
+    ? Array.from(new Set(safeCandidates))
+    : [enforceProviderEndpointPolicy("ollama", rawEndpoint, OLLAMA_DISCOVERY_FALLBACK_HOST)];
 }
 
 function normalizeOllamaApiBase(rawEndpoint: string): string {
@@ -349,23 +367,21 @@ function normalizePreviewForHistory(preview: string): string | null {
   return trimmed;
 }
 
-async function getAuthenticatedUserId(request: NextRequest): Promise<string | null> {
-  const token = request.cookies.get(getAuthCookieName())?.value;
-  const payload = await verifySessionToken(token);
-  return payload?.userId ?? null;
-}
-
 function normalizeApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
   const provider = parseProviderHint(raw.provider);
+  const normalizedEndpoint = provider === "mistral"
+    ? normalizeMistralOcrEndpoint(raw.apiEndpoint || DEFAULT_MISTRAL_API_URL)
+    : resolveOllamaHostEndpoint(
+        raw.apiEndpoint || OLLAMA_DISCOVERY_FALLBACK_HOST,
+        OLLAMA_DISCOVERY_FALLBACK_HOST,
+      );
+
   return {
     provider,
     apiEndpoint:
       provider === "mistral"
-        ? normalizeMistralOcrEndpoint(raw.apiEndpoint || DEFAULT_MISTRAL_API_URL)
-        : resolveOllamaHostEndpoint(
-            raw.apiEndpoint || OLLAMA_DISCOVERY_FALLBACK_HOST,
-            OLLAMA_DISCOVERY_FALLBACK_HOST,
-          ),
+        ? enforceProviderEndpointPolicy("mistral", normalizedEndpoint, DEFAULT_MISTRAL_API_URL)
+        : enforceProviderEndpointPolicy("ollama", normalizedEndpoint, OLLAMA_DISCOVERY_FALLBACK_HOST),
     apiKey: raw.apiKey?.trim() || "",
     obsidianBaseDir: raw.obsidianBaseDir?.trim() || OBSIDIAN_EXPORT_BASE_DIR,
   };
@@ -1406,6 +1422,29 @@ function resolveObsidianRootPath(requestedRoot: string): {
   };
 }
 
+async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) {
+    return;
+  }
+
+  const maxWorkers = Math.max(1, Math.min(concurrency, items.length));
+  let nextIndex = 0;
+
+  await Promise.all(
+    Array.from({ length: maxWorkers }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        await worker(items[currentIndex]);
+      }
+    })
+  );
+}
+
 async function writeObsidianVault(input: {
   plan: ObsidianVaultPlan;
   fileName: string;
@@ -1471,6 +1510,7 @@ async function writeObsidianVault(input: {
 
   let noteCount = 0;
   let fileCount = 0;
+  const pendingWrites: Array<{ target: string; contents: string }> = [];
 
   for (const topic of input.plan.topics) {
     const topicDirName = sanitizeFileSegment(topic.name, "topic");
@@ -1509,11 +1549,18 @@ async function writeObsidianVault(input: {
         page.markdown.trim(),
         "",
       ].join("\n");
-      await writeVaultFile(pagePath, pageContent);
+      pendingWrites.push({
+        target: pagePath,
+        contents: pageContent,
+      });
       noteCount += 1;
       fileCount += 1;
     }
   }
+
+  await runWithConcurrency(pendingWrites, 8, async (item) => {
+    await writeVaultFile(item.target, item.contents);
+  });
 
   const unassignedPages = input.plan.pages
     .filter((page) => !page.primaryTopic || !pagesByTopic.has(page.primaryTopic))
@@ -1529,39 +1576,39 @@ async function writeObsidianVault(input: {
 
   let chownApplied = false;
   if (ownership) {
-    for (const dirPath of createdDirs) {
+    await runWithConcurrency(createdDirs, 16, async (dirPath) => {
       try {
         await chown(dirPath, ownership.uid, ownership.gid);
         chownApplied = true;
       } catch {
         // ignore and fallback below
       }
-    }
-    for (const filePath of createdFiles) {
+    });
+    await runWithConcurrency(createdFiles, 16, async (filePath) => {
       try {
         await chown(filePath, ownership.uid, ownership.gid);
         chownApplied = true;
       } catch {
         // ignore and fallback below
       }
-    }
+    });
   }
 
   if (!chownApplied) {
-    for (const dirPath of createdDirs) {
+    await runWithConcurrency(createdDirs, 16, async (dirPath) => {
       try {
         await chmod(dirPath, 0o777);
       } catch {
         // ignore
       }
-    }
-    for (const filePath of createdFiles) {
+    });
+    await runWithConcurrency(createdFiles, 16, async (filePath) => {
       try {
         await chmod(filePath, 0o666);
       } catch {
         // ignore
       }
-    }
+    });
   }
 
   return {
@@ -2706,28 +2753,85 @@ interface ProcessOcrJobInput {
   obsidianPayload: ObsidianSettings;
   inputPreviews: string[];
   prompt: string;
-  initialPageOutputs?: Array<{
-    pageNumber: number;
-    text: string;
-    structured: Record<string, unknown>;
-    metadata: Record<string, unknown>;
-    durationMs: number;
-  }>;
+  initialPageOutputs?: ProcessedPageOutput[];
   startIndex?: number;
   resumed?: boolean;
+}
+
+interface ProcessedPageOutput {
+  pageNumber: number;
+  text: string;
+  structured: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  durationMs: number;
+}
+
+function toPageCheckpoint(page: ProcessedPageOutput): OcrPageCheckpoint {
+  return {
+    pageNumber: page.pageNumber,
+    status: "completed",
+    characterCount: page.text.length,
+    durationMs: page.durationMs,
+    previewText: page.text.trim().slice(0, 320),
+  };
+}
+
+function toCheckpointPage(page: ProcessedPageOutput) {
+  return {
+    pageNumber: page.pageNumber,
+    text: page.text,
+    structured: page.structured,
+    durationMs: page.durationMs,
+    metadata: page.metadata,
+  };
+}
+
+function toStructuredPagePayload(page: ProcessedPageOutput) {
+  return {
+    pageNumber: page.pageNumber,
+    durationMs: page.durationMs,
+    ...page.structured,
+  };
+}
+
+function toPageResultPayload(page: ProcessedPageOutput) {
+  return {
+    pageNumber: page.pageNumber,
+    durationMs: page.durationMs,
+    structured: page.structured,
+    ...page.metadata,
+  };
 }
 
 async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<void> {
   const isObsidianMode = input.mode === "pdf_to_obsidian";
   const startedAtIso = new Date(input.startedAtMs).toISOString();
-  const pageOutputs: Array<{
-    pageNumber: number;
-    text: string;
-    structured: Record<string, unknown>;
-    metadata: Record<string, unknown>;
-    durationMs: number;
-  }> = input.initialPageOutputs ? [...input.initialPageOutputs] : [];
+  const pageOutputs: ProcessedPageOutput[] = input.initialPageOutputs ? [...input.initialPageOutputs] : [];
   const startIndex = Math.max(0, Math.min(input.startIndex ?? 0, input.inputPreviews.length));
+  const checkpoints: OcrPageCheckpoint[] = pageOutputs.map(toPageCheckpoint);
+  const checkpointPages = pageOutputs.map(toCheckpointPage);
+  const partialStructuredPages = pageOutputs.map(toStructuredPagePayload);
+  const partialPageResults = pageOutputs.map(toPageResultPayload);
+  let totalDurationMs = pageOutputs.reduce((sum, page) => sum + page.durationMs, 0);
+  let extractedTextSoFar = "";
+  let extractedChunkCount = 0;
+  for (const page of pageOutputs) {
+    const pageMarkdown = getPageMarkdownForRouting({
+      pageNumber: page.pageNumber,
+      text: page.text,
+      structured: page.structured,
+    }).trim();
+    if (!pageMarkdown) {
+      continue;
+    }
+
+    if (extractedChunkCount > 0) {
+      extractedTextSoFar += "\n\n---\n\n";
+    }
+    extractedTextSoFar += pageMarkdown;
+    extractedChunkCount += 1;
+  }
+
   const selectedPostProcessModel = input.postProcessingPayload.model || input.model;
   const usedOllamaModels = new Set<string>();
   if (input.provider === "ollama") {
@@ -2778,7 +2882,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
     etaSeconds: null,
     startedAt: startedAtIso,
     events: progressEvents,
-    checkpoints: [],
+    checkpoints,
     postProcessing: postProcessingMeta,
   });
 
@@ -2797,13 +2901,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       etaSeconds: null,
       startedAt: startedAtIso,
       events: progressEvents,
-      checkpoints: pageOutputs.map((page) => ({
-        pageNumber: page.pageNumber,
-        status: "completed",
-        characterCount: page.text.length,
-        durationMs: page.durationMs,
-        previewText: page.text.trim().slice(0, 320),
-      })),
+      checkpoints,
       postProcessing: postProcessingMeta,
     });
 
@@ -2815,7 +2913,10 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       where: { id: input.jobId },
       data: {
         status: OcrJobStatus.QUEUED,
-        metadata: toJsonValue(latestMetadata),
+        metadata: toJsonValue({
+          ...latestMetadata,
+          checkpointPages,
+        }),
         processingMs: Date.now() - input.startedAtMs,
       },
     });
@@ -2829,13 +2930,6 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
     if (input.provider === "ollama") {
       await warmupOllamaModel(input.settings.apiEndpoint, input.ocrModel);
     }
-
-    await db.ocrJob.update({
-      where: { id: input.jobId },
-      data: {
-        metadata: toJsonValue(latestMetadata),
-      },
-    });
 
     for (let index = startIndex; index < input.inputPreviews.length; index++) {
       if (isOcrJobStopRequested(input.jobId)) {
@@ -2855,36 +2949,6 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
         "ocr",
         `Running OCR on page ${pageNumber}/${input.inputPreviews.length}`
       );
-
-      latestMetadata = buildProgressMetadata({
-        stage: "ocr",
-        message: `Processing page ${pageNumber}/${input.inputPreviews.length}`,
-        progressPct:
-          input.postProcessingPayload.enabled
-            ? (index / input.inputPreviews.length) * 85
-            : (index / input.inputPreviews.length) * 100,
-        pageCount: input.inputPreviews.length,
-        processedPages: index,
-        currentPage: pageNumber,
-        etaSeconds: latestMetadata.etaSeconds,
-        startedAt: startedAtIso,
-        events: progressEvents,
-        checkpoints: pageOutputs.map((page) => ({
-          pageNumber: page.pageNumber,
-          status: "completed",
-          characterCount: page.text.length,
-          durationMs: page.durationMs,
-          previewText: page.text.trim().slice(0, 320),
-        })),
-        postProcessing: postProcessingMeta,
-      });
-
-      await db.ocrJob.update({
-        where: { id: input.jobId },
-        data: {
-          metadata: toJsonValue(latestMetadata),
-        },
-      });
 
       let pageText = "";
       let pageStructured: Record<string, unknown> = { markdown: "" };
@@ -2927,27 +2991,36 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       }
 
       const durationMs = Date.now() - pageStartMs;
-      pageOutputs.push({
+      totalDurationMs += durationMs;
+
+      const completedPage: ProcessedPageOutput = {
         pageNumber,
         text: pageText,
         structured: pageStructured,
         metadata: pageMetadata,
         durationMs,
-      });
+      };
 
-      const extractedTextSoFar = pageOutputs
-        .map((page) =>
-          getPageMarkdownForRouting({
-            pageNumber: page.pageNumber,
-            text: page.text,
-            structured: page.structured,
-          }).trim()
-        )
-        .filter(Boolean)
-        .join(pageOutputs.length > 1 ? "\n\n---\n\n" : "\n");
+      pageOutputs.push(completedPage);
+      checkpoints.push(toPageCheckpoint(completedPage));
+      checkpointPages.push(toCheckpointPage(completedPage));
+      partialStructuredPages.push(toStructuredPagePayload(completedPage));
+      partialPageResults.push(toPageResultPayload(completedPage));
 
-      const averagePageMs =
-        pageOutputs.reduce((sum, page) => sum + page.durationMs, 0) / pageOutputs.length;
+      const pageMarkdown = getPageMarkdownForRouting({
+        pageNumber: completedPage.pageNumber,
+        text: completedPage.text,
+        structured: completedPage.structured,
+      }).trim();
+      if (pageMarkdown) {
+        if (extractedChunkCount > 0) {
+          extractedTextSoFar += "\n\n---\n\n";
+        }
+        extractedTextSoFar += pageMarkdown;
+        extractedChunkCount += 1;
+      }
+
+      const averagePageMs = totalDurationMs / pageOutputs.length;
       const remainingPages = input.inputPreviews.length - pageOutputs.length;
       const etaSeconds =
         remainingPages > 0 ? Math.max(1, Math.round((averagePageMs * remainingPages) / 1000)) : 0;
@@ -2972,70 +3045,23 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
         etaSeconds,
         startedAt: startedAtIso,
         events: progressEvents,
-        checkpoints: pageOutputs.map((page) => ({
-          pageNumber: page.pageNumber,
-          status: "completed",
-          characterCount: page.text.length,
-          durationMs: page.durationMs,
-          previewText: page.text.trim().slice(0, 320),
-        })),
+        checkpoints,
         postProcessing: postProcessingMeta,
       });
-
-      const partialResult = buildJsonResult(
-        input.fileName,
-        input.model,
-        input.provider,
-        input.settingsPayload,
-        extractedTextSoFar,
-        {
-          markdown: extractedTextSoFar,
-          pages: pageOutputs.map((page) => ({
-            pageNumber: page.pageNumber,
-            durationMs: page.durationMs,
-            ...page.structured,
-          })),
-        },
-        {
-          pageCount: input.inputPreviews.length,
-          pageResults: pageOutputs.map((page) => ({
-            pageNumber: page.pageNumber,
-            durationMs: page.durationMs,
-            structured: page.structured,
-            ...page.metadata,
-          })),
-          checkpointPages: pageOutputs.map((page) => ({
-            pageNumber: page.pageNumber,
-            text: page.text,
-            structured: page.structured,
-            durationMs: page.durationMs,
-            metadata: page.metadata,
-          })),
-          progress: latestMetadata,
-        }
-      );
-      partialResult.rawExtractionText = extractedTextSoFar;
 
       await db.ocrJob.update({
         where: { id: input.jobId },
         data: {
           extractedText: extractedTextSoFar,
-          result: toJsonValue(partialResult),
-          metadata: toJsonValue(latestMetadata),
+          metadata: toJsonValue({
+            ...latestMetadata,
+            checkpointPages,
+          }),
         },
       });
     }
 
-    const extractedMarkdown = pageOutputs
-      .map((page) =>
-        getPageMarkdownForRouting({
-          pageNumber: page.pageNumber,
-          text: page.text,
-          structured: page.structured,
-        }).trim()
-      )
-      .filter(Boolean)
-      .join(pageOutputs.length > 1 ? "\n\n---\n\n" : "\n");
+    const extractedMarkdown = extractedTextSoFar.trim();
     if (!extractedMarkdown.trim()) {
       throw new ApiRouteError("OCR returned no text", 502);
     }
@@ -3053,12 +3079,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       ocrModel: input.ocrModel,
       inferenceModel: input.model,
       pageCount: input.inputPreviews.length,
-      pageResults: pageOutputs.map((page) => ({
-        pageNumber: page.pageNumber,
-        durationMs: page.durationMs,
-        structured: page.structured,
-        ...page.metadata,
-      })),
+      pageResults: partialPageResults,
       pageIntelligence,
     };
     let finalMarkdown = extractedMarkdown;
@@ -3088,13 +3109,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
         etaSeconds: 2,
         startedAt: startedAtIso,
         events: progressEvents,
-        checkpoints: pageOutputs.map((page) => ({
-          pageNumber: page.pageNumber,
-          status: "completed",
-          characterCount: page.text.length,
-          durationMs: page.durationMs,
-          previewText: page.text.trim().slice(0, 320),
-        })),
+        checkpoints,
         postProcessing: postProcessingMeta,
       });
       await db.ocrJob.update({
@@ -3191,13 +3206,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
         etaSeconds: 2,
         startedAt: startedAtIso,
         events: progressEvents,
-        checkpoints: pageOutputs.map((page) => ({
-          pageNumber: page.pageNumber,
-          status: "completed",
-          characterCount: page.text.length,
-          durationMs: page.durationMs,
-          previewText: page.text.trim().slice(0, 320),
-        })),
+        checkpoints,
         postProcessing: postProcessingMeta,
       });
       await db.ocrJob.update({
@@ -3270,11 +3279,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       {
         markdown: finalMarkdown,
         rawMarkdown: extractedMarkdown,
-        pages: pageOutputs.map((page) => ({
-          pageNumber: page.pageNumber,
-          durationMs: page.durationMs,
-          ...page.structured,
-        })),
+        pages: partialStructuredPages,
         ...(postProcessedText
           ? {
               postProcessingOutput:
@@ -3311,13 +3316,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       etaSeconds: 0,
       startedAt: startedAtIso,
       events: progressEvents,
-      checkpoints: pageOutputs.map((page) => ({
-        pageNumber: page.pageNumber,
-        status: "completed",
-        characterCount: page.text.length,
-        durationMs: page.durationMs,
-        previewText: page.text.trim().slice(0, 320),
-      })),
+      checkpoints,
       postProcessing: postProcessingMeta,
     });
     extractedMetadata.progress = latestMetadata;
@@ -3354,13 +3353,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       etaSeconds: null,
       startedAt: startedAtIso,
       events: progressEvents,
-      checkpoints: pageOutputs.map((page) => ({
-        pageNumber: page.pageNumber,
-        status: "completed",
-        characterCount: page.text.length,
-        durationMs: page.durationMs,
-        previewText: page.text.trim().slice(0, 320),
-      })),
+      checkpoints,
       postProcessing: postProcessingMeta,
     });
 
@@ -3382,23 +3375,24 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
   }
 }
 
-function parseCheckpointPages(result: unknown): Array<{
-  pageNumber: number;
-  text: string;
-  structured: Record<string, unknown>;
-  durationMs: number;
-  metadata: Record<string, unknown>;
-}> {
-  if (!result || typeof result !== "object" || Array.isArray(result)) {
+function parseCheckpointPages(
+  result: unknown,
+  metadata?: unknown
+): ProcessedPageOutput[] {
+  const rawCheckpointPages =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? (metadata as { checkpointPages?: unknown }).checkpointPages
+      : undefined;
+  const fromResult = result && typeof result === "object" && !Array.isArray(result)
+    ? (result as { metadata?: { checkpointPages?: unknown } }).metadata?.checkpointPages
+    : undefined;
+  const checkpointSource = Array.isArray(rawCheckpointPages) ? rawCheckpointPages : fromResult;
+
+  if (!Array.isArray(checkpointSource)) {
     return [];
   }
 
-  const rawCheckpointPages = (result as { metadata?: { checkpointPages?: unknown } }).metadata?.checkpointPages;
-  if (!Array.isArray(rawCheckpointPages)) {
-    return [];
-  }
-
-  return rawCheckpointPages
+  const normalized = checkpointSource
     .map((page) => {
       if (!page || typeof page !== "object" || Array.isArray(page)) {
         return null;
@@ -3428,19 +3422,20 @@ function parseCheckpointPages(result: unknown): Array<{
             : {},
       };
     })
-    .filter((page): page is {
-      pageNumber: number;
-      text: string;
-      structured: Record<string, unknown>;
-      durationMs: number;
-      metadata: Record<string, unknown>;
-    } => Boolean(page))
+    .filter((page): page is ProcessedPageOutput => Boolean(page))
     .sort((a, b) => a.pageNumber - b.pageNumber);
+
+  return normalized;
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const storedSettings = normalizeApiSettings(await getApiSettings());
+    const userId = await getAuthenticatedUserId(request);
+    if (!userId) {
+      throw new ApiRouteError("Unauthorized", 401);
+    }
+
+    const storedSettings = normalizeApiSettings(await getApiSettings(userId));
     const query = new URL(request.url).searchParams;
     const provider = parseProviderHint(query.get("provider") || undefined);
     const catalog = await getModelCatalog(storedSettings);
@@ -3472,8 +3467,32 @@ export async function POST(request: NextRequest) {
     if (!userId) {
       throw new ApiRouteError("Unauthorized", 401);
     }
+    if (!isTrustedMutationRequest(request)) {
+      throw new ApiRouteError("Invalid request origin", 403);
+    }
 
-    const storedSettings = normalizeApiSettings(await getApiSettings());
+    const clientIp = getClientIpAddress(request);
+    const rateLimit = consumeRateLimit({
+      key: `ocr:job:${userId}:${clientIp}`,
+      max: OCR_RATE_LIMIT_MAX,
+      windowMs: OCR_RATE_LIMIT_WINDOW_MS,
+    });
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: "Too many OCR jobs requested. Please retry shortly.",
+          success: false,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": `${rateLimit.retryAfterSeconds}`,
+          },
+        }
+      );
+    }
+
+    const storedSettings = normalizeApiSettings(await getApiSettings(userId));
     const body = (await request.json().catch(() => null)) as OCRRequestBody | null;
 
     if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -3499,30 +3518,7 @@ export async function POST(request: NextRequest) {
     const mode = parseRunMode(body.mode);
     const obsidianPayload = sanitizeObsidianSettings(body.obsidian);
     let postProcessingPayload = sanitizePostProcessing(body.postProcessing);
-    const settings = normalizeApiSettings({
-      provider:
-        typeof body.apiSettings?.provider === "string"
-          ? body.apiSettings.provider
-          : typeof body.provider === "string"
-            ? body.provider
-            : storedSettings.provider,
-      apiEndpoint:
-        typeof body.apiSettings?.apiEndpoint === "string"
-          ? body.apiSettings.apiEndpoint
-          : typeof body.apiEndpoint === "string"
-            ? body.apiEndpoint
-            : storedSettings.apiEndpoint,
-      apiKey:
-        typeof body.apiSettings?.apiKey === "string"
-          ? body.apiSettings.apiKey
-          : typeof body.apiKey === "string"
-            ? body.apiKey
-            : storedSettings.apiKey,
-      obsidianBaseDir:
-        typeof body.apiSettings?.obsidianBaseDir === "string"
-          ? body.apiSettings.obsidianBaseDir
-          : storedSettings.obsidianBaseDir,
-    });
+    const settings = normalizeApiSettings(storedSettings);
     const effectiveObsidianPayload: ObsidianSettings = {
       ...obsidianPayload,
       enabled: mode === "pdf_to_obsidian",
@@ -3570,6 +3566,7 @@ export async function POST(request: NextRequest) {
           id: true,
           status: true,
           result: true,
+          metadata: true,
         },
       });
       if (!existingJob) {
@@ -3583,7 +3580,7 @@ export async function POST(request: NextRequest) {
         throw new ApiRouteError("Job is already processing", 409);
       }
 
-      const initialPageOutputs = parseCheckpointPages(existingJob.result);
+      const initialPageOutputs = parseCheckpointPages(existingJob.result, existingJob.metadata);
       const startIndex = initialPageOutputs.length;
       if (startIndex >= inputPreviews.length) {
         throw new ApiRouteError("All pages were already checkpointed for this job", 400);

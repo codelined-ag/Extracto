@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthCookieName, shouldUseSecureCookie } from "@/lib/auth/token";
+import { isTrustedMutationRequest } from "@/lib/request-security";
 
 export async function POST(_request: NextRequest) {
+  if (!isTrustedMutationRequest(_request)) {
+    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+  }
+
   const forwardedProto = _request.headers.get("x-forwarded-proto");
   const protocol = (forwardedProto ? forwardedProto.split(",")[0].trim() : _request.nextUrl.protocol)
     .replace(":", "");
@@ -13,7 +18,7 @@ export async function POST(_request: NextRequest) {
     name: getAuthCookieName(),
     value: "",
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "strict",
     secure: shouldUseSecureCookie(isRequestSecure),
     path: "/",
     maxAge: 0,

@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
 import {
   isLikelyLocalhostEndpoint,
   normalizeHostEndpoint,
@@ -106,6 +107,10 @@ export interface ApiProviderSettings {
   obsidianBaseDir: string;
 }
 
+interface SaveApiSettingsInput extends Partial<ApiProviderSettings> {
+  replaceApiKey?: boolean;
+}
+
 const DEFAULT_API_SETTINGS: ApiProviderSettings = {
   provider: "ollama",
   apiEndpoint: normalizeApiEndpoint(DEFAULT_OLLAMA_HOST, "ollama"),
@@ -113,38 +118,101 @@ const DEFAULT_API_SETTINGS: ApiProviderSettings = {
   obsidianBaseDir: DEFAULT_OBSIDIAN_BASE_DIR,
 };
 
-const SETTINGS_PATH = path.join(DATA_ROOT, "api-settings.json");
+const SETTINGS_DIR = path.join(DATA_ROOT, "api-settings");
+const settingsCache = new Map<string, ApiProviderSettings>();
 
 const normalizeSettings = (settings: Partial<ApiProviderSettings>): ApiProviderSettings => {
   const provider = normalizeProvider(settings.provider);
+  const normalizedEndpoint = normalizeApiEndpoint(settings.apiEndpoint, provider);
+  const safeEndpoint = provider === "mistral"
+    ? enforceProviderEndpointPolicy("mistral", normalizedEndpoint, DEFAULT_MISTRAL_OCR_ENDPOINT)
+    : enforceProviderEndpointPolicy("ollama", normalizedEndpoint, FALLBACK_OLLAMA_HOST);
+
   return {
     provider,
-    apiEndpoint: normalizeApiEndpoint(settings.apiEndpoint, provider),
+    apiEndpoint: safeEndpoint,
     apiKey: settings.apiKey?.trim() || "",
     obsidianBaseDir: settings.obsidianBaseDir?.trim() || DEFAULT_OBSIDIAN_BASE_DIR,
   };
 };
 
-export async function getApiSettings(): Promise<ApiProviderSettings> {
+function sanitizeUserId(userId: string): string {
+  return userId.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+function getSettingsPath(userId: string): string {
+  return path.join(SETTINGS_DIR, `${sanitizeUserId(userId)}.json`);
+}
+
+function cloneSettings(settings: ApiProviderSettings): ApiProviderSettings {
+  return {
+    provider: settings.provider,
+    apiEndpoint: settings.apiEndpoint,
+    apiKey: settings.apiKey,
+    obsidianBaseDir: settings.obsidianBaseDir,
+  };
+}
+
+export function toClientApiSettings(settings: ApiProviderSettings): ApiProviderSettings & { hasApiKey: boolean } {
+  return {
+    provider: settings.provider,
+    apiEndpoint: settings.apiEndpoint,
+    apiKey: "",
+    obsidianBaseDir: settings.obsidianBaseDir,
+    hasApiKey: Boolean(settings.apiKey.trim()),
+  };
+}
+
+export async function getApiSettings(userId: string): Promise<ApiProviderSettings> {
+  const safeUserId = sanitizeUserId(userId);
+  const cached = settingsCache.get(safeUserId);
+  if (cached) {
+    return cloneSettings(cached);
+  }
+
+  const settingsPath = getSettingsPath(safeUserId);
   try {
-    const stored = await readFile(SETTINGS_PATH, "utf8");
+    const stored = await readFile(settingsPath, "utf8");
     const parsed = JSON.parse(stored);
-    return normalizeSettings(parsed);
+    const normalized = normalizeSettings(parsed);
+    settingsCache.set(safeUserId, normalized);
+    return cloneSettings(normalized);
   } catch {
     await ensureSettingsDirectory();
-    return DEFAULT_API_SETTINGS;
+    const normalized = normalizeSettings(DEFAULT_API_SETTINGS);
+    settingsCache.set(safeUserId, normalized);
+    return cloneSettings(normalized);
   }
 }
 
 export async function saveApiSettings(
-  settings: Partial<ApiProviderSettings>
+  userId: string,
+  settings: SaveApiSettingsInput
 ): Promise<ApiProviderSettings> {
-  const normalized = normalizeSettings(settings);
+  const safeUserId = sanitizeUserId(userId);
+  const current = await getApiSettings(safeUserId);
+  const provider = normalizeProvider(settings.provider || current.provider);
+  const apiEndpoint = typeof settings.apiEndpoint === "string"
+    ? settings.apiEndpoint
+    : provider === current.provider
+      ? current.apiEndpoint
+      : provider === "mistral"
+        ? DEFAULT_MISTRAL_OCR_ENDPOINT
+        : FALLBACK_OLLAMA_HOST;
+  const normalized = normalizeSettings({
+    ...current,
+    ...settings,
+    provider,
+    apiEndpoint,
+    apiKey: settings.replaceApiKey ? (settings.apiKey?.trim() || "") : current.apiKey,
+  });
+  const settingsPath = getSettingsPath(safeUserId);
   await ensureSettingsDirectory();
-  await writeFile(SETTINGS_PATH, JSON.stringify(normalized, null, 2), "utf8");
-  return normalized;
+  await writeFile(settingsPath, JSON.stringify(normalized, null, 2), "utf8");
+  settingsCache.set(safeUserId, normalized);
+  return cloneSettings(normalized);
 }
 
 async function ensureSettingsDirectory() {
-  await mkdir(path.dirname(SETTINGS_PATH), { recursive: true });
+  await mkdir(SETTINGS_DIR, { recursive: true });
 }

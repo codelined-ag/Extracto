@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OcrSetting } from "@prisma/client";
 import { db } from "@/lib/db";
+import { isTrustedMutationRequest } from "@/lib/request-security";
 import {
   DEFAULT_SETTINGS,
   OCR_SETTINGS_KEY,
@@ -39,6 +40,10 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  if (!isTrustedMutationRequest(request)) {
+    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+  }
+
   const body = await request.json().catch(() => ({}));
   const normalized = normalizeAdvancedSettings(body);
 

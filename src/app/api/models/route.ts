@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { getAuthenticatedUserId } from "@/lib/auth/request";
+import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
 import { getApiSettings } from "@/lib/settings-store";
 import {
   buildOllamaHostCandidates,
@@ -60,14 +62,18 @@ function getModelPaths(providerHint?: "ollama" | "mistral" | ""): readonly strin
 }
 
 export async function GET(request: NextRequest) {
-  const settings = await getApiSettings();
+  const userId = await getAuthenticatedUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const settings = await getApiSettings(userId);
   const query = new URL(request.url).searchParams;
 
   const providerHint = parseProviderHint(query.get("provider")) || parseProviderHint(settings.provider) || "ollama";
   const defaultHost = providerHint === "mistral" ? DEFAULT_MISTRAL_ENDPOINT : DISCOVERY_FALLBACK_HOST;
-  const rawHost = query.get("host")?.trim() || settings.apiEndpoint || defaultHost;
-  const apiKey =
-    query.get("apiKey")?.trim() || request.headers.get("x-api-key")?.trim() || settings.apiKey;
+  const rawHost = settings.apiEndpoint || defaultHost;
+  const apiKey = settings.apiKey || process.env.MISTRAL_API_KEY || "";
   let candidateHosts: string[] = [];
 
   if (!rawHost) {
@@ -111,9 +117,22 @@ function buildCandidateHosts(
   providerHint: "ollama" | "mistral" | ""
 ): string[] {
   if (providerHint === "mistral") {
-    return [normalizeHostEndpoint(rawHost, DEFAULT_MISTRAL_ENDPOINT)];
+    return [enforceProviderEndpointPolicy("mistral", rawHost, DEFAULT_MISTRAL_ENDPOINT)];
   }
-  return buildOllamaHostCandidates(rawHost, DISCOVERY_FALLBACK_HOST);
+
+  const safeOllamaHost = enforceProviderEndpointPolicy("ollama", rawHost, DISCOVERY_FALLBACK_HOST);
+  const rawCandidates = buildOllamaHostCandidates(safeOllamaHost, DISCOVERY_FALLBACK_HOST);
+  const safeCandidates = rawCandidates
+    .map((candidate) => {
+      try {
+        return enforceProviderEndpointPolicy("ollama", candidate, DISCOVERY_FALLBACK_HOST);
+      } catch {
+        return "";
+      }
+    })
+    .filter(Boolean);
+
+  return safeCandidates.length > 0 ? Array.from(new Set(safeCandidates)) : [safeOllamaHost];
 }
 
 async function discoverModels(

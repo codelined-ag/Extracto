@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getAuthCookieName, verifySessionToken } from "@/lib/auth/token";
+import { getAuthenticatedUserId } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-
-async function getAuthenticatedUserId(request: NextRequest): Promise<string | null> {
-  const token = request.cookies.get(getAuthCookieName())?.value;
-  const payload = await verifySessionToken(token);
-  return payload?.userId ?? null;
-}
+import { isTrustedMutationRequest } from "@/lib/request-security";
 
 export async function GET(
   request: NextRequest,
@@ -16,6 +11,9 @@ export async function GET(
   const userId = await getAuthenticatedUserId(request);
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isTrustedMutationRequest(request)) {
+    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
   }
 
   const { id } = await context.params;

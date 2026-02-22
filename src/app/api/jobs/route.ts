@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus } from "@prisma/client";
 
-import { getAuthCookieName, verifySessionToken } from "@/lib/auth/token";
+import { getAuthenticatedUserId } from "@/lib/auth/request";
 import { db } from "@/lib/db";
+import { isTrustedMutationRequest } from "@/lib/request-security";
 
 const MAX_PAGE_SIZE = 100;
 
@@ -23,12 +24,6 @@ const parseStatusFilter = (value: string | null) => {
     ? (normalized as OcrJobStatus)
     : null;
 };
-
-async function getAuthenticatedUserId(request: NextRequest): Promise<string | null> {
-  const token = request.cookies.get(getAuthCookieName())?.value;
-  const payload = await verifySessionToken(token);
-  return payload?.userId ?? null;
-}
 
 export async function GET(request: NextRequest) {
   const userId = await getAuthenticatedUserId(request);
@@ -79,6 +74,9 @@ export async function DELETE(request: NextRequest) {
   const userId = await getAuthenticatedUserId(request);
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isTrustedMutationRequest(request)) {
+    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);

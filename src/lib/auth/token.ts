@@ -1,6 +1,6 @@
 const AUTH_COOKIE_NAME = "estracto_session";
-const FALLBACK_AUTH_SECRET = "estracto-auth-secret-change-me";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+const MIN_AUTH_SECRET_LENGTH = 32;
 
 interface AuthSessionPayload {
   userId: string;
@@ -14,15 +14,15 @@ const decoder = new TextDecoder();
 
 function getSecret(): string {
   const configured = process.env.AUTH_SECRET?.trim();
-  if (configured) {
-    return configured;
+  if (!configured) {
+    throw new Error("AUTH_SECRET is required");
   }
 
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("AUTH_SECRET is required in production");
+  if (configured.length < MIN_AUTH_SECRET_LENGTH) {
+    throw new Error(`AUTH_SECRET must be at least ${MIN_AUTH_SECRET_LENGTH} characters`);
   }
 
-  return FALLBACK_AUTH_SECRET;
+  return configured;
 }
 
 function base64UrlEncode(input: string | Uint8Array): string {
@@ -112,10 +112,12 @@ export async function verifySessionToken(
   try {
     const key = await getSigningKey();
     const signature = base64UrlDecode(signaturePart);
+    const signatureBytes = new Uint8Array(signature.length);
+    signatureBytes.set(signature);
     const isValid = await crypto.subtle.verify(
       "HMAC",
       key,
-      signature,
+      signatureBytes,
       encoder.encode(payloadPart)
     );
 

@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
 import { createUser, findUserByEmail, toSafeUser } from "@/lib/auth/credentials";
+import { consumeRateLimit } from "@/lib/rate-limit";
+import { getClientIpAddress, isTrustedMutationRequest } from "@/lib/request-security";
 import {
   createSessionToken,
   getAuthCookieName,
   getSessionMaxAgeSeconds,
   shouldUseSecureCookie,
 } from "@/lib/auth/token";
+
+const SIGNUP_IP_LIMIT_MAX = 10;
+const SIGNUP_EMAIL_LIMIT_MAX = 5;
+const SIGNUP_WINDOW_MS = 60_000;
 
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
@@ -25,8 +31,34 @@ function isRequestSecure(request: NextRequest): boolean {
   return protocol === "https";
 }
 
+function tooManyRequests(retryAfterSeconds: number) {
+  return NextResponse.json(
+    { error: "Too many requests. Please try again shortly." },
+    {
+      status: 429,
+      headers: {
+        "Retry-After": `${retryAfterSeconds}`,
+      },
+    }
+  );
+}
+
 export async function POST(request: NextRequest) {
   try {
+    if (!isTrustedMutationRequest(request)) {
+      return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+    }
+
+    const clientIp = getClientIpAddress(request);
+    const ipLimit = consumeRateLimit({
+      key: `auth:signup:ip:${clientIp}`,
+      max: SIGNUP_IP_LIMIT_MAX,
+      windowMs: SIGNUP_WINDOW_MS,
+    });
+    if (!ipLimit.allowed) {
+      return tooManyRequests(ipLimit.retryAfterSeconds);
+    }
+
     const body = (await request.json().catch(() => null)) as
       | {
           email?: unknown;
@@ -42,6 +74,15 @@ export async function POST(request: NextRequest) {
     const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
     const password = typeof body.password === "string" ? body.password : "";
     const name = typeof body.name === "string" ? body.name : "";
+
+    const emailLimit = consumeRateLimit({
+      key: `auth:signup:email:${email || "unknown"}`,
+      max: SIGNUP_EMAIL_LIMIT_MAX,
+      windowMs: SIGNUP_WINDOW_MS,
+    });
+    if (!emailLimit.allowed) {
+      return tooManyRequests(emailLimit.retryAfterSeconds);
+    }
 
     if (!email || !password || password.length < 8) {
       return badRequest("Email and password (minimum 8 chars) are required");
@@ -73,7 +114,7 @@ export async function POST(request: NextRequest) {
       name: getAuthCookieName(),
       value: token,
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: shouldUseSecureCookie(isRequestSecure(request)),
       path: "/",
       maxAge: getSessionMaxAgeSeconds(),

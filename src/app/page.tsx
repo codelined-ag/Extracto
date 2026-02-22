@@ -120,6 +120,7 @@ interface ApiSettings {
   provider: string;
   apiEndpoint: string;
   apiKey: string;
+  hasApiKey?: boolean;
   obsidianBaseDir: string;
 }
 
@@ -210,6 +211,7 @@ const DEFAULT_API_SETTINGS: ApiSettings = {
   provider: "ollama",
   apiEndpoint: DEFAULT_OLLAMA_ENDPOINT,
   apiKey: "",
+  hasApiKey: false,
   obsidianBaseDir: DEFAULT_OBSIDIAN_VAULT_ROOT,
 };
 
@@ -734,6 +736,7 @@ const PDFJS_MODULE_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/
 const PDFJS_WORKER_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
 
 let pdfJsLibPromise: Promise<Record<string, unknown>> | null = null;
+const pdfArrayBufferCache = new WeakMap<File, Promise<ArrayBuffer>>();
 
 function isPdfFile(file: File): boolean {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -765,7 +768,21 @@ async function loadPdfJsLib(): Promise<Record<string, unknown>> {
   return pdfjsLib;
 }
 
-async function renderPdfPagesAsImages(file: File, pageLimit?: number): Promise<string[]> {
+function getPdfArrayBuffer(file: File): Promise<ArrayBuffer> {
+  const cached = pdfArrayBufferCache.get(file);
+  if (cached) {
+    return cached;
+  }
+
+  const next = file.arrayBuffer();
+  pdfArrayBufferCache.set(file, next);
+  return next;
+}
+
+async function renderPdfPagesAsImages(
+  file: File,
+  options?: { pageLimit?: number; startPage?: number }
+): Promise<string[]> {
   const pdfjsLib = await loadPdfJsLib();
   const getDocument = (pdfjsLib as { getDocument?: (input: { data: ArrayBuffer }) => {
     promise: Promise<{
@@ -783,16 +800,20 @@ async function renderPdfPagesAsImages(file: File, pageLimit?: number): Promise<s
     throw new Error("PDF renderer unavailable");
   }
 
-  const loadingTask = getDocument({ data: await file.arrayBuffer() });
+  const loadingTask = getDocument({ data: await getPdfArrayBuffer(file) });
   const pdfDocument = await loadingTask.promise;
+  const startPage =
+    typeof options?.startPage === "number" && Number.isFinite(options.startPage) && options.startPage > 0
+      ? Math.floor(options.startPage)
+      : 1;
   const normalizedLimit =
-    typeof pageLimit === "number" && Number.isFinite(pageLimit) && pageLimit > 0
-      ? Math.floor(pageLimit)
+    typeof options?.pageLimit === "number" && Number.isFinite(options.pageLimit) && options.pageLimit > 0
+      ? Math.floor(options.pageLimit)
       : pdfDocument.numPages;
-  const totalPages = Math.min(pdfDocument.numPages, normalizedLimit);
+  const lastPage = Math.min(pdfDocument.numPages, startPage + normalizedLimit - 1);
   const pageImages: string[] = [];
 
-  for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
+  for (let pageNumber = startPage; pageNumber <= lastPage; pageNumber++) {
     const page = await pdfDocument.getPage(pageNumber);
     const baseViewport = page.getViewport({ scale: 1 });
     const constrainedScale = Math.min(
@@ -830,7 +851,7 @@ async function getPdfPageCount(file: File): Promise<number> {
     throw new Error("PDF renderer unavailable");
   }
 
-  const loadingTask = getDocument({ data: await file.arrayBuffer() });
+  const loadingTask = getDocument({ data: await getPdfArrayBuffer(file) });
   const pdfDocument = await loadingTask.promise;
   return pdfDocument.numPages;
 }
@@ -851,7 +872,7 @@ async function buildInitialPreview(file: File): Promise<{
 
   try {
     const pageCount = await getPdfPageCount(file).catch(() => undefined);
-    const previews = await renderPdfPagesAsImages(file, 1);
+    const previews = await renderPdfPagesAsImages(file, { pageLimit: 1, startPage: 1 });
     const firstPage = previews[0] || "";
     return { preview: firstPage, pagePreviews: previews, pageCount };
   } catch {
@@ -868,6 +889,7 @@ export default function EstractoPage() {
   const [models, setModels] = React.useState<Model[]>(OLLAMA_FALLBACK_MODELS);
   const [apiSettings, setApiSettings] = React.useState<ApiSettings>(DEFAULT_API_SETTINGS);
   const [apiSettingsDraft, setApiSettingsDraft] = React.useState<ApiSettings>(DEFAULT_API_SETTINGS);
+  const [apiKeyDirty, setApiKeyDirty] = React.useState(false);
   const [isDragOver, setIsDragOver] = React.useState(false);
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [uiLanguage, setUiLanguage] = React.useState<UiLanguage>("it");
@@ -878,6 +900,7 @@ export default function EstractoPage() {
   const [apiSettingsOpen, setApiSettingsOpen] = React.useState(false);
   const [viewMode, setViewMode] = React.useState<"preview" | "split" | "result">("split");
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const pdfPagePreviewCacheRef = React.useRef<Record<string, string[]>>({});
   const modelSelectionsRef = React.useRef<ProviderModelSelections>({});
   const postProcessModelSelectionsRef = React.useRef<ProviderModelSelections>({});
   const modelSelectionsHydratedRef = React.useRef(false);
@@ -977,6 +1000,25 @@ export default function EstractoPage() {
     (it: string, en: string) => (uiLanguage === "it" ? it : en),
     [uiLanguage]
   );
+  const updateFileById = React.useCallback(
+    (fileId: string, updater: (current: ProcessingFile) => ProcessingFile) => {
+      setFiles((prev) => {
+        const index = prev.findIndex((entry) => entry.id === fileId);
+        if (index < 0) {
+          return prev;
+        }
+        const current = prev[index];
+        const next = updater(current);
+        if (next === current) {
+          return prev;
+        }
+        const clone = [...prev];
+        clone[index] = next;
+        return clone;
+      });
+    },
+    []
+  );
 
   const openVaultInObsidian = React.useCallback(
     (metadata: {
@@ -1072,23 +1114,12 @@ export default function EstractoPage() {
       const normalizedSettings = {
         ...values,
         provider: normalizeProvider(values.provider),
-        apiEndpoint: "",
-        apiKey: values.apiKey.trim(),
       };
-      normalizedSettings.apiEndpoint =
-        values.apiEndpoint.trim() || defaultEndpointForProvider(normalizedSettings.provider);
 
       try {
         const params = new URLSearchParams();
-        params.set("host", normalizedSettings.apiEndpoint);
         params.set("provider", normalizedSettings.provider || DEFAULT_API_SETTINGS.provider);
-        const response = await fetch(`/api/models?${params.toString()}`, {
-          headers: normalizedSettings.apiKey
-            ? {
-                "x-api-key": normalizedSettings.apiKey,
-              }
-            : undefined,
-        });
+        const response = await fetch(`/api/models?${params.toString()}`);
 
         if (!response.ok) {
           const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -1193,11 +1224,13 @@ export default function EstractoPage() {
       const normalizedSettings: ApiSettings = {
         provider,
         apiEndpoint: values.apiEndpoint?.trim() || defaultEndpointForProvider(provider),
-        apiKey: values.apiKey?.trim() || "",
+        apiKey: "",
+        hasApiKey: values.hasApiKey === true,
         obsidianBaseDir: values.obsidianBaseDir?.trim() || DEFAULT_OBSIDIAN_VAULT_ROOT,
       };
       setApiSettings(normalizedSettings);
       setApiSettingsDraft(normalizedSettings);
+      setApiKeyDirty(false);
       setObsidianSettings((prev) => ({
         ...prev,
         vaultRoot: normalizedSettings.obsidianBaseDir,
@@ -1206,6 +1239,7 @@ export default function EstractoPage() {
     } catch (error) {
       setApiSettings(DEFAULT_API_SETTINGS);
       setApiSettingsDraft(DEFAULT_API_SETTINGS);
+      setApiKeyDirty(false);
       setObsidianSettings((prev) => ({
         ...prev,
         vaultRoot: DEFAULT_API_SETTINGS.obsidianBaseDir,
@@ -1230,7 +1264,10 @@ export default function EstractoPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(apiSettingsDraft),
+        body: JSON.stringify({
+          ...apiSettingsDraft,
+          replaceApiKey: apiKeyDirty,
+        }),
       });
 
       if (!response.ok) {
@@ -1243,11 +1280,14 @@ export default function EstractoPage() {
       const normalizedSettings: ApiSettings = {
         provider,
         apiEndpoint: saved.apiEndpoint?.trim() || defaultEndpointForProvider(provider),
-        apiKey: saved.apiKey?.trim() || "",
+        apiKey: "",
+        hasApiKey: saved.hasApiKey === true,
         obsidianBaseDir: saved.obsidianBaseDir?.trim() || DEFAULT_OBSIDIAN_VAULT_ROOT,
       };
 
       setApiSettings(normalizedSettings);
+      setApiSettingsDraft(normalizedSettings);
+      setApiKeyDirty(false);
       setObsidianSettings((prev) => ({
         ...prev,
         vaultRoot: normalizedSettings.obsidianBaseDir,
@@ -1428,6 +1468,15 @@ export default function EstractoPage() {
   React.useEffect(() => {
     void loadSavedSettings();
   }, [loadSavedSettings]);
+
+  React.useEffect(() => {
+    const activeIds = new Set(files.map((file) => file.id));
+    for (const fileId of Object.keys(pdfPagePreviewCacheRef.current)) {
+      if (!activeIds.has(fileId)) {
+        delete pdfPagePreviewCacheRef.current[fileId];
+      }
+    }
+  }, [files]);
 
   React.useEffect(() => {
     if (!modelSelectionsHydratedRef.current || !selectedModel) {
@@ -1648,28 +1697,34 @@ export default function EstractoPage() {
 
   const ensurePagePreviews = async (file: ProcessingFile): Promise<string[]> => {
     if (file.file && isPdfFile(file.file)) {
+      const inMemoryPages = pdfPagePreviewCacheRef.current[file.id];
+      if (Array.isArray(inMemoryPages) && inMemoryPages.length > 0) {
+        return inMemoryPages;
+      }
+
       const cachedPages = Array.isArray(file.pagePreviews) ? file.pagePreviews.filter(Boolean) : [];
       if (cachedPages.length > 1) {
+        pdfPagePreviewCacheRef.current[file.id] = cachedPages;
         return cachedPages;
       }
 
-      const renderedPages = await renderPdfPagesAsImages(file.file);
+      const firstPage = cachedPages[0] || file.preview?.trim() || "";
+      const remainingPages = firstPage
+        ? await renderPdfPagesAsImages(file.file, { startPage: 2 })
+        : await renderPdfPagesAsImages(file.file, { startPage: 1 });
+      const renderedPages = firstPage ? [firstPage, ...remainingPages] : remainingPages;
       if (renderedPages.length === 0) {
         throw new Error("Unable to render PDF pages for OCR");
       }
+      pdfPagePreviewCacheRef.current[file.id] = renderedPages;
 
-      setFiles((prev) =>
-        prev.map((entry) =>
-          entry.id === file.id
-            ? {
-                ...entry,
-                preview: renderedPages[0],
-                pagePreviews: renderedPages,
-                pageCount: renderedPages.length,
-              }
-            : entry
-        )
-      );
+      updateFileById(file.id, (entry) => ({
+        ...entry,
+        preview: renderedPages[0],
+        // Keep state light: only first page preview is kept in React state.
+        pagePreviews: renderedPages.length > 0 ? [renderedPages[0]] : [],
+        pageCount: renderedPages.length,
+      }));
 
       return renderedPages;
     }
@@ -1759,55 +1814,49 @@ export default function EstractoPage() {
       }
 
       const progressMeta = parseProgressMetadata(job.metadata);
-      setFiles((prev) =>
-        prev.map((entry) =>
-          entry.id === fileId
-            ? (() => {
-                const nextStatus: ProcessingFile["status"] =
-                  job.status === "COMPLETED"
-                    ? "completed"
-                    : job.status === "FAILED"
-                      ? "error"
-                      : job.status === "QUEUED" && progressMeta?.stage === "paused"
-                        ? "paused"
-                        : "processing";
-                return {
-                  ...entry,
-                  jobId,
-                  status: nextStatus,
-                  progress:
-                    typeof progressMeta?.progressPct === "number"
-                      ? Math.max(0, Math.min(100, progressMeta.progressPct))
-                      : entry.progress,
-                  pageCount: progressMeta?.pageCount ?? entry.pageCount,
-                  processedPages: progressMeta?.processedPages ?? entry.processedPages,
-                  etaSeconds:
-                    progressMeta?.etaSeconds === null || typeof progressMeta?.etaSeconds === "number"
-                      ? progressMeta.etaSeconds
-                      : entry.etaSeconds,
-                  stage: progressMeta?.stage || entry.stage,
-                  stageMessage: progressMeta?.message || entry.stageMessage,
-                  checkpoints: progressMeta?.checkpoints ?? entry.checkpoints,
-                  events: progressMeta?.events ?? entry.events,
-                  result:
-                    job.result && typeof job.result === "object" && !Array.isArray(job.result)
-                      ? {
-                          text:
-                            typeof job.extractedText === "string"
-                              ? job.extractedText
-                              : entry.result?.text || "",
-                          json: job.result as Record<string, unknown>,
-                        }
-                      : entry.result,
-                  error:
-                    job.status === "FAILED"
-                      ? job.errorMessage || t("Elaborazione non riuscita", "Processing failed")
-                      : entry.error,
-                };
-              })()
-            : entry
-        )
-      );
+      updateFileById(fileId, (entry) => {
+        const nextStatus: ProcessingFile["status"] =
+          job.status === "COMPLETED"
+            ? "completed"
+            : job.status === "FAILED"
+              ? "error"
+              : job.status === "QUEUED" && progressMeta?.stage === "paused"
+                ? "paused"
+                : "processing";
+        return {
+          ...entry,
+          jobId,
+          status: nextStatus,
+          progress:
+            typeof progressMeta?.progressPct === "number"
+              ? Math.max(0, Math.min(100, progressMeta.progressPct))
+              : entry.progress,
+          pageCount: progressMeta?.pageCount ?? entry.pageCount,
+          processedPages: progressMeta?.processedPages ?? entry.processedPages,
+          etaSeconds:
+            progressMeta?.etaSeconds === null || typeof progressMeta?.etaSeconds === "number"
+              ? progressMeta.etaSeconds
+              : entry.etaSeconds,
+          stage: progressMeta?.stage || entry.stage,
+          stageMessage: progressMeta?.message || entry.stageMessage,
+          checkpoints: progressMeta?.checkpoints ?? entry.checkpoints,
+          events: progressMeta?.events ?? entry.events,
+          result:
+            job.result && typeof job.result === "object" && !Array.isArray(job.result)
+              ? {
+                  text:
+                    typeof job.extractedText === "string"
+                      ? job.extractedText
+                      : entry.result?.text || "",
+                  json: job.result as Record<string, unknown>,
+                }
+              : entry.result,
+          error:
+            job.status === "FAILED"
+              ? job.errorMessage || t("Elaborazione non riuscita", "Processing failed")
+              : entry.error,
+        };
+      });
 
       if (job.status === "COMPLETED") {
         return {
@@ -1858,7 +1907,6 @@ export default function EstractoPage() {
           includePageNotes: obsidianSettings.includePageNotes,
           model: obsidianSettings.model,
         },
-        apiSettings,
       }),
     });
 
@@ -1883,42 +1931,30 @@ export default function EstractoPage() {
       throw new Error("No image preview available for OCR");
     }
 
-    setFiles((prev) =>
-      prev.map((entry) =>
-        entry.id === file.id
-          ? {
-              ...entry,
-              status: "processing",
-              progress: Math.max(entry.progress, 1),
-              stage: resume ? "resuming" : "queued",
-              stageMessage: resume
-                ? t("Ripresa dal checkpoint...", "Resuming from checkpoint...")
-                : runMode === "pdf_to_obsidian"
-                  ? t(
-                      `In coda per PDF→Obsidian (${pagePreviews.length} pagine)`,
-                      `Queued for PDF→Obsidian (${pagePreviews.length} pages)`
-                    )
-                  : t(`In coda per OCR (${pagePreviews.length} pagine)`, `Queued for OCR (${pagePreviews.length} pages)`),
-              pageCount: pagePreviews.length,
-              processedPages: entry.processedPages || 0,
-              etaSeconds: null,
-              error: undefined,
-            }
-          : entry
-      )
-    );
+    updateFileById(file.id, (entry) => ({
+      ...entry,
+      status: "processing",
+      progress: Math.max(entry.progress, 1),
+      stage: resume ? "resuming" : "queued",
+      stageMessage: resume
+        ? t("Ripresa dal checkpoint...", "Resuming from checkpoint...")
+        : runMode === "pdf_to_obsidian"
+          ? t(
+              `In coda per PDF→Obsidian (${pagePreviews.length} pagine)`,
+              `Queued for PDF→Obsidian (${pagePreviews.length} pages)`
+            )
+          : t(`In coda per OCR (${pagePreviews.length} pagine)`, `Queued for OCR (${pagePreviews.length} pages)`),
+      pageCount: pagePreviews.length,
+      processedPages: entry.processedPages || 0,
+      etaSeconds: null,
+      error: undefined,
+    }));
 
     const startPayload = await startOrResumeOcr(file, pagePreviews, resume);
-    setFiles((prev) =>
-      prev.map((entry) =>
-        entry.id === file.id
-          ? {
-              ...entry,
-              jobId: startPayload.jobId,
-            }
-          : entry
-      )
-    );
+    updateFileById(file.id, (entry) => ({
+      ...entry,
+      jobId: startPayload.jobId,
+    }));
 
     return pollJobUntilStopped(file.id, startPayload.jobId);
   };
@@ -1982,17 +2018,11 @@ export default function EstractoPage() {
           break;
         }
       } catch (error) {
-        setFiles((prev) =>
-          prev.map((entry) =>
-            entry.id === file.id
-              ? {
-                  ...entry,
-                  status: "error",
-                  error: error instanceof Error ? error.message : t("Elaborazione non riuscita", "Processing failed"),
-                }
-              : entry
-          )
-        );
+        updateFileById(file.id, (entry) => ({
+          ...entry,
+          status: "error",
+          error: error instanceof Error ? error.message : t("Elaborazione non riuscita", "Processing failed"),
+        }));
       }
     }
 
@@ -2023,16 +2053,10 @@ export default function EstractoPage() {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(payload.error || `Stop failed (${response.status})`);
       }
-      setFiles((prev) =>
-        prev.map((entry) =>
-          entry.id === file.id
-            ? {
-                ...entry,
-                stageMessage: t("Stop richiesto. Interruzione inferenza corrente...", "Stop requested. Aborting current inference..."),
-              }
-            : entry
-        )
-      );
+      updateFileById(file.id, (entry) => ({
+        ...entry,
+        stageMessage: t("Stop richiesto. Interruzione inferenza corrente...", "Stop requested. Aborting current inference..."),
+      }));
       toast({
         title: t("Stop richiesto", "Stop requested"),
         description: t("Interruzione immediata dell'inferenza e scaricamento del modello.", "Aborting current inference now and unloading the model."),
@@ -2060,17 +2084,11 @@ export default function EstractoPage() {
         });
       }
     } catch (error) {
-      setFiles((prev) =>
-        prev.map((entry) =>
-          entry.id === file.id
-            ? {
-                ...entry,
-                status: "error",
-                error: error instanceof Error ? error.message : t("Ripresa non riuscita", "Resume failed"),
-              }
-            : entry
-        )
-      );
+      updateFileById(file.id, (entry) => ({
+        ...entry,
+        status: "error",
+        error: error instanceof Error ? error.message : t("Ripresa non riuscita", "Resume failed"),
+      }));
       toast({
         title: t("Ripresa non riuscita", "Resume failed"),
         description: error instanceof Error ? error.message : t("Impossibile riprendere l'OCR", "Unable to resume OCR"),
@@ -2185,6 +2203,7 @@ export default function EstractoPage() {
                 className="group"
                 onClick={() => {
                   setApiSettingsDraft(apiSettings);
+                  setApiKeyDirty(false);
                   setApiSettingsOpen(true);
                 }}
                 aria-label={t("Impostazioni", "Settings")}
@@ -2220,6 +2239,7 @@ export default function EstractoPage() {
           setApiSettingsOpen(open);
           if (!open) {
             setApiSettingsDraft(apiSettings);
+            setApiKeyDirty(false);
           }
         }}
       >
@@ -2277,10 +2297,25 @@ export default function EstractoPage() {
                 type="password"
                 value={apiSettingsDraft.apiKey}
                 onChange={(event) =>
-                  setApiSettingsDraft((prev) => ({ ...prev, apiKey: event.target.value }))
+                  setApiSettingsDraft((prev) => {
+                    setApiKeyDirty(true);
+                    return { ...prev, apiKey: event.target.value };
+                  })
                 }
-                placeholder="sk-..."
+                placeholder={
+                  !apiKeyDirty && apiSettingsDraft.hasApiKey
+                    ? t("Chiave API salvata (non mostrata)", "API key is saved (hidden)")
+                    : "sk-..."
+                }
               />
+              {!apiKeyDirty && apiSettingsDraft.hasApiKey ? (
+                <p className="text-[11px] text-muted-foreground">
+                  {t(
+                    "Lascia il campo invariato per mantenere la chiave corrente.",
+                    "Leave unchanged to keep the current key."
+                  )}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="obsidian-base-dir">
@@ -2328,6 +2363,7 @@ export default function EstractoPage() {
               onClick={() => {
                 setApiSettingsOpen(false);
                 setApiSettingsDraft(apiSettings);
+                setApiKeyDirty(false);
               }}
               disabled={isSavingApiSettings}
             >
