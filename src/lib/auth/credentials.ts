@@ -1,0 +1,86 @@
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+
+import { db } from "@/lib/db";
+
+interface AuthUserRecord {
+  id: string;
+  email: string;
+  passwordHash: string;
+  name: string | null;
+}
+
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function normalizeName(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function hashPassword(password: string, salt = randomBytes(16).toString("hex")): string {
+  const key = scryptSync(password, salt, 64);
+  return `${salt}:${key.toString("hex")}`;
+}
+
+export function verifyPassword(password: string, passwordHash: string): boolean {
+  const [salt, storedHash] = passwordHash.split(":");
+  if (!salt || !storedHash) return false;
+
+  const derived = hashPassword(password, salt).split(":")[1];
+  const hashBuffer = Buffer.from(storedHash, "hex");
+  const derivedBuffer = Buffer.from(derived, "hex");
+
+  if (hashBuffer.length !== derivedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(hashBuffer, derivedBuffer);
+}
+
+export async function findUserByEmail(email: string): Promise<AuthUserRecord | null> {
+  const normalizedEmail = normalizeEmail(email);
+  return await db.authUser.findUnique({
+    where: { email: normalizedEmail },
+    select: {
+      id: true,
+      email: true,
+      passwordHash: true,
+      name: true,
+    },
+  });
+}
+
+export async function createUser(input: {
+  email: string;
+  password: string;
+  name?: string;
+}): Promise<AuthUserRecord> {
+  const normalizedEmail = normalizeEmail(input.email);
+  const normalizedName = normalizeName(input.name || "");
+
+  const passwordHash = hashPassword(input.password);
+
+  return await db.authUser.create({
+    data: {
+      email: normalizedEmail,
+      passwordHash,
+      name: normalizedName,
+    },
+    select: {
+      id: true,
+      email: true,
+      passwordHash: true,
+      name: true,
+    },
+  });
+}
+
+export function toSafeUser(user: AuthUserRecord) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+  };
+}
+

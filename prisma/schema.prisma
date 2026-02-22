@@ -1,0 +1,79 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum OcrJobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model AuthUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String?
+  jobs         OcrJob[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model OcrSetting {
+  id                     String       @id @default(cuid())
+  key                    String       @unique
+  language               String       @default("auto")
+  tableDetection         Boolean      @default(true)
+  handwritingRecognition Boolean      @default(false)
+  preserveFormatting     Boolean      @default(true)
+  customPrompt           String       @default("")
+  quality                Int          @default(80)
+  jobs                   OcrJob[]
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+}
+
+model OcrJob {
+  id                     String       @id @default(cuid())
+  userId                 String?
+  user                   AuthUser?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status                 OcrJobStatus @default(QUEUED)
+  fileName               String
+  sourcePreview          String?
+  model                  String
+  language               String
+  tableDetection         Boolean
+  handwritingRecognition Boolean
+  preserveFormatting     Boolean
+  customPrompt           String
+  quality                Int
+  settingsId             String?
+  settings               OcrSetting?  @relation(fields: [settingsId], references: [id], onDelete: SetNull)
+  settingsSnapshot       Json
+  prompt                 String
+  extractedText          String?
+  result                 Json?
+  metadata               Json?
+  errorMessage           String?
+  startedAt              DateTime     @default(now())
+  completedAt            DateTime?
+  processingMs           Int?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@index([settingsId])
+  @@index([userId, createdAt(sort: Desc)])
+}
