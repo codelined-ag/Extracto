@@ -1870,7 +1870,7 @@ export default function EstractoPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="h-screen overflow-hidden flex flex-col">
       {/* Header */}
       <motion.header
         initial={{ y: -20, opacity: 0 }}
@@ -2344,14 +2344,14 @@ export default function EstractoPage() {
       </Dialog>
 
       {/* Main Content */}
-      <main className="flex-1 container mx-auto px-4 py-6">
-        <div className="grid lg:grid-cols-[380px_1fr] gap-6 h-full">
+      <main className="flex-1 min-h-0 overflow-hidden container mx-auto px-4 py-6">
+        <div className="grid lg:grid-cols-[380px_1fr] gap-6 h-full min-h-0">
           {/* Left Panel - File Upload & List */}
           <motion.div
             initial={{ x: -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ duration: 0.4, delay: 0.1 }}
-            className="flex flex-col gap-4"
+            className="flex flex-col gap-4 min-h-0 overflow-y-auto scrollbar-hide pr-1"
           >
             {/* Upload Area */}
             <Card
