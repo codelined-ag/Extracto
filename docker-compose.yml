@@ -8,6 +8,7 @@ services:
     network_mode: ${APP_NETWORK_MODE:-host}
     environment:
       APP_NETWORK_MODE: ${APP_NETWORK_MODE:-host}
+      AUTH_SECRET: ${AUTH_SECRET:-}
       OBSIDIAN_EXPORT_BASE_DIR: ${OBSIDIAN_EXPORT_BASE_DIR:-/host-vaults}
       OBSIDIAN_EXPORT_HOST_ROOT: ${OBSIDIAN_EXPORT_HOST_ROOT:-./obsidian-vaults}
     extra_hosts:
