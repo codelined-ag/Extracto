@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus, Prisma } from "@prisma/client";
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, chown, mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { ApiProviderSettings, getApiSettings } from "@/lib/settings-store";
@@ -881,23 +881,34 @@ async function writeObsidianVault(input: {
   const pageRoot = path.join(vaultPath, "02 Pages");
   const rawRoot = path.join(vaultPath, "03 Raw");
   const indexRoot = path.join(vaultPath, "00 Index");
+  const createdDirs: string[] = [];
+  const createdFiles: string[] = [];
 
-  await mkdir(path.join(vaultPath, ".obsidian"), { recursive: true });
-  await mkdir(topicRoot, { recursive: true });
-  await mkdir(pageRoot, { recursive: true });
-  await mkdir(rawRoot, { recursive: true });
-  await mkdir(indexRoot, { recursive: true });
+  const ensureDir = async (target: string) => {
+    await mkdir(target, { recursive: true });
+    createdDirs.push(target);
+  };
 
-  await writeFile(
+  const writeVaultFile = async (target: string, contents: string) => {
+    await writeFile(target, contents, "utf8");
+    createdFiles.push(target);
+  };
+
+  await ensureDir(vaultPath);
+  await ensureDir(path.join(vaultPath, ".obsidian"));
+  await ensureDir(topicRoot);
+  await ensureDir(pageRoot);
+  await ensureDir(rawRoot);
+  await ensureDir(indexRoot);
+
+  await writeVaultFile(
     path.join(vaultPath, ".obsidian", "app.json"),
     JSON.stringify({ }, null, 2),
-    "utf8"
   );
-  await writeFile(path.join(indexRoot, "Home.md"), `${input.plan.indexMarkdown.trim()}\n`, "utf8");
-  await writeFile(
+  await writeVaultFile(path.join(indexRoot, "Home.md"), `${input.plan.indexMarkdown.trim()}\n`);
+  await writeVaultFile(
     path.join(rawRoot, "Full OCR.md"),
     `${input.plan.markdown.trim()}\n`,
-    "utf8"
   );
 
   const usedNamesByFolder = new Map<string, Set<string>>();
@@ -907,7 +918,7 @@ async function writeObsidianVault(input: {
   for (const topic of input.plan.topics) {
     const topicDirName = sanitizeFileSegment(topic.name, "topic");
     const topicDirPath = path.join(topicRoot, topicDirName);
-    await mkdir(topicDirPath, { recursive: true });
+    await ensureDir(topicDirPath);
     fileCount += 1;
 
     const used = usedNamesByFolder.get(topicDirPath) || new Set<string>();
@@ -931,7 +942,7 @@ async function writeObsidianVault(input: {
       ]
         .filter((line) => line.length > 0)
         .join("\n");
-      await writeFile(notePath, noteContent, "utf8");
+      await writeVaultFile(notePath, noteContent);
       noteCount += 1;
       fileCount += 1;
     }
@@ -952,8 +963,57 @@ async function writeObsidianVault(input: {
         page.text.trim(),
         "",
       ].join("\n");
-      await writeFile(pagePath, pageContent, "utf8");
+      await writeVaultFile(pagePath, pageContent);
       fileCount += 1;
+    }
+  }
+
+  const ownership = await (async () => {
+    try {
+      const info = await stat(root.containerRoot);
+      if (typeof info.uid === "number" && typeof info.gid === "number") {
+        return { uid: info.uid, gid: info.gid };
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  })();
+
+  let chownApplied = false;
+  if (ownership) {
+    for (const dirPath of createdDirs) {
+      try {
+        await chown(dirPath, ownership.uid, ownership.gid);
+        chownApplied = true;
+      } catch {
+        // ignore and fallback below
+      }
+    }
+    for (const filePath of createdFiles) {
+      try {
+        await chown(filePath, ownership.uid, ownership.gid);
+        chownApplied = true;
+      } catch {
+        // ignore and fallback below
+      }
+    }
+  }
+
+  if (!chownApplied) {
+    for (const dirPath of createdDirs) {
+      try {
+        await chmod(dirPath, 0o777);
+      } catch {
+        // ignore
+      }
+    }
+    for (const filePath of createdFiles) {
+      try {
+        await chmod(filePath, 0o666);
+      } catch {
+        // ignore
+      }
     }
   }
 
