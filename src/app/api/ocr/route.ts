@@ -580,10 +580,8 @@ function parseJsonCandidate(rawText: string): unknown | null {
     }
   }
 
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    const bracketCandidate = trimmed.slice(start, end + 1).trim();
+  const bracketCandidate = extractFirstBalancedJsonObject(trimmed);
+  if (bracketCandidate) {
     try {
       return JSON.parse(bracketCandidate);
     } catch {
@@ -592,6 +590,79 @@ function parseJsonCandidate(rawText: string): unknown | null {
   }
 
   return null;
+}
+
+function extractFirstBalancedJsonObject(input: string): string | null {
+  let depth = 0;
+  let startIndex = -1;
+  let inString = false;
+  let escapeNext = false;
+
+  for (let index = 0; index < input.length; index++) {
+    const char = input[index];
+
+    if (inString) {
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      if (char === "\\") {
+        escapeNext = true;
+        continue;
+      }
+      if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") {
+      if (depth === 0) {
+        startIndex = index;
+      }
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}") {
+      if (depth > 0) {
+        depth -= 1;
+        if (depth === 0 && startIndex >= 0) {
+          return input.slice(startIndex, index + 1);
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function coerceMarkdownText(value: unknown, fallbackMarkdown: string): string {
+  const fallback = fallbackMarkdown.trim();
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+
+  const parsed = parseJsonCandidate(trimmed);
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const objectValue = parsed as Record<string, unknown>;
+    const nestedValue = objectValue.markdown ?? objectValue.text ?? objectValue.content;
+    if (typeof nestedValue === "string" && nestedValue.trim()) {
+      return nestedValue.trim();
+    }
+  }
+
+  return trimmed;
 }
 
 function normalizeStructuredMarkdownPayload(
@@ -604,14 +675,10 @@ function normalizeStructuredMarkdownPayload(
 } {
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
     const objectValue = raw as Record<string, unknown>;
-    const markdown =
-      typeof objectValue.markdown === "string" && objectValue.markdown.trim()
-        ? objectValue.markdown.trim()
-        : typeof objectValue.text === "string" && objectValue.text.trim()
-          ? objectValue.text.trim()
-          : typeof objectValue.content === "string" && objectValue.content.trim()
-            ? objectValue.content.trim()
-            : fallbackMarkdown.trim();
+    const markdown = coerceMarkdownText(
+      objectValue.markdown ?? objectValue.text ?? objectValue.content,
+      fallbackMarkdown
+    );
 
     return {
       markdown,

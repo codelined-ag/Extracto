@@ -226,13 +226,14 @@ const formatEta = (value?: number | null): string => {
 };
 
 function getMarkdownFromJsonPayload(payload: unknown, fallback = ""): string {
+  const fallbackNormalized = normalizeMarkdownCandidate(fallback);
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return fallback;
+    return fallbackNormalized;
   }
 
   const typed = payload as Record<string, unknown>;
   if (typeof typed.markdown === "string" && typed.markdown.trim()) {
-    return typed.markdown;
+    return normalizeMarkdownCandidate(typed.markdown);
   }
 
   if (
@@ -242,14 +243,14 @@ function getMarkdownFromJsonPayload(payload: unknown, fallback = ""): string {
     typeof (typed.structured as Record<string, unknown>).markdown === "string" &&
     ((typed.structured as Record<string, unknown>).markdown as string).trim()
   ) {
-    return (typed.structured as Record<string, unknown>).markdown as string;
+    return normalizeMarkdownCandidate((typed.structured as Record<string, unknown>).markdown as string);
   }
 
   if (typeof typed.text === "string" && typed.text.trim()) {
-    return typed.text;
+    return normalizeMarkdownCandidate(typed.text);
   }
 
-  return fallback;
+  return fallbackNormalized;
 }
 
 function getStructuredJsonPayload(payload: unknown): Record<string, unknown> {
@@ -263,6 +264,113 @@ function getStructuredJsonPayload(payload: unknown): Record<string, unknown> {
   }
 
   return typed;
+}
+
+function parseLooseJsonObject(raw: string): Record<string, unknown> | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const directCandidates = [
+    trimmed,
+    trimmed.replace(/^json\s*/iu, "").trim(),
+    trimmed.replace(/^['"]+|['"]+$/g, "").trim(),
+  ];
+
+  const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
+  if (fencedMatch?.[1]) {
+    directCandidates.unshift(fencedMatch[1].trim());
+  }
+
+  for (const candidate of directCandidates) {
+    if (!candidate) continue;
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // continue
+    }
+  }
+
+  const balanced = extractFirstBalancedJsonObject(trimmed);
+  if (balanced) {
+    try {
+      const parsed = JSON.parse(balanced);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function extractFirstBalancedJsonObject(input: string): string | null {
+  let depth = 0;
+  let startIndex = -1;
+  let inString = false;
+  let escapeNext = false;
+
+  for (let index = 0; index < input.length; index++) {
+    const char = input[index];
+
+    if (inString) {
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      if (char === "\\") {
+        escapeNext = true;
+        continue;
+      }
+      if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") {
+      if (depth === 0) {
+        startIndex = index;
+      }
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}") {
+      if (depth > 0) {
+        depth -= 1;
+        if (depth === 0 && startIndex >= 0) {
+          return input.slice(startIndex, index + 1);
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function normalizeMarkdownCandidate(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  const parsed = parseLooseJsonObject(trimmed);
+  if (parsed) {
+    const nested = parsed.markdown ?? parsed.text ?? parsed.content;
+    if (typeof nested === "string" && nested.trim()) {
+      return nested.trim();
+    }
+  }
+
+  return trimmed;
 }
 
 const PDF_RENDER_SCALE = 1.5;
