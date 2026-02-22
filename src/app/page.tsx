@@ -1911,7 +1911,7 @@ export default function EstractoPage() {
   };
 
   return (
-    <div className="h-screen overflow-hidden flex flex-col">
+    <div className="h-screen overflow-hidden flex flex-col no-scrollbars">
       {/* Header */}
       <motion.header
         initial={{ y: -20, opacity: 0 }}
@@ -2427,8 +2427,8 @@ export default function EstractoPage() {
             />
 
             {/* File List */}
-            <Card className="min-h-0 overflow-hidden">
-              <CardContent className="p-0">
+            <Card className="min-h-[220px] overflow-hidden">
+              <CardContent className="p-0 flex flex-col">
                 {/* File List Header */}
                 <div className="flex items-center justify-between p-3 border-b">
                   <div className="flex items-center gap-2">
@@ -2572,7 +2572,7 @@ export default function EstractoPage() {
                     </div>
                   </ScrollArea>
                 ) : (
-                  <div className="flex items-center justify-center py-8">
+                  <div className="flex items-center justify-center py-8 min-h-[120px]">
                     <div className="text-center">
                       <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
                         <FileText className="h-6 w-6 text-muted-foreground" />

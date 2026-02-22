@@ -130,4 +130,17 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  .no-scrollbars,
+  .no-scrollbars * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .no-scrollbars::-webkit-scrollbar,
+  .no-scrollbars *::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
 }
