@@ -147,9 +147,16 @@ async function discoverModels(
     const candidateBases = provider === "mistral"
       ? buildMistralEndpointBases(normalizedHost)
       : buildEndpointBases(normalizedHost);
-    const candidateUrls = Array.from(
+    const rawCandidateUrls = Array.from(
       new Set(candidateBases.flatMap((base) => candidates.map((path) => `${base}/${path}`)))
     );
+    const candidateUrls = provider === "mistral"
+      ? Array.from(
+          new Set(
+            rawCandidateUrls.flatMap((url) => [url, `${url}?object=list`])
+          )
+        )
+      : rawCandidateUrls;
 
     for (const url of candidateUrls) {
       try {

@@ -198,14 +198,16 @@ const DEFAULT_API_SETTINGS: ApiSettings = {
   obsidianBaseDir: DEFAULT_OBSIDIAN_VAULT_ROOT,
 };
 
-// Fallback list before first model fetch
-const FALLBACK_MODELS: Model[] = [
+// Fallback list before first model fetch (Ollama only; Mistral is dynamic).
+const OLLAMA_FALLBACK_MODELS: Model[] = [
   { id: "llama3.2-vision:latest", name: "Llama 3.2 Vision", provider: "ollama" },
   { id: "llava:latest", name: "LLaVA", provider: "ollama" },
   { id: "minicpm-v:latest", name: "MiniCPM-V", provider: "ollama" },
-  { id: "mistral-ocr-latest", name: "Mistral OCR (latest)", provider: "mistral" },
-  { id: "pixtral-12b", name: "Pixtral 12B", provider: "mistral" },
 ];
+
+function getFallbackModelsForProvider(provider: "ollama" | "mistral"): Model[] {
+  return provider === "ollama" ? OLLAMA_FALLBACK_MODELS : [];
+}
 
 // Languages
 const LANGUAGES = [
@@ -735,8 +737,8 @@ export default function EstractoPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [files, setFiles] = React.useState<ProcessingFile[]>([]);
-  const [selectedModel, setSelectedModel] = React.useState<string>(FALLBACK_MODELS[0].id);
-  const [models, setModels] = React.useState<Model[]>(FALLBACK_MODELS);
+  const [selectedModel, setSelectedModel] = React.useState<string>(OLLAMA_FALLBACK_MODELS[0].id);
+  const [models, setModels] = React.useState<Model[]>(OLLAMA_FALLBACK_MODELS);
   const [apiSettings, setApiSettings] = React.useState<ApiSettings>(DEFAULT_API_SETTINGS);
   const [apiSettingsDraft, setApiSettingsDraft] = React.useState<ApiSettings>(DEFAULT_API_SETTINGS);
   const [isDragOver, setIsDragOver] = React.useState(false);
@@ -889,8 +891,10 @@ export default function EstractoPage() {
 
         const payload = (await response.json()) as { models?: Model[] };
         const discoveredModels = Array.isArray(payload.models) ? payload.models : [];
-        const nextModels =
-          discoveredModels.length > 0 ? discoveredModels : FALLBACK_MODELS;
+        const fallbackModels = getFallbackModelsForProvider(
+          normalizedSettings.provider as ProviderKind
+        );
+        const nextModels = discoveredModels.length > 0 ? discoveredModels : fallbackModels;
         const providerModelIds = nextModels
           .filter((model) => normalizeProvider(model.provider) === normalizedSettings.provider)
           .map((model) => model.id);
@@ -920,13 +924,16 @@ export default function EstractoPage() {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unable to fetch models";
         setModelError(message);
-        setModels(FALLBACK_MODELS);
-        const providerModelIds = FALLBACK_MODELS
+        const fallbackModels = getFallbackModelsForProvider(
+          normalizedSettings.provider as ProviderKind
+        );
+        setModels(fallbackModels);
+        const providerModelIds = fallbackModels
           .filter((model) => normalizeProvider(model.provider) === normalizedSettings.provider)
           .map((model) => model.id);
         const storedModel =
           modelSelectionsRef.current[normalizedSettings.provider as ProviderKind]?.trim() || "";
-        const providerFirstModelId = providerModelIds[0] || FALLBACK_MODELS[0]?.id || "";
+        const providerFirstModelId = providerModelIds[0] || fallbackModels[0]?.id || "";
         setSelectedModel((current) => {
           const currentInProvider = providerModelIds.includes(current);
           const storedInProvider = storedModel && providerModelIds.includes(storedModel);
@@ -949,7 +956,7 @@ export default function EstractoPage() {
           description: message,
           variant: "destructive",
         });
-        return FALLBACK_MODELS;
+        return fallbackModels;
       } finally {
         setIsLoadingModels(false);
       }
@@ -1705,6 +1712,17 @@ export default function EstractoPage() {
   // Process files with OCR
   const processFiles = async () => {
     if (files.length === 0) return;
+    if (!selectedModel.trim()) {
+      toast({
+        title: t("Modello mancante", "Missing model"),
+        description: t(
+          "Seleziona prima un modello disponibile per il provider scelto.",
+          "Select an available model for the selected provider first."
+        ),
+        variant: "destructive",
+      });
+      return;
+    }
     if (!isRunReady) {
       if (runMode === "pdf_to_obsidian") {
         toast({
@@ -2345,13 +2363,13 @@ export default function EstractoPage() {
 
       {/* Main Content */}
       <main className="flex-1 min-h-0 overflow-hidden container mx-auto px-4 py-6">
-        <div className="grid lg:grid-cols-[380px_1fr] gap-6 h-full min-h-0">
+        <div className="grid lg:grid-cols-[380px_1fr] gap-6 min-h-0 lg:h-full">
           {/* Left Panel - File Upload & List */}
           <motion.div
             initial={{ x: -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ duration: 0.4, delay: 0.1 }}
-            className="flex flex-col gap-4 min-h-0 overflow-y-auto scrollbar-hide pr-1"
+            className="flex flex-col gap-4 min-h-0 lg:overflow-y-auto lg:scrollbar-hide lg:pr-1"
           >
             {/* Upload Area */}
             <Card
@@ -2401,7 +2419,7 @@ export default function EstractoPage() {
             />
 
             {/* File List */}
-            <Card className="flex-1 min-h-0">
+            <Card className="min-h-0 lg:flex-1">
               <CardContent className="p-0 flex flex-col h-full">
                 {/* File List Header */}
                 <div className="flex items-center justify-between p-3 border-b">
@@ -2560,13 +2578,14 @@ export default function EstractoPage() {
                 )}
 
                 {/* Process Button */}
-                <div className="p-3 border-t space-y-2">
+                <div className="p-3 border-t space-y-2 shrink-0 bg-card">
                   <Button
                     className="w-full group"
                     onClick={processFiles}
                     disabled={
                       isProcessing ||
                       pendingCount === 0 ||
+                      !selectedModel.trim() ||
                       !isRunReady ||
                       activeProcessingFile !== null
                     }
