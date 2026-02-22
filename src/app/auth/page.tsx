@@ -152,7 +152,7 @@ export default function AuthPage() {
       <Card className="w-full max-w-md border-2">
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
-            <CardTitle>{t("Accesso OCR", "OCR Access")}</CardTitle>
+            <CardTitle>{t("Accesso Extracto", "Extracto Access")}</CardTitle>
             <Select value={uiLanguage} onValueChange={(value) => setUiLanguage(value as UiLanguage)}>
               <SelectTrigger className="w-[90px] h-8" aria-label={t("Lingua", "Language")}>
                 <div className="flex items-center gap-1.5">

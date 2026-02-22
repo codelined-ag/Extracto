@@ -15,10 +15,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OCR Web App",
+  title: "Extracto - AI-Powered Document OCR",
   description: "Extract text from documents with AI. Batch processing, real-time progress, and multiple output formats.",
-  keywords: ["OCR", "Document Processing", "AI", "Text Extraction"],
-  authors: [{ name: "OCR Web App" }],
+  keywords: ["OCR", "Document Processing", "AI", "Text Extraction", "Extracto"],
+  authors: [{ name: "Extracto Team" }],
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
