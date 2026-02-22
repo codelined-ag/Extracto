@@ -1631,7 +1631,7 @@ export default function EstractoPage() {
           }
         }}
       >
-        <DialogContent className="w-[min(96vw,1200px)] max-w-[96vw] h-[min(90vh,860px)] flex flex-col overflow-hidden p-4 sm:p-5">
+        <DialogContent className="w-[96vw] !max-w-[96vw] h-[92vh] flex flex-col overflow-hidden p-4 sm:w-[94vw] sm:!max-w-[94vw] sm:h-[90vh] sm:p-5">
           <DialogHeader>
             <DialogTitle>Past OCR Runs</DialogTitle>
             <DialogDescription>
@@ -1639,7 +1639,7 @@ export default function EstractoPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid md:grid-cols-[280px_minmax(0,1fr)] gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
+          <div className="grid lg:grid-cols-[320px_minmax(0,1fr)] gap-4 flex-1 min-h-0 min-w-0 overflow-y-auto lg:overflow-hidden">
             <Card className="min-h-0 min-w-0 flex flex-col">
               <CardHeader className="py-3 px-4 border-b">
                 <CardTitle className="text-sm">History</CardTitle>
@@ -1731,7 +1731,7 @@ export default function EstractoPage() {
                       </p>
                     </div>
 
-                    <div className="grid md:grid-cols-[220px_minmax(0,1fr)] flex-1 min-h-0 min-w-0">
+                    <div className="grid xl:grid-cols-[240px_minmax(0,1fr)] flex-1 min-h-0 min-w-0">
                       <div className="border-r p-3 flex items-center justify-center bg-muted/20">
                         {selectedHistoryJob.sourcePreview ? (
                           <img
