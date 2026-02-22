@@ -12,12 +12,14 @@ export async function POST(request: NextRequest) {
     provider: string;
     apiEndpoint: string;
     apiKey: string;
+    obsidianBaseDir: string;
   }>;
 
   const updated = await saveApiSettings({
     provider: body.provider,
     apiEndpoint: body.apiEndpoint?.trim(),
     apiKey: body.apiKey?.trim(),
+    obsidianBaseDir: body.obsidianBaseDir?.trim(),
   });
 
   return NextResponse.json(updated);

@@ -67,6 +67,7 @@ interface OCRRequestBody {
     provider?: unknown;
     apiEndpoint?: unknown;
     apiKey?: unknown;
+    obsidianBaseDir?: unknown;
   };
 }
 
@@ -328,6 +329,7 @@ function normalizeApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
             OLLAMA_DISCOVERY_FALLBACK_HOST,
           ),
     apiKey: raw.apiKey?.trim() || "",
+    obsidianBaseDir: raw.obsidianBaseDir?.trim() || OBSIDIAN_EXPORT_BASE_DIR,
   };
 }
 
@@ -2847,20 +2849,7 @@ export async function POST(request: NextRequest) {
     const settingsPayload = sanitizeSettings(body.settings);
     const mode = parseRunMode(body.mode);
     const obsidianPayload = sanitizeObsidianSettings(body.obsidian);
-    const effectiveObsidianPayload: ObsidianSettings =
-      mode === "pdf_to_obsidian"
-        ? { ...obsidianPayload, enabled: true }
-        : { ...obsidianPayload, enabled: false };
     let postProcessingPayload = sanitizePostProcessing(body.postProcessing);
-    if (mode === "pdf_to_obsidian") {
-      const obsidianModel = effectiveObsidianPayload.model || postProcessingPayload.model || model;
-      postProcessingPayload = {
-        enabled: true,
-        instruction: buildObsidianPostProcessingInstruction(effectiveObsidianPayload.instruction),
-        outputFormat: "json",
-        model: obsidianModel,
-      };
-    }
     const settings = normalizeApiSettings({
       provider:
         typeof body.apiSettings?.provider === "string"
@@ -2880,7 +2869,26 @@ export async function POST(request: NextRequest) {
           : typeof body.apiKey === "string"
             ? body.apiKey
             : storedSettings.apiKey,
+      obsidianBaseDir:
+        typeof body.apiSettings?.obsidianBaseDir === "string"
+          ? body.apiSettings.obsidianBaseDir
+          : storedSettings.obsidianBaseDir,
     });
+    const effectiveObsidianPayload: ObsidianSettings = {
+      ...obsidianPayload,
+      enabled: mode === "pdf_to_obsidian",
+      vaultRoot:
+        obsidianPayload.vaultRoot.trim() || settings.obsidianBaseDir || OBSIDIAN_EXPORT_BASE_DIR,
+    };
+    if (mode === "pdf_to_obsidian") {
+      const obsidianModel = effectiveObsidianPayload.model || postProcessingPayload.model || model;
+      postProcessingPayload = {
+        enabled: true,
+        instruction: buildObsidianPostProcessingInstruction(effectiveObsidianPayload.instruction),
+        outputFormat: "json",
+        model: obsidianModel,
+      };
+    }
 
     if (!model) {
       throw new ApiRouteError("Model is required", 400);

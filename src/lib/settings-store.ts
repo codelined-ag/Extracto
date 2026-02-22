@@ -17,6 +17,7 @@ const DEFAULT_MISTRAL_OCR_ENDPOINT = normalizeHostEndpoint(
 );
 const SHOULD_PRESERVE_LOCALHOST =
   (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase() === "host";
+const DEFAULT_OBSIDIAN_BASE_DIR = (process.env.OBSIDIAN_EXPORT_BASE_DIR || "/host-vaults").trim();
 const FALLBACK_OLLAMA_HOST = resolveOllamaHostEndpoint(
   DEFAULT_OLLAMA_HOST,
   "http://127.0.0.1:11434"
@@ -102,12 +103,14 @@ export interface ApiProviderSettings {
   provider: string;
   apiEndpoint: string;
   apiKey: string;
+  obsidianBaseDir: string;
 }
 
 const DEFAULT_API_SETTINGS: ApiProviderSettings = {
   provider: "ollama",
   apiEndpoint: normalizeApiEndpoint(DEFAULT_OLLAMA_HOST, "ollama"),
   apiKey: "",
+  obsidianBaseDir: DEFAULT_OBSIDIAN_BASE_DIR,
 };
 
 const SETTINGS_PATH = path.join(DATA_ROOT, "api-settings.json");
@@ -118,6 +121,7 @@ const normalizeSettings = (settings: Partial<ApiProviderSettings>): ApiProviderS
     provider,
     apiEndpoint: normalizeApiEndpoint(settings.apiEndpoint, provider),
     apiKey: settings.apiKey?.trim() || "",
+    obsidianBaseDir: settings.obsidianBaseDir?.trim() || DEFAULT_OBSIDIAN_BASE_DIR,
   };
 };
 

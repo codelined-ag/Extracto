@@ -120,6 +120,7 @@ interface ApiSettings {
   provider: string;
   apiEndpoint: string;
   apiKey: string;
+  obsidianBaseDir: string;
 }
 
 interface AdvancedSettings {
@@ -194,6 +195,7 @@ const DEFAULT_API_SETTINGS: ApiSettings = {
   provider: "ollama",
   apiEndpoint: DEFAULT_OLLAMA_ENDPOINT,
   apiKey: "",
+  obsidianBaseDir: DEFAULT_OBSIDIAN_VAULT_ROOT,
 };
 
 // Fallback list before first model fetch
@@ -971,13 +973,22 @@ export default function EstractoPage() {
         provider,
         apiEndpoint: values.apiEndpoint?.trim() || defaultEndpointForProvider(provider),
         apiKey: values.apiKey?.trim() || "",
+        obsidianBaseDir: values.obsidianBaseDir?.trim() || DEFAULT_OBSIDIAN_VAULT_ROOT,
       };
       setApiSettings(normalizedSettings);
       setApiSettingsDraft(normalizedSettings);
+      setObsidianSettings((prev) => ({
+        ...prev,
+        vaultRoot: normalizedSettings.obsidianBaseDir,
+      }));
       await fetchAvailableModels(normalizedSettings);
     } catch (error) {
       setApiSettings(DEFAULT_API_SETTINGS);
       setApiSettingsDraft(DEFAULT_API_SETTINGS);
+      setObsidianSettings((prev) => ({
+        ...prev,
+        vaultRoot: DEFAULT_API_SETTINGS.obsidianBaseDir,
+      }));
       await fetchAvailableModels(DEFAULT_API_SETTINGS);
       toast({
         title: t("Caricamento impostazioni non riuscito", "Settings load failed"),
@@ -1012,9 +1023,14 @@ export default function EstractoPage() {
         provider,
         apiEndpoint: saved.apiEndpoint?.trim() || defaultEndpointForProvider(provider),
         apiKey: saved.apiKey?.trim() || "",
+        obsidianBaseDir: saved.obsidianBaseDir?.trim() || DEFAULT_OBSIDIAN_VAULT_ROOT,
       };
 
       setApiSettings(normalizedSettings);
+      setObsidianSettings((prev) => ({
+        ...prev,
+        vaultRoot: normalizedSettings.obsidianBaseDir,
+      }));
       setApiSettingsOpen(false);
       await fetchAvailableModels(normalizedSettings);
       toast({
@@ -2048,6 +2064,28 @@ export default function EstractoPage() {
                 }
                 placeholder="sk-..."
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="obsidian-base-dir">
+                {t("Directory base Obsidian", "Obsidian base directory")}
+              </Label>
+              <Input
+                id="obsidian-base-dir"
+                value={apiSettingsDraft.obsidianBaseDir}
+                onChange={(event) =>
+                  setApiSettingsDraft((prev) => ({
+                    ...prev,
+                    obsidianBaseDir: event.target.value,
+                  }))
+                }
+                placeholder={DEFAULT_OBSIDIAN_VAULT_ROOT}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {t(
+                  "Root usata per creare i nuovi vault in modalità PDF → Obsidian.",
+                  "Root used to create new vaults in PDF → Obsidian mode."
+                )}
+              </p>
             </div>
             <Separator />
             <div className="space-y-2">
