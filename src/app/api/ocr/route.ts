@@ -255,12 +255,16 @@ async function getAuthenticatedUserId(request: NextRequest): Promise<string | nu
 }
 
 function normalizeApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
+  const provider = parseProviderHint(raw.provider);
   return {
-    provider: parseProviderHint(raw.provider),
-    apiEndpoint: resolveOllamaHostEndpoint(
-      raw.apiEndpoint || OLLAMA_DISCOVERY_FALLBACK_HOST,
-      OLLAMA_DISCOVERY_FALLBACK_HOST,
-    ),
+    provider,
+    apiEndpoint:
+      provider === "mistral"
+        ? normalizeMistralOcrEndpoint(raw.apiEndpoint || DEFAULT_MISTRAL_API_URL)
+        : resolveOllamaHostEndpoint(
+            raw.apiEndpoint || OLLAMA_DISCOVERY_FALLBACK_HOST,
+            OLLAMA_DISCOVERY_FALLBACK_HOST,
+          ),
     apiKey: raw.apiKey?.trim() || "",
   };
 }
@@ -275,13 +279,52 @@ function normalizeOllamaEndpoint(rawEndpoint: string): string {
     .replace(/\/v1\/?$/i, "");
 }
 
-function normalizeMistralEndpoint(rawEndpoint: string): string {
-  const trimmed = rawEndpoint.trim().replace(/\/+$/, "");
-  return trimmed.endsWith("/ocr")
-    ? trimmed
-    : trimmed
-        .replace(/\/v1\/?$/i, "")
-        .replace(/\/api\/?$/i, "");
+function normalizeMistralOcrEndpoint(rawEndpoint: string): string {
+  const fallback = DEFAULT_MISTRAL_API_URL;
+  const trimmed = rawEndpoint.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+
+  const normalized = normalizeHostEndpoint(trimmed, fallback);
+  try {
+    const url = new URL(normalized);
+    url.search = "";
+    url.hash = "";
+
+    const pathname = url.pathname.replace(/\/+$/u, "");
+    if (pathname.endsWith("/v1/ocr")) {
+      url.pathname = pathname;
+      return url.toString();
+    }
+    if (pathname.endsWith("/v1/models")) {
+      url.pathname = `${pathname.slice(0, -10)}/v1/ocr`;
+      return url.toString();
+    }
+    if (pathname.endsWith("/models")) {
+      const base = pathname.slice(0, -7);
+      url.pathname = base.endsWith("/v1") ? `${base}/ocr` : `${base}/v1/ocr`;
+      return url.toString();
+    }
+    if (pathname.endsWith("/ocr")) {
+      const base = pathname.slice(0, -4);
+      url.pathname = base.endsWith("/v1") ? `${base}/ocr` : `${base}/v1/ocr`;
+      return url.toString();
+    }
+    if (pathname.endsWith("/v1")) {
+      url.pathname = `${pathname}/ocr`;
+      return url.toString();
+    }
+    if (!pathname || pathname === "/") {
+      url.pathname = "/v1/ocr";
+      return url.toString();
+    }
+
+    url.pathname = `${pathname}/v1/ocr`;
+    return url.toString();
+  } catch {
+    return fallback;
+  }
 }
 
 function sanitizeSettings(raw: Partial<AdvancedSettings> | undefined): AdvancedSettings {
@@ -1082,11 +1125,7 @@ async function runMistralOcr(
     throw new ApiRouteError("MISTRAL_API_KEY is not configured", 500);
   }
 
-  const endpoint =
-    apiEndpoint.trim().startsWith("http")
-      ? normalizeMistralEndpoint(apiEndpoint)
-      : DEFAULT_MISTRAL_API_URL;
-  const normalizedEndpoint = endpoint.endsWith("/ocr") ? endpoint : `${endpoint}/ocr`;
+  const normalizedEndpoint = normalizeMistralOcrEndpoint(apiEndpoint || DEFAULT_MISTRAL_API_URL);
 
   const response = await fetchWithTimeout(normalizedEndpoint, {
     method: "POST",
@@ -1184,7 +1223,7 @@ async function runMistralPostProcessing(
   }
 
   const endpoint = buildMistralChatEndpoint(
-    apiEndpoint.trim() || "https://api.mistral.ai/v1/ocr"
+    apiEndpoint.trim() || DEFAULT_MISTRAL_API_URL
   );
   const response = await fetchWithTimeout(endpoint, {
     method: "POST",

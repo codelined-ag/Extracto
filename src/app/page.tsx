@@ -157,9 +157,16 @@ interface HistoryJobDetail extends HistoryJobSummary {
   result?: unknown;
 }
 
+const DEFAULT_OLLAMA_ENDPOINT = "http://localhost:11434";
+const DEFAULT_MISTRAL_ENDPOINT = "https://api.mistral.ai/v1/ocr";
+
+function normalizeProvider(provider?: string): "ollama" | "mistral" {
+  return provider?.trim().toLowerCase().split(":")[0] === "mistral" ? "mistral" : "ollama";
+}
+
 const DEFAULT_API_SETTINGS: ApiSettings = {
   provider: "ollama",
-  apiEndpoint: "http://localhost:11434",
+  apiEndpoint: DEFAULT_OLLAMA_ENDPOINT,
   apiKey: "",
 };
 
@@ -168,7 +175,7 @@ const FALLBACK_MODELS: Model[] = [
   { id: "llama3.2-vision:latest", name: "Llama 3.2 Vision", provider: "ollama" },
   { id: "llava:latest", name: "LLaVA", provider: "ollama" },
   { id: "minicpm-v:latest", name: "MiniCPM-V", provider: "ollama" },
-  { id: "mistral-ocr", name: "Mistral OCR", provider: "mistral" },
+  { id: "mistral-ocr-latest", name: "Mistral OCR (latest)", provider: "mistral" },
   { id: "pixtral-12b", name: "Pixtral 12B", provider: "mistral" },
 ];
 
@@ -409,6 +416,7 @@ export default function EstractoPage() {
 
       const normalizedSettings = {
         ...values,
+        provider: normalizeProvider(values.provider),
         apiEndpoint: values.apiEndpoint.trim() || DEFAULT_API_SETTINGS.apiEndpoint,
         apiKey: values.apiKey.trim(),
       };
@@ -473,8 +481,9 @@ export default function EstractoPage() {
       }
 
       const values = (await response.json()) as ApiSettings;
+      const provider = normalizeProvider(values.provider);
       const normalizedSettings: ApiSettings = {
-        provider: values.provider?.trim() || DEFAULT_API_SETTINGS.provider,
+        provider,
         apiEndpoint: values.apiEndpoint?.trim() || DEFAULT_API_SETTINGS.apiEndpoint,
         apiKey: values.apiKey?.trim() || "",
       };
@@ -513,8 +522,9 @@ export default function EstractoPage() {
       }
 
       const saved = (await response.json()) as ApiSettings;
+      const provider = normalizeProvider(saved.provider);
       const normalizedSettings: ApiSettings = {
-        provider: saved.provider?.trim() || DEFAULT_API_SETTINGS.provider,
+        provider,
         apiEndpoint: saved.apiEndpoint?.trim() || DEFAULT_API_SETTINGS.apiEndpoint,
         apiKey: saved.apiKey?.trim() || "",
       };
@@ -1341,7 +1351,29 @@ export default function EstractoPage() {
               <Select
                 value={apiSettingsDraft.provider}
                 onValueChange={(value) =>
-                  setApiSettingsDraft((prev) => ({ ...prev, provider: value }))
+                  setApiSettingsDraft((prev) => {
+                    const nextProvider = normalizeProvider(value);
+                    const trimmedEndpoint = prev.apiEndpoint.trim();
+                    const shouldResetToMistral =
+                      nextProvider === "mistral" &&
+                      (!trimmedEndpoint ||
+                        trimmedEndpoint === DEFAULT_OLLAMA_ENDPOINT ||
+                        trimmedEndpoint === "http://127.0.0.1:11434");
+                    const shouldResetToOllama =
+                      nextProvider === "ollama" &&
+                      (!trimmedEndpoint ||
+                        trimmedEndpoint === DEFAULT_MISTRAL_ENDPOINT ||
+                        trimmedEndpoint === "https://api.mistral.ai");
+                    return {
+                      ...prev,
+                      provider: nextProvider,
+                      apiEndpoint: shouldResetToMistral
+                        ? DEFAULT_MISTRAL_ENDPOINT
+                        : shouldResetToOllama
+                          ? DEFAULT_OLLAMA_ENDPOINT
+                          : prev.apiEndpoint,
+                    };
+                  })
                 }
               >
                 <SelectTrigger id="provider" className="w-full">
@@ -1349,8 +1381,7 @@ export default function EstractoPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ollama">Ollama</SelectItem>
-                  <SelectItem value="openai">OpenAI-compatible</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  <SelectItem value="mistral">Mistral OCR API</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1362,7 +1393,11 @@ export default function EstractoPage() {
                 onChange={(event) =>
                   setApiSettingsDraft((prev) => ({ ...prev, apiEndpoint: event.target.value }))
                 }
-                placeholder="http://localhost:11434"
+                placeholder={
+                  normalizeProvider(apiSettingsDraft.provider) === "mistral"
+                    ? DEFAULT_MISTRAL_ENDPOINT
+                    : DEFAULT_OLLAMA_ENDPOINT
+                }
               />
             </div>
             <div className="space-y-2">

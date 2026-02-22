@@ -20,7 +20,9 @@ export const metadata: Metadata = {
   keywords: ["OCR", "Document Processing", "AI", "Text Extraction", "Estracto"],
   authors: [{ name: "Estracto Team" }],
   icons: {
-    icon: "/logo.svg",
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
   },
 };
 

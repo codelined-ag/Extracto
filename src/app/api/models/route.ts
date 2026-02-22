@@ -15,8 +15,8 @@ interface NormalizedModel {
 
 const MODELS_SOURCE_TIMEOUT_MS = 8000;
 const OLLAMA_MODEL_PATHS = ["api/tags", "v1/models"] as const;
-const OPENAI_MODEL_PATHS = ["v1/models", "models"] as const;
-const DEFAULT_MODEL_PATHS = ["api/tags", "v1/models", "models"] as const;
+const MISTRAL_MODEL_PATHS = ["v1/models"] as const;
+const DEFAULT_MODEL_PATHS = ["api/tags", "v1/models"] as const;
 
 const OLLAMA_NETWORK_HINT =
   "If Ollama runs on the host machine, ensure it is not bound only to 127.0.0.1; " +
@@ -35,18 +35,25 @@ const FALLBACK_OLLAMA_HOST = resolveOllamaHostEndpoint(
 );
 const DISCOVERY_FALLBACK_HOST =
   APP_NETWORK_MODE === "host" ? "http://127.0.0.1:11434" : FALLBACK_OLLAMA_HOST;
+const DEFAULT_MISTRAL_ENDPOINT = normalizeHostEndpoint(
+  process.env.MISTRAL_OCR_API_URL || "",
+  "https://api.mistral.ai/v1/ocr"
+);
 
-function parseProviderHint(rawProvider: string | null): string {
-  return rawProvider?.trim().toLowerCase().split(":")[0] ?? "";
+function parseProviderHint(rawProvider: string | null): "ollama" | "mistral" | "" {
+  const normalized = rawProvider?.trim().toLowerCase().split(":")[0] ?? "";
+  if (normalized === "mistral") return "mistral";
+  if (normalized === "ollama") return "ollama";
+  return "";
 }
 
-function getModelPaths(providerHint?: string): readonly string[] {
+function getModelPaths(providerHint?: "ollama" | "mistral" | ""): readonly string[] {
   if (providerHint === "ollama") {
     return OLLAMA_MODEL_PATHS;
   }
 
   if (providerHint === "mistral") {
-    return OPENAI_MODEL_PATHS;
+    return MISTRAL_MODEL_PATHS;
   }
 
   return DEFAULT_MODEL_PATHS;
@@ -56,8 +63,9 @@ export async function GET(request: NextRequest) {
   const settings = await getApiSettings();
   const query = new URL(request.url).searchParams;
 
-  const rawHost = query.get("host")?.trim() || settings.apiEndpoint;
-  const providerHint = parseProviderHint(query.get("provider"));
+  const providerHint = parseProviderHint(query.get("provider")) || parseProviderHint(settings.provider) || "ollama";
+  const defaultHost = providerHint === "mistral" ? DEFAULT_MISTRAL_ENDPOINT : DISCOVERY_FALLBACK_HOST;
+  const rawHost = query.get("host")?.trim() || settings.apiEndpoint || defaultHost;
   const apiKey =
     query.get("apiKey")?.trim() || request.headers.get("x-api-key")?.trim() || settings.apiKey;
   let candidateHosts: string[] = [];
@@ -68,14 +76,20 @@ export async function GET(request: NextRequest) {
       { status: 400 }
     );
   }
+  if (providerHint === "mistral" && !apiKey) {
+    return NextResponse.json(
+      { error: "Missing API key. Set MISTRAL_API_KEY in settings to discover Mistral models." },
+      { status: 400 }
+    );
+  }
 
   try {
-    candidateHosts = buildOllamaHostCandidates(rawHost, DISCOVERY_FALLBACK_HOST);
-    const effectiveHost = candidateHosts[0] || DISCOVERY_FALLBACK_HOST;
+    candidateHosts = buildCandidateHosts(rawHost, providerHint);
+    const effectiveHost = candidateHosts[0] || defaultHost;
     const models = await discoverModels(candidateHosts, apiKey, providerHint);
 
     return NextResponse.json({
-        provider: providerHint || settings.provider,
+      provider: providerHint || settings.provider,
       endpoint: effectiveHost,
       attemptedHosts: candidateHosts,
       models,
@@ -85,19 +99,29 @@ export async function GET(request: NextRequest) {
       {
         error: error instanceof Error ? error.message : "Unable to fetch models",
         attemptedHosts: candidateHosts,
-        hint: OLLAMA_NETWORK_HINT,
+        hint: providerHint === "ollama" ? OLLAMA_NETWORK_HINT : undefined,
       },
       { status: 502 }
     );
   }
 }
 
+function buildCandidateHosts(
+  rawHost: string,
+  providerHint: "ollama" | "mistral" | ""
+): string[] {
+  if (providerHint === "mistral") {
+    return [normalizeHostEndpoint(rawHost, DEFAULT_MISTRAL_ENDPOINT)];
+  }
+  return buildOllamaHostCandidates(rawHost, DISCOVERY_FALLBACK_HOST);
+}
+
 async function discoverModels(
   candidateHosts: string[],
   apiKey: string,
-  providerHint?: string
+  providerHint?: "ollama" | "mistral" | ""
 ): Promise<NormalizedModel[]> {
-  const provider = providerHint?.toLowerCase();
+  const provider = providerHint || "";
   const candidates = getModelPaths(provider);
 
   const errors: string[] = [];
@@ -112,12 +136,17 @@ async function discoverModels(
   }
 
   for (const hostCandidate of candidateHosts) {
-    const normalizedHost = normalizeHostEndpoint(hostCandidate, DISCOVERY_FALLBACK_HOST);
+    const normalizedHost = normalizeHostEndpoint(
+      hostCandidate,
+      provider === "mistral" ? DEFAULT_MISTRAL_ENDPOINT : DISCOVERY_FALLBACK_HOST
+    );
     if (!normalizedHost) {
       continue;
     }
 
-    const candidateBases = buildEndpointBases(normalizedHost);
+    const candidateBases = provider === "mistral"
+      ? buildMistralEndpointBases(normalizedHost)
+      : buildEndpointBases(normalizedHost);
     const candidateUrls = Array.from(
       new Set(candidateBases.flatMap((base) => candidates.map((path) => `${base}/${path}`)))
     );
@@ -136,7 +165,7 @@ async function discoverModels(
           : url.endsWith("/models")
             ? "models"
             : "v1/models";
-        const models = normalizeModelsFromPayload(payload, pathHint);
+        const models = normalizeModelsFromPayload(payload, pathHint, provider);
         if (models.length > 0) {
           return dedupeModels(models);
         }
@@ -161,6 +190,41 @@ async function discoverModels(
   throw new Error(`No models found. ${errors.join(" | ")}`);
 }
 
+function buildMistralEndpointBases(rawEndpoint: string): string[] {
+  const normalized = normalizeHostEndpoint(rawEndpoint, DEFAULT_MISTRAL_ENDPOINT).replace(/\/+$/u, "");
+
+  try {
+    const url = new URL(normalized);
+    url.search = "";
+    url.hash = "";
+    const pathname = url.pathname.replace(/\/+$/u, "");
+
+    const trimmedBasePath = pathname
+      .replace(/\/v1\/ocr$/iu, "")
+      .replace(/\/ocr$/iu, "")
+      .replace(/\/v1\/models$/iu, "")
+      .replace(/\/models$/iu, "")
+      .replace(/\/v1$/iu, "");
+
+    const basePath = trimmedBasePath === "/" ? "" : trimmedBasePath;
+    const candidateSet = new Set<string>();
+    const addCandidate = (nextPath: string) => {
+      const candidate = new URL(url.toString());
+      candidate.search = "";
+      candidate.hash = "";
+      candidate.pathname = nextPath || "/";
+      candidateSet.add(candidate.toString().replace(/\/+$/u, ""));
+    };
+
+    addCandidate(basePath || "/");
+    addCandidate(`${basePath}/v1`);
+
+    return Array.from(candidateSet);
+  } catch {
+    return [normalized];
+  }
+}
+
 function buildEndpointBases(rawEndpoint: string): string[] {
   const trimmed = rawEndpoint.trim().replace(/\/+$/, "");
   const candidateSet = new Set([trimmed]);
@@ -178,29 +242,39 @@ function buildEndpointBases(rawEndpoint: string): string[] {
   return Array.from(candidateSet);
 }
 
-function normalizeModelsFromPayload(payload: unknown, path: string): NormalizedModel[] {
+function normalizeModelsFromPayload(
+  payload: unknown,
+  path: string,
+  providerHint: "ollama" | "mistral" | ""
+): NormalizedModel[] {
   if (!payload || typeof payload !== "object") return [];
 
   const entries = payload as {
     models?: unknown[];
     data?: unknown[];
   };
+  const fallbackProvider =
+    providerHint === "mistral"
+      ? "mistral"
+      : path === "api/tags"
+        ? "ollama"
+        : "openai-compatible";
 
   if (Array.isArray(entries.models)) {
     return entries.models
-      .map((model) => parseModelEntry(model, path === "api/tags" ? "ollama" : "openai-compatible"))
+      .map((model) => parseModelEntry(model, fallbackProvider))
       .filter((model): model is NormalizedModel => Boolean(model));
   }
 
   if (Array.isArray(payload as unknown[]) && path !== "api/tags") {
     return (payload as unknown[])
-      .map((model) => parseModelEntry(model, "openai-compatible"))
+      .map((model) => parseModelEntry(model, fallbackProvider))
       .filter((model): model is NormalizedModel => Boolean(model));
   }
 
   if (Array.isArray(entries.data)) {
     return entries.data
-      .map((model) => parseModelEntry(model, "openai-compatible"))
+      .map((model) => parseModelEntry(model, fallbackProvider))
       .filter((model): model is NormalizedModel => Boolean(model));
   }
 
@@ -214,6 +288,7 @@ function parseModelEntry(model: unknown, fallbackProvider: string): NormalizedMo
 
   const typed = model as { id?: unknown; name?: unknown };
   const id = typeof typed.id === "string" ? typed.id : typeof typed.name === "string" ? typed.name : "";
+  const name = typeof typed.name === "string" ? typed.name : id;
 
   if (!id) {
     return null;
@@ -221,7 +296,7 @@ function parseModelEntry(model: unknown, fallbackProvider: string): NormalizedMo
 
   return {
     id,
-    name: id,
+    name,
     provider: fallbackProvider,
   };
 }
