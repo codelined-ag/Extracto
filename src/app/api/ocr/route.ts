@@ -240,6 +240,7 @@ const FALLBACK_OLLAMA_HOST = resolveOllamaHostEndpoint(
 const APP_NETWORK_MODE = (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase();
 const DEFAULT_MISTRAL_API_URL =
   process.env.MISTRAL_OCR_API_URL?.trim() || "https://api.mistral.ai/v1/ocr";
+const DEFAULT_MISTRAL_OCR_MODEL = (process.env.MISTRAL_OCR_MODEL || "mistral-ocr-latest").trim();
 const DEFAULT_MISTRAL_MODELS = (() => {
   const configured = (process.env.MISTRAL_MODELS || "")
     .split(",")
@@ -530,6 +531,15 @@ function isLikelyMistralModel(model: string): boolean {
     normalized.includes("pixtral") ||
     normalized.includes("ocr")
   );
+}
+
+function isLikelyMistralOcrModel(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+  return normalized.includes("ocr");
+}
+
+function resolveMistralOcrModel(selectedModel: string): string {
+  return isLikelyMistralOcrModel(selectedModel) ? selectedModel : DEFAULT_MISTRAL_OCR_MODEL;
 }
 
 function isLikelyOllamaModel(model: string): boolean {
@@ -2718,6 +2728,7 @@ interface ProcessOcrJobInput {
   startedAtMs: number;
   fileName: string;
   model: string;
+  ocrModel: string;
   provider: "ollama" | "mistral";
   mode: OcrRunMode;
   settings: ApiProviderSettings;
@@ -2751,7 +2762,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
   const selectedPostProcessModel = input.postProcessingPayload.model || input.model;
   const usedOllamaModels = new Set<string>();
   if (input.provider === "ollama") {
-    usedOllamaModels.add(input.model);
+    usedOllamaModels.add(input.ocrModel);
   }
 
   let progressEvents: OcrProgressEvent[] = [];
@@ -2762,6 +2773,13 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       ? `Resuming from page ${startIndex + 1}/${input.inputPreviews.length}`
       : `Document analyzed: ${input.inputPreviews.length} page(s) ready`
   );
+  if (input.provider === "mistral" && input.ocrModel !== input.model) {
+    progressEvents = appendProgressEvent(
+      progressEvents,
+      "analyzing",
+      `Using ${input.ocrModel} for OCR and ${input.model} for inference`
+    );
+  }
 
   let postProcessingMeta: OcrProgressMetadata["postProcessing"] = {
     enabled: input.postProcessingPayload.enabled,
@@ -2840,7 +2858,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
     clearOcrJobStop(input.jobId);
     markOcrJobRunning(input.jobId);
     if (input.provider === "ollama") {
-      await warmupOllamaModel(input.settings.apiEndpoint, input.model);
+      await warmupOllamaModel(input.settings.apiEndpoint, input.ocrModel);
     }
 
     await db.ocrJob.update({
@@ -2908,7 +2926,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
         if (input.provider === "ollama") {
           ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runOllamaOcr(
             input.settings.apiEndpoint,
-            input.model,
+            input.ocrModel,
             input.prompt,
             pagePreview,
             pageAbortController.signal
@@ -2919,7 +2937,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
               ? input.settings.apiEndpoint
               : DEFAULT_MISTRAL_API_URL;
           ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runMistralOcr(
-            input.model,
+            input.ocrModel,
             pagePreview,
             input.settings.apiKey || process.env.MISTRAL_API_KEY || "",
             mistralEndpoint,
@@ -3063,6 +3081,8 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
     const pageScopedText = formatPageScopedText(pageOutputs);
     const extractedMetadata: Record<string, unknown> = {
       mode: input.mode,
+      ocrModel: input.ocrModel,
+      inferenceModel: input.model,
       pageCount: input.inputPreviews.length,
       pageResults: pageOutputs.map((page) => ({
         pageNumber: page.pageNumber,
@@ -3562,6 +3582,7 @@ export async function POST(request: NextRequest) {
     const resumeJobId = typeof body.jobId === "string" ? body.jobId.trim() : "";
 
     const provider = await resolveProvider(model, settings);
+    const ocrModel = provider === "mistral" ? resolveMistralOcrModel(model) : model;
     const prompt = buildPrompt(settingsPayload);
     const sourcePreview = normalizePreviewForHistory(inputPreviews[0] || "");
     const startedAtIso = new Date(startedAtMs).toISOString();
@@ -3620,6 +3641,15 @@ export async function POST(request: NextRequest) {
             stage: "queued",
             message: "Resume requested",
           },
+          ...(provider === "mistral" && ocrModel !== model
+            ? [
+                {
+                  at: startedAtIso,
+                  stage: "queued" as const,
+                  message: `OCR will use ${ocrModel}; selected inference model is ${model}`,
+                },
+              ]
+            : []),
         ],
         checkpoints: initialPageOutputs.map((page) => ({
           pageNumber: page.pageNumber,
@@ -3664,6 +3694,7 @@ export async function POST(request: NextRequest) {
         startedAtMs,
         fileName,
         model,
+        ocrModel,
         provider,
         mode,
         settings,
@@ -3705,6 +3736,15 @@ export async function POST(request: NextRequest) {
           stage: "queued",
           message: "Job created",
         },
+        ...(provider === "mistral" && ocrModel !== model
+          ? [
+              {
+                at: startedAtIso,
+                stage: "queued" as const,
+                message: `OCR will use ${ocrModel}; selected inference model is ${model}`,
+              },
+            ]
+          : []),
       ],
       checkpoints: [],
       postProcessing: {
@@ -3748,6 +3788,7 @@ export async function POST(request: NextRequest) {
       startedAtMs,
       fileName,
       model,
+      ocrModel,
       provider,
       mode,
       settings,

@@ -191,6 +191,21 @@ function defaultEndpointForProvider(provider: "ollama" | "mistral"): string {
   return provider === "mistral" ? DEFAULT_MISTRAL_ENDPOINT : DEFAULT_OLLAMA_ENDPOINT;
 }
 
+function isMistralOcrModelId(modelId: string): boolean {
+  return modelId.trim().toLowerCase().includes("ocr");
+}
+
+function pickPreferredProviderModelId(
+  provider: "ollama" | "mistral",
+  modelIds: string[]
+): string {
+  if (provider === "mistral") {
+    return modelIds.find((id) => isMistralOcrModelId(id)) || modelIds[0] || "";
+  }
+
+  return modelIds[0] || "";
+}
+
 const DEFAULT_API_SETTINGS: ApiSettings = {
   provider: "ollama",
   apiEndpoint: DEFAULT_OLLAMA_ENDPOINT,
@@ -900,7 +915,11 @@ export default function EstractoPage() {
           .map((model) => model.id);
         const storedModel =
           modelSelectionsRef.current[normalizedSettings.provider as ProviderKind]?.trim() || "";
-        const providerFirstModelId = providerModelIds[0] || nextModels[0]?.id || "";
+        const providerFirstModelId =
+          pickPreferredProviderModelId(
+            normalizedSettings.provider as "ollama" | "mistral",
+            providerModelIds
+          ) || nextModels[0]?.id || "";
 
         setModels(nextModels);
         setSelectedModel((current) => {
@@ -933,7 +952,11 @@ export default function EstractoPage() {
           .map((model) => model.id);
         const storedModel =
           modelSelectionsRef.current[normalizedSettings.provider as ProviderKind]?.trim() || "";
-        const providerFirstModelId = providerModelIds[0] || fallbackModels[0]?.id || "";
+        const providerFirstModelId =
+          pickPreferredProviderModelId(
+            normalizedSettings.provider as "ollama" | "mistral",
+            providerModelIds
+          ) || fallbackModels[0]?.id || "";
         setSelectedModel((current) => {
           const currentInProvider = providerModelIds.includes(current);
           const storedInProvider = storedModel && providerModelIds.includes(storedModel);
