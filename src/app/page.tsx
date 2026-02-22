@@ -2419,8 +2419,8 @@ export default function EstractoPage() {
             />
 
             {/* File List */}
-            <Card className="min-h-0 overflow-hidden lg:flex-1">
-              <CardContent className="p-0 flex flex-col min-h-0">
+            <Card className="min-h-0 overflow-hidden">
+              <CardContent className="p-0">
                 {/* File List Header */}
                 <div className="flex items-center justify-between p-3 border-b">
                   <div className="flex items-center gap-2">
@@ -2456,7 +2456,7 @@ export default function EstractoPage() {
 
                 {/* File List Items or Empty State */}
                 {files.length > 0 ? (
-                  <ScrollArea className="flex-1 max-h-[200px]">
+                  <ScrollArea className="max-h-[220px]">
                     <div className="p-2 space-y-1">
                       <AnimatePresence initial={false}>
                         {files.map((file, index) => (
@@ -2564,7 +2564,7 @@ export default function EstractoPage() {
                     </div>
                   </ScrollArea>
                 ) : (
-                  <div className="flex-1 flex items-center justify-center py-8">
+                  <div className="flex items-center justify-center py-8">
                     <div className="text-center">
                       <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
                         <FileText className="h-6 w-6 text-muted-foreground" />
@@ -2578,7 +2578,7 @@ export default function EstractoPage() {
                 )}
 
                 {/* Process Button */}
-                <div className="p-3 border-t space-y-2 shrink-0 bg-card">
+                <div className="p-3 border-t space-y-2 bg-card">
                   <Button
                     className="w-full group"
                     onClick={processFiles}
