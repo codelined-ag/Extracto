@@ -662,7 +662,45 @@ function coerceMarkdownText(value: unknown, fallbackMarkdown: string): string {
     }
   }
 
+  const extractedFromPseudoJson = extractMarkdownFromJsonLikeText(trimmed);
+  if (extractedFromPseudoJson) {
+    return extractedFromPseudoJson;
+  }
+
   return trimmed;
+}
+
+function extractMarkdownFromJsonLikeText(raw: string): string | null {
+  const normalized = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/iu, "")
+    .replace(/```$/u, "")
+    .replace(/^json\s*/iu, "");
+
+  const keyMatch = /"markdown"\s*:/iu.exec(normalized);
+  if (!keyMatch) {
+    return null;
+  }
+
+  const valueSlice = normalized.slice(keyMatch.index + keyMatch[0].length).trimStart();
+  if (!valueSlice.startsWith("\"")) {
+    return null;
+  }
+
+  const fieldMatch = /^"([\s\S]*?)"\s*(?:,\s*"[\w$-]+"\s*:|\}\s*$)/u.exec(valueSlice);
+  if (!fieldMatch?.[1]) {
+    return null;
+  }
+
+  const decoded = fieldMatch[1]
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\\"/g, "\"")
+    .replace(/\\\\/g, "\\")
+    .trim();
+
+  return decoded || null;
 }
 
 function normalizeStructuredMarkdownPayload(

@@ -370,7 +370,45 @@ function normalizeMarkdownCandidate(value: string): string {
     }
   }
 
+  const extracted = extractMarkdownFromJsonLikeText(trimmed);
+  if (extracted) {
+    return extracted;
+  }
+
   return trimmed;
+}
+
+function extractMarkdownFromJsonLikeText(raw: string): string | null {
+  const normalized = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/iu, "")
+    .replace(/```$/u, "")
+    .replace(/^json\s*/iu, "");
+
+  const keyMatch = /"markdown"\s*:/iu.exec(normalized);
+  if (!keyMatch) {
+    return null;
+  }
+
+  const valueSlice = normalized.slice(keyMatch.index + keyMatch[0].length).trimStart();
+  if (!valueSlice.startsWith("\"")) {
+    return null;
+  }
+
+  const fieldMatch = /^"([\s\S]*?)"\s*(?:,\s*"[\w$-]+"\s*:|\}\s*$)/u.exec(valueSlice);
+  if (!fieldMatch?.[1]) {
+    return null;
+  }
+
+  const decoded = fieldMatch[1]
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\\"/g, "\"")
+    .replace(/\\\\/g, "\\")
+    .trim();
+
+  return decoded || null;
 }
 
 const PDF_RENDER_SCALE = 1.5;
