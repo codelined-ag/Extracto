@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Extracto maskable icon">
+  <defs>
+    <linearGradient id="mbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#022c22" />
+      <stop offset="100%" stop-color="#0f766e" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#mbg)" />
+  <rect x="112" y="96" width="288" height="320" rx="28" fill="#ecfeff" />
+  <circle cx="188" cy="188" r="44" fill="none" stroke="#0f766e" stroke-width="18" />
+  <path d="M220 220L284 284" stroke="#0f766e" stroke-width="18" stroke-linecap="round" />
+  <path d="M168 320H344M168 360H312" stroke="#0f766e" stroke-width="18" stroke-linecap="round" />
+</svg>
+
