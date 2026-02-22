@@ -2145,7 +2145,7 @@ export default function EstractoPage() {
               </motion.div>
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">Estracto</h1>
+              <h1 className="text-xl font-bold tracking-tight">OCR Web App</h1>
             </div>
           </motion.div>
 
@@ -3580,7 +3580,7 @@ export default function EstractoPage() {
       >
         <div className="container mx-auto px-4 h-14 flex items-center">
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Estracto.
+            © {new Date().getFullYear()} OCR Web App.
           </p>
         </div>
       </motion.footer>

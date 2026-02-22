@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 
-function getRequestOrigin(request: NextRequest): string {
-  return request.nextUrl.origin;
+function parseHeaderFirstValue(value: string | null): string {
+  if (!value) return "";
+  return value.split(",")[0]?.trim() || "";
 }
 
 function safeParseOrigin(value: string): string | null {
@@ -12,20 +13,60 @@ function safeParseOrigin(value: string): string | null {
   }
 }
 
+function normalizeOriginForComparison(origin: string): string {
+  try {
+    const parsed = new URL(origin);
+    const hostname = parsed.hostname.trim().toLowerCase();
+    const normalizedHost =
+      hostname === "127.0.0.1" || hostname === "::1" || hostname === "0.0.0.0"
+        ? "localhost"
+        : hostname;
+    const protocol = parsed.protocol.toLowerCase();
+    const port = parsed.port ? `:${parsed.port}` : "";
+    return `${protocol}//${normalizedHost}${port}`;
+  } catch {
+    return origin.trim().toLowerCase();
+  }
+}
+
+function getExpectedOrigins(request: NextRequest): Set<string> {
+  const origins = new Set<string>();
+  origins.add(normalizeOriginForComparison(request.nextUrl.origin));
+
+  const forwardedProto = parseHeaderFirstValue(request.headers.get("x-forwarded-proto"))
+    .replace(/:$/u, "")
+    .toLowerCase();
+  const forwardedHost = parseHeaderFirstValue(request.headers.get("x-forwarded-host"));
+  const hostHeader = parseHeaderFirstValue(request.headers.get("host"));
+  const host = forwardedHost || hostHeader || request.nextUrl.host;
+  const proto = forwardedProto || request.nextUrl.protocol.replace(":", "");
+
+  if (host) {
+    origins.add(normalizeOriginForComparison(`${proto}://${host}`));
+  }
+
+  return origins;
+}
+
+function originMatchesExpected(origin: string, expectedOrigins: Set<string>): boolean {
+  const normalizedOrigin = normalizeOriginForComparison(origin);
+  return expectedOrigins.has(normalizedOrigin);
+}
+
 export function isTrustedMutationRequest(request: NextRequest): boolean {
-  const expectedOrigin = getRequestOrigin(request);
+  const expectedOrigins = getExpectedOrigins(request);
   const originHeader = request.headers.get("origin");
   const refererHeader = request.headers.get("referer");
   const fetchSite = (request.headers.get("sec-fetch-site") || "").trim().toLowerCase();
 
   if (originHeader) {
     const parsedOrigin = safeParseOrigin(originHeader);
-    if (parsedOrigin !== expectedOrigin) {
+    if (!parsedOrigin || !originMatchesExpected(parsedOrigin, expectedOrigins)) {
       return false;
     }
   } else if (refererHeader) {
     const parsedRefererOrigin = safeParseOrigin(refererHeader);
-    if (parsedRefererOrigin !== expectedOrigin) {
+    if (!parsedRefererOrigin || !originMatchesExpected(parsedRefererOrigin, expectedOrigins)) {
       return false;
     }
   } else if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "same-site" && fetchSite !== "none") {
@@ -49,4 +90,3 @@ export function getClientIpAddress(request: NextRequest): string {
 
   return "unknown";
 }
-
