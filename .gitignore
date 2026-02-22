@@ -49,6 +49,7 @@ db/*.db-shm
 db/*.db-wal
 db/*.sqlite-shm
 db/*.sqlite-wal
+obsidian-vaults/
 
 # Docker/tooling
 .docker/
