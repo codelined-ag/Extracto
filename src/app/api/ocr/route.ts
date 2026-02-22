@@ -72,6 +72,8 @@ interface OcrJsonResult {
   model: string;
   settings: AdvancedSettings;
   text: string;
+  markdown: string;
+  structured: Record<string, unknown>;
   metadata: {
     characterCount: number;
     wordCount: number;
@@ -327,6 +329,15 @@ function normalizeMistralOcrEndpoint(rawEndpoint: string): string {
   }
 }
 
+function buildMistralOcrEndpointCandidates(rawEndpoint: string): string[] {
+  const baseEndpoint = normalizeMistralOcrEndpoint(rawEndpoint);
+  const withoutProcess = baseEndpoint.replace(/\/process$/iu, "");
+  const withProcess = withoutProcess.endsWith("/ocr")
+    ? `${withoutProcess}/process`
+    : `${withoutProcess}/ocr/process`;
+  return Array.from(new Set([withoutProcess, withProcess]));
+}
+
 function sanitizeSettings(raw: Partial<AdvancedSettings> | undefined): AdvancedSettings {
   const safeQuality =
     typeof raw?.quality === "number" && Number.isFinite(raw.quality)
@@ -457,7 +468,16 @@ Instructions:
 
 Quality focus: ${settings.quality}%
 
-Format your response as a clean markdown version of the extracted text. Start directly with the content.`;
+Return ONLY valid JSON with this exact shape:
+{
+  "markdown": "clean markdown text extracted from the image",
+  "fields": {}
+}
+
+Rules:
+- "markdown" is required and must contain the extracted OCR content.
+- "fields" is optional but if present must be a JSON object.
+- Do not wrap JSON in markdown code fences.`;
 }
 
 function buildPostProcessingPrompt(
@@ -532,6 +552,60 @@ function extractChatContentText(content: unknown): string {
   }
 
   return "";
+}
+
+function parseJsonCandidate(rawText: string): unknown | null {
+  const trimmed = rawText.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
+  const candidate = (fencedMatch?.[1] || trimmed).trim();
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeStructuredMarkdownPayload(
+  raw: unknown,
+  fallbackMarkdown: string
+): {
+  markdown: string;
+  structured: Record<string, unknown>;
+  parseMode: "json" | "markdown";
+} {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const objectValue = raw as Record<string, unknown>;
+    const markdown =
+      typeof objectValue.markdown === "string" && objectValue.markdown.trim()
+        ? objectValue.markdown.trim()
+        : typeof objectValue.text === "string" && objectValue.text.trim()
+          ? objectValue.text.trim()
+          : typeof objectValue.content === "string" && objectValue.content.trim()
+            ? objectValue.content.trim()
+            : fallbackMarkdown.trim();
+
+    return {
+      markdown,
+      structured: {
+        ...objectValue,
+        markdown,
+      },
+      parseMode: "json",
+    };
+  }
+
+  const markdown = fallbackMarkdown.trim();
+  return {
+    markdown,
+    structured: {
+      markdown,
+    },
+    parseMode: "markdown",
+  };
 }
 
 function normalizePostProcessedText(
@@ -609,18 +683,22 @@ function buildJsonResult(
   model: string,
   provider: "ollama" | "mistral",
   settings: AdvancedSettings,
-  text: string,
+  markdown: string,
+  structured: Record<string, unknown>,
   metadata: Record<string, unknown> = {}
 ): OcrJsonResult {
+  const normalizedMarkdown = markdown.trim();
   return {
     fileName,
     extractedAt: new Date().toISOString(),
     provider,
     model,
     settings,
-    text,
+    text: normalizedMarkdown,
+    markdown: normalizedMarkdown,
+    structured,
     metadata: {
-      ...computeTextStats(text),
+      ...computeTextStats(normalizedMarkdown),
       provider,
       ...metadata,
     },
@@ -837,7 +915,7 @@ async function runOllamaOcr(
   model: string,
   prompt: string,
   preview: string
-): Promise<{ text: string; metadata: Record<string, unknown> }> {
+): Promise<{ text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> }> {
   const imageData = parsePreviewImageData(preview);
   if (!imageData.base64) {
     throw new ApiRouteError("Invalid image data for Ollama OCR", 400);
@@ -925,8 +1003,16 @@ async function runOllamaOcr(
           continue;
         }
 
+        const parsedPayload = parseJsonCandidate(text);
+        const normalizedPayload = normalizeStructuredMarkdownPayload(parsedPayload, text);
+        if (!normalizedPayload.markdown) {
+          errors.push(`${host}${chatPath}: OCR response markdown was empty`);
+          continue;
+        }
+
         return {
-          text,
+          text: normalizedPayload.markdown,
+          structured: normalizedPayload.structured,
           metadata: {
             responseDone: typeof payloadWithMetrics.done === "boolean" ? payloadWithMetrics.done : undefined,
             evalCount: typeof payloadWithMetrics.eval_count === "number"
@@ -936,6 +1022,7 @@ async function runOllamaOcr(
               typeof payloadWithMetrics.total_duration === "number"
                 ? payloadWithMetrics.total_duration
                 : undefined,
+            outputFormat: normalizedPayload.parseMode,
           },
         };
       } catch (error) {
@@ -1120,38 +1207,66 @@ async function runMistralOcr(
   preview: string,
   apiKey: string,
   apiEndpoint: string
-): Promise<{ text: string; metadata: Record<string, unknown> }> {
+): Promise<{ text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> }> {
   if (!apiKey) {
     throw new ApiRouteError("MISTRAL_API_KEY is not configured", 500);
   }
 
-  const normalizedEndpoint = normalizeMistralOcrEndpoint(apiEndpoint || DEFAULT_MISTRAL_API_URL);
+  const endpointCandidates = buildMistralOcrEndpointCandidates(
+    apiEndpoint || DEFAULT_MISTRAL_API_URL
+  );
+  let endpointUsed = endpointCandidates[0] || normalizeMistralOcrEndpoint(DEFAULT_MISTRAL_API_URL);
+  let payload: unknown = null;
+  let response: Response | null = null;
+  let lastError: ApiRouteError | null = null;
 
-  const response = await fetchWithTimeout(normalizedEndpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      document: {
-        type: "image_url",
-        image_url: preview,
+  for (let index = 0; index < endpointCandidates.length; index++) {
+    const candidateEndpoint = endpointCandidates[index];
+    endpointUsed = candidateEndpoint;
+    const candidateResponse = await fetchWithTimeout(candidateEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
       },
-      table_format: "markdown",
-    }),
-  });
+      body: JSON.stringify({
+        model,
+        document: {
+          type: "image_url",
+          image_url: preview,
+        },
+        table_format: "markdown",
+      }),
+    });
 
-  const payload = await parseResponseText(response);
-  if (!response.ok) {
-    throw new ApiRouteError(
-      `Mistral OCR failed (${response.status}): ${parseServiceError(response, payload)}`,
-      response.status
-    );
+    const candidatePayload = await parseResponseText(candidateResponse);
+    if (!candidateResponse.ok) {
+      const isLastEndpoint = index === endpointCandidates.length - 1;
+      const isNotFound = candidateResponse.status === 404;
+      if (!isLastEndpoint && isNotFound) {
+        continue;
+      }
+
+      lastError = new ApiRouteError(
+        `Mistral OCR failed (${candidateResponse.status}): ${parseServiceError(
+          candidateResponse,
+          candidatePayload
+        )}`,
+        candidateResponse.status
+      );
+      break;
+    }
+
+    response = candidateResponse;
+    payload = candidatePayload;
+    break;
   }
 
-  if (!payload || typeof payload !== "object") {
+  if (lastError) {
+    throw lastError;
+  }
+
+  if (!response || !payload || typeof payload !== "object") {
     throw new ApiRouteError("Invalid OCR response from Mistral", 502);
   }
 
@@ -1189,8 +1304,24 @@ async function runMistralOcr(
     throw new ApiRouteError("Mistral returned no OCR text", 502);
   }
 
+  const pagePayload = Array.isArray(payloadObject.pages)
+    ? payloadObject.pages.map((page) => ({
+        index: typeof page.index === "number" ? page.index : undefined,
+        markdown: typeof page.markdown === "string" ? page.markdown : undefined,
+        text: typeof page.text === "string" ? page.text : undefined,
+        html: typeof page.html === "string" ? page.html : undefined,
+      }))
+    : [];
+  const structured = {
+    markdown: text,
+    pages: pagePayload,
+    document_annotation: payloadObject.document_annotation ?? null,
+    usage_info: payloadObject.usage_info ?? null,
+  };
+
   return {
     text,
+    structured,
     metadata: {
       responsePages: Array.isArray(payloadObject.pages) ? payloadObject.pages.length : 0,
       documentAnnotation:
@@ -1206,6 +1337,7 @@ async function runMistralOcr(
               .map((page) => page.index)
               .filter((index): index is number => typeof index === "number")
           : undefined,
+      endpoint: endpointUsed,
     },
   };
 }
@@ -1319,6 +1451,7 @@ interface ProcessOcrJobInput {
   initialPageOutputs?: Array<{
     pageNumber: number;
     text: string;
+    structured: Record<string, unknown>;
     metadata: Record<string, unknown>;
     durationMs: number;
   }>;
@@ -1331,6 +1464,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
   const pageOutputs: Array<{
     pageNumber: number;
     text: string;
+    structured: Record<string, unknown>;
     metadata: Record<string, unknown>;
     durationMs: number;
   }> = input.initialPageOutputs ? [...input.initialPageOutputs] : [];
@@ -1479,9 +1613,10 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       });
 
       let pageText = "";
+      let pageStructured: Record<string, unknown> = { markdown: "" };
       let pageMetadata: Record<string, unknown> = {};
       if (input.provider === "ollama") {
-        ({ text: pageText, metadata: pageMetadata } = await runOllamaOcr(
+        ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runOllamaOcr(
           input.settings.apiEndpoint,
           input.model,
           input.prompt,
@@ -1492,7 +1627,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
           input.settings.provider === "mistral"
             ? input.settings.apiEndpoint
             : DEFAULT_MISTRAL_API_URL;
-        ({ text: pageText, metadata: pageMetadata } = await runMistralOcr(
+        ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runMistralOcr(
           input.model,
           pagePreview,
           input.settings.apiKey || process.env.MISTRAL_API_KEY || "",
@@ -1504,6 +1639,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       pageOutputs.push({
         pageNumber,
         text: pageText,
+        structured: pageStructured,
         metadata: pageMetadata,
         durationMs,
       });
@@ -1556,15 +1692,25 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
         input.settingsPayload,
         extractedTextSoFar,
         {
+          markdown: extractedTextSoFar,
+          pages: pageOutputs.map((page) => ({
+            pageNumber: page.pageNumber,
+            durationMs: page.durationMs,
+            ...page.structured,
+          })),
+        },
+        {
           pageCount: input.inputPreviews.length,
           pageResults: pageOutputs.map((page) => ({
             pageNumber: page.pageNumber,
             durationMs: page.durationMs,
+            structured: page.structured,
             ...page.metadata,
           })),
           checkpointPages: pageOutputs.map((page) => ({
             pageNumber: page.pageNumber,
             text: page.text,
+            structured: page.structured,
             durationMs: page.durationMs,
             metadata: page.metadata,
           })),
@@ -1583,11 +1729,11 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       });
     }
 
-    const extractedText = pageOutputs
+    const extractedMarkdown = pageOutputs
       .map((page) => page.text.trim())
       .filter(Boolean)
       .join(pageOutputs.length > 1 ? "\n\n---\n\n" : "\n");
-    if (!extractedText.trim()) {
+    if (!extractedMarkdown.trim()) {
       throw new ApiRouteError("OCR returned no text", 502);
     }
 
@@ -1597,10 +1743,11 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       pageResults: pageOutputs.map((page) => ({
         pageNumber: page.pageNumber,
         durationMs: page.durationMs,
+        structured: page.structured,
         ...page.metadata,
       })),
     };
-    let finalText = extractedText;
+    let finalMarkdown = extractedMarkdown;
     let postProcessedJson: unknown = undefined;
     let postProcessedText: string | undefined;
 
@@ -1675,9 +1822,11 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
           input.postProcessingPayload.outputFormat
         );
         if (normalizedPostProcessed.text) {
-          finalText = normalizedPostProcessed.text;
           postProcessedText = normalizedPostProcessed.text;
           postProcessedJson = normalizedPostProcessed.parsedJson;
+          if (input.postProcessingPayload.outputFormat === "markdown") {
+            finalMarkdown = normalizedPostProcessed.text;
+          }
         }
 
         postProcessingMeta = {
@@ -1715,10 +1864,32 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       input.model,
       input.provider,
       input.settingsPayload,
-      finalText,
+      finalMarkdown,
+      {
+        markdown: finalMarkdown,
+        rawMarkdown: extractedMarkdown,
+        pages: pageOutputs.map((page) => ({
+          pageNumber: page.pageNumber,
+          durationMs: page.durationMs,
+          ...page.structured,
+        })),
+        ...(postProcessedText
+          ? {
+              postProcessingOutput:
+                input.postProcessingPayload.outputFormat === "json"
+                  ? {
+                      json: postProcessedJson ?? null,
+                      rawText: postProcessedText,
+                    }
+                  : {
+                      markdown: postProcessedText,
+                    },
+            }
+          : {}),
+      },
       extractedMetadata
     );
-    result.rawExtractionText = extractedText;
+    result.rawExtractionText = extractedMarkdown;
     if (postProcessedText) {
       result.postProcessedText = postProcessedText;
     }
@@ -1752,7 +1923,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       where: { id: input.jobId },
       data: {
         status: OcrJobStatus.COMPLETED,
-        extractedText: finalText,
+        extractedText: finalMarkdown,
         result: toJsonValue(result),
         metadata: toJsonValue(extractedMetadata),
         completedAt: new Date(),
@@ -1811,6 +1982,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
 function parseCheckpointPages(result: unknown): Array<{
   pageNumber: number;
   text: string;
+  structured: Record<string, unknown>;
   durationMs: number;
   metadata: Record<string, unknown>;
 }> {
@@ -1831,6 +2003,7 @@ function parseCheckpointPages(result: unknown): Array<{
       const typed = page as {
         pageNumber?: unknown;
         text?: unknown;
+        structured?: unknown;
         durationMs?: unknown;
         metadata?: unknown;
       };
@@ -1841,6 +2014,10 @@ function parseCheckpointPages(result: unknown): Array<{
       return {
         pageNumber: typed.pageNumber,
         text: typed.text,
+        structured:
+          typed.structured && typeof typed.structured === "object" && !Array.isArray(typed.structured)
+            ? (typed.structured as Record<string, unknown>)
+            : { markdown: typed.text },
         durationMs: typeof typed.durationMs === "number" ? typed.durationMs : 0,
         metadata:
           typed.metadata && typeof typed.metadata === "object" && !Array.isArray(typed.metadata)
@@ -1851,6 +2028,7 @@ function parseCheckpointPages(result: unknown): Array<{
     .filter((page): page is {
       pageNumber: number;
       text: string;
+      structured: Record<string, unknown>;
       durationMs: number;
       metadata: Record<string, unknown>;
     } => Boolean(page))

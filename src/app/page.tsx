@@ -164,6 +164,10 @@ function normalizeProvider(provider?: string): "ollama" | "mistral" {
   return provider?.trim().toLowerCase().split(":")[0] === "mistral" ? "mistral" : "ollama";
 }
 
+function defaultEndpointForProvider(provider: "ollama" | "mistral"): string {
+  return provider === "mistral" ? DEFAULT_MISTRAL_ENDPOINT : DEFAULT_OLLAMA_ENDPOINT;
+}
+
 const DEFAULT_API_SETTINGS: ApiSettings = {
   provider: "ollama",
   apiEndpoint: DEFAULT_OLLAMA_ENDPOINT,
@@ -417,9 +421,11 @@ export default function EstractoPage() {
       const normalizedSettings = {
         ...values,
         provider: normalizeProvider(values.provider),
-        apiEndpoint: values.apiEndpoint.trim() || DEFAULT_API_SETTINGS.apiEndpoint,
+        apiEndpoint: "",
         apiKey: values.apiKey.trim(),
       };
+      normalizedSettings.apiEndpoint =
+        values.apiEndpoint.trim() || defaultEndpointForProvider(normalizedSettings.provider);
 
       try {
         const params = new URLSearchParams();
@@ -484,7 +490,7 @@ export default function EstractoPage() {
       const provider = normalizeProvider(values.provider);
       const normalizedSettings: ApiSettings = {
         provider,
-        apiEndpoint: values.apiEndpoint?.trim() || DEFAULT_API_SETTINGS.apiEndpoint,
+        apiEndpoint: values.apiEndpoint?.trim() || defaultEndpointForProvider(provider),
         apiKey: values.apiKey?.trim() || "",
       };
       setApiSettings(normalizedSettings);
@@ -525,7 +531,7 @@ export default function EstractoPage() {
       const provider = normalizeProvider(saved.provider);
       const normalizedSettings: ApiSettings = {
         provider,
-        apiEndpoint: saved.apiEndpoint?.trim() || DEFAULT_API_SETTINGS.apiEndpoint,
+        apiEndpoint: saved.apiEndpoint?.trim() || defaultEndpointForProvider(provider),
         apiKey: saved.apiKey?.trim() || "",
       };
 
