@@ -402,6 +402,29 @@ function getObsidianMetadata(payload: unknown): Record<string, unknown> {
   return {};
 }
 
+function getLastPathSegment(value: string): string {
+  const normalized = value.replace(/\\/g, "/").replace(/\/+$/g, "").trim();
+  if (!normalized) {
+    return "";
+  }
+  const segments = normalized.split("/").filter(Boolean);
+  return segments[segments.length - 1] || "";
+}
+
+function buildObsidianOpenUriCandidates(vaultPath: string): string[] {
+  const normalizedPath = vaultPath.trim();
+  if (!normalizedPath) {
+    return [];
+  }
+
+  const candidates = [`obsidian://open?path=${encodeURIComponent(normalizedPath)}`];
+  const vaultName = getLastPathSegment(normalizedPath);
+  if (vaultName) {
+    candidates.push(`obsidian://open?vault=${encodeURIComponent(vaultName)}`);
+  }
+  return Array.from(new Set(candidates));
+}
+
 // Utility functions
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return "0 Bytes";
@@ -851,6 +874,37 @@ export default function EstractoPage() {
     (it: string, en: string) => (uiLanguage === "it" ? it : en),
     [uiLanguage]
   );
+
+  const openVaultInObsidian = React.useCallback(
+    (vaultPath: string) => {
+      const candidates = buildObsidianOpenUriCandidates(vaultPath);
+      if (candidates.length === 0) {
+        toast({
+          title: t("Vault non disponibile", "Vault not available"),
+          description: t("Percorso vault Obsidian non valido.", "Obsidian vault path is invalid."),
+          variant: "destructive",
+        });
+        return;
+      }
+
+      window.location.href = candidates[0];
+      toast({
+        title: t("Apertura in Obsidian...", "Opening in Obsidian..."),
+        description: vaultPath,
+      });
+    },
+    [t, toast]
+  );
+
+  const openSelectedVaultInObsidian = React.useCallback(() => {
+    if (!selectedFileObsidianPath) return;
+    openVaultInObsidian(selectedFileObsidianPath);
+  }, [openVaultInObsidian, selectedFileObsidianPath]);
+
+  const openSelectedHistoryVaultInObsidian = React.useCallback(() => {
+    if (!selectedHistoryObsidianPath) return;
+    openVaultInObsidian(selectedHistoryObsidianPath);
+  }, [openVaultInObsidian, selectedHistoryObsidianPath]);
 
   const persistProviderSelection = React.useCallback(
     (storageKey: string, provider: ProviderKind, value: string) => {
@@ -2340,6 +2394,15 @@ export default function EstractoPage() {
           <DialogFooter>
             <Button
               variant="outline"
+              onClick={openSelectedHistoryVaultInObsidian}
+              disabled={!selectedHistoryObsidianPath}
+              className="group"
+            >
+              <FolderOpen className="h-4 w-4 mr-1.5 text-violet-400 transition-transform duration-200 group-hover:scale-110" />
+              {t("Apri in Obsidian", "Open in Obsidian")}
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => downloadHistoryResult("md")}
               disabled={!selectedHistoryJob}
               className="group"
@@ -3046,6 +3109,20 @@ export default function EstractoPage() {
                           >
                             <Download className="h-3.5 w-3.5 text-emerald-400 transition-transform duration-200 group-hover:-translate-y-0.5" />
                           </Button>
+                          {selectedFile.status === "completed" && selectedFileObsidianPath ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 group gap-1.5"
+                              onClick={openSelectedVaultInObsidian}
+                              title={t("Apri in Obsidian", "Open in Obsidian")}
+                            >
+                              <FolderOpen className="h-3.5 w-3.5 text-violet-400 transition-transform duration-200 group-hover:scale-110" />
+                              <span className="text-[11px]">
+                                {t("Apri in Obsidian", "Open in Obsidian")}
+                              </span>
+                            </Button>
+                          ) : null}
                         </>
                       )}
                     </div>
@@ -3141,7 +3218,7 @@ export default function EstractoPage() {
                       )}
                     </div>
                   ) : selectedFile.status === "processing" || selectedFile.status === "paused" ? (
-                    <div className="flex-1 min-h-0 flex flex-col">
+                    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                       <div className="p-4 border-b space-y-3">
                         <div className="flex items-center justify-between gap-3">
                           <div>
@@ -3173,8 +3250,8 @@ export default function EstractoPage() {
                           </div>
                         </div>
                       </div>
-                      <div className="grid md:grid-cols-[1fr_280px] flex-1 min-h-0">
-                        <ScrollArea className="h-full border-r">
+                      <div className="grid md:grid-cols-[1fr_280px] flex-1 min-h-0 overflow-hidden">
+                        <div className="h-full min-h-0 overflow-y-auto scrollbar-hide border-r">
                           <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-3">
                             {(selectedFile.pagePreviews || []).map((preview, index) => {
                               const pageNumber = index + 1;
@@ -3210,8 +3287,8 @@ export default function EstractoPage() {
                               );
                             })}
                           </div>
-                        </ScrollArea>
-                        <ScrollArea className="h-full">
+                        </div>
+                        <div className="h-full min-h-0 overflow-y-auto scrollbar-hide">
                           <div className="p-4 space-y-2">
                             <p className="text-xs font-medium text-muted-foreground">
                               {t("Attività modello in tempo reale", "Live model activity")}
@@ -3242,7 +3319,7 @@ export default function EstractoPage() {
                               </p>
                             )}
                           </div>
-                        </ScrollArea>
+                        </div>
                       </div>
                     </div>
                   ) : selectedFile.status === "error" ? (
