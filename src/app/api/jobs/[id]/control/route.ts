@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 
 import { getAuthCookieName, verifySessionToken } from "@/lib/auth/token";
 import { db } from "@/lib/db";
-import { isOcrJobRunning, requestOcrJobStop } from "@/lib/ocr/job-control";
+import { abortOcrJobRequests, isOcrJobRunning, requestOcrJobStop } from "@/lib/ocr/job-control";
 
 async function getAuthenticatedUserId(request: NextRequest): Promise<string | null> {
   const token = request.cookies.get(getAuthCookieName())?.value;
@@ -49,6 +49,7 @@ export async function POST(
   }
 
   requestOcrJobStop(id);
+  abortOcrJobRequests(id);
   const running = isOcrJobRunning(id);
 
   const metadata =
@@ -58,7 +59,7 @@ export async function POST(
   const updatedMetadata = {
     ...metadata,
     stopRequested: true,
-    message: running ? "Stop requested. Finishing current page..." : "Stop requested",
+    message: running ? "Stop requested. Aborting current inference..." : "Stop requested",
     updatedAt: new Date().toISOString(),
   };
 

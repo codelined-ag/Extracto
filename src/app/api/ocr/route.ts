@@ -9,6 +9,8 @@ import {
   clearOcrJobStop,
   isOcrJobStopRequested,
   markOcrJobRunning,
+  registerOcrJobAbortController,
+  unregisterOcrJobAbortController,
 } from "@/lib/ocr/job-control";
 import {
   buildOllamaHostCandidates,
@@ -139,6 +141,13 @@ class ApiRouteError extends Error {
     super(message);
     this.name = "ApiRouteError";
     this.status = status;
+  }
+}
+
+class OcrStopRequestedError extends Error {
+  constructor(message = "OCR stop requested") {
+    super(message);
+    this.name = "OcrStopRequestedError";
   }
 }
 
@@ -905,14 +914,51 @@ function parseServiceError(response: Response, payload: unknown): string {
 async function fetchWithTimeout(
   input: string,
   init: RequestInit = {},
-  timeoutMs = REQUEST_TIMEOUT_MS
+  timeoutMs = REQUEST_TIMEOUT_MS,
+  externalSignal?: AbortSignal
 ): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let abortedByExternalSignal = false;
+  let timeoutTriggered = false;
+  const onExternalAbort = () => {
+    abortedByExternalSignal = true;
+    controller.abort();
+  };
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      abortedByExternalSignal = true;
+      controller.abort();
+    } else {
+      externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+  }
+
+  const timeout = setTimeout(() => {
+    timeoutTriggered = true;
+    controller.abort();
+  }, timeoutMs);
   try {
     return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (abortedByExternalSignal) {
+      throw new OcrStopRequestedError();
+    }
+
+    if (
+      timeoutTriggered &&
+      error instanceof Error &&
+      (error.name === "AbortError" || /abort/iu.test(error.message))
+    ) {
+      throw new ApiRouteError(`Request timeout after ${timeoutMs}ms`, 504);
+    }
+
+    throw error;
   } finally {
     clearTimeout(timeout);
+    if (externalSignal) {
+      externalSignal.removeEventListener("abort", onExternalAbort);
+    }
   }
 }
 
@@ -1044,7 +1090,8 @@ async function runOllamaOcr(
   endpoint: string,
   model: string,
   prompt: string,
-  preview: string
+  preview: string,
+  signal?: AbortSignal
 ): Promise<{ text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> }> {
   const imageData = parsePreviewImageData(preview);
   if (!imageData.base64) {
@@ -1100,7 +1147,7 @@ async function runOllamaOcr(
                   stream: false,
                 }
           ),
-        });
+        }, REQUEST_TIMEOUT_MS, signal);
 
         const payload = await parseResponseText(response);
         if (!response.ok) {
@@ -1156,6 +1203,9 @@ async function runOllamaOcr(
           },
         };
       } catch (error) {
+        if (error instanceof OcrStopRequestedError) {
+          throw error;
+        }
         errors.push(
           `${host}${chatPath}: ${error instanceof Error ? error.message : "Request failed"}`
         );
@@ -1336,7 +1386,8 @@ async function runMistralOcr(
   model: string,
   preview: string,
   apiKey: string,
-  apiEndpoint: string
+  apiEndpoint: string,
+  signal?: AbortSignal
 ): Promise<{ text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> }> {
   if (!apiKey) {
     throw new ApiRouteError("MISTRAL_API_KEY is not configured", 500);
@@ -1353,21 +1404,31 @@ async function runMistralOcr(
   for (let index = 0; index < endpointCandidates.length; index++) {
     const candidateEndpoint = endpointCandidates[index];
     endpointUsed = candidateEndpoint;
-    const candidateResponse = await fetchWithTimeout(candidateEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        document: {
-          type: "image_url",
-          image_url: preview,
+    let candidateResponse: Response;
+    try {
+      candidateResponse = await fetchWithTimeout(candidateEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
         },
-        table_format: "markdown",
-      }),
-    });
+        body: JSON.stringify({
+          model,
+          document: {
+            type: "image_url",
+            image_url: preview,
+          },
+          table_format: "markdown",
+        }),
+      }, REQUEST_TIMEOUT_MS, signal);
+    } catch (error) {
+      if (error instanceof OcrStopRequestedError) {
+        throw error;
+      }
+      throw error instanceof ApiRouteError
+        ? error
+        : new ApiRouteError(error instanceof Error ? error.message : "Mistral OCR request failed", 502);
+    }
 
     const candidatePayload = await parseResponseText(candidateResponse);
     if (!candidateResponse.ok) {
@@ -1641,6 +1702,47 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
     postProcessing: postProcessingMeta,
   });
 
+  const pauseAtCheckpoint = async (stageMessage: string, eventMessage: string): Promise<void> => {
+    progressEvents = appendProgressEvent(progressEvents, "paused", eventMessage);
+    latestMetadata = buildProgressMetadata({
+      stage: "paused",
+      message: stageMessage,
+      progressPct:
+        input.postProcessingPayload.enabled
+          ? (pageOutputs.length / input.inputPreviews.length) * 85
+          : (pageOutputs.length / input.inputPreviews.length) * 100,
+      pageCount: input.inputPreviews.length,
+      processedPages: pageOutputs.length,
+      currentPage: null,
+      etaSeconds: null,
+      startedAt: startedAtIso,
+      events: progressEvents,
+      checkpoints: pageOutputs.map((page) => ({
+        pageNumber: page.pageNumber,
+        status: "completed",
+        characterCount: page.text.length,
+        durationMs: page.durationMs,
+        previewText: page.text.trim().slice(0, 320),
+      })),
+      postProcessing: postProcessingMeta,
+    });
+
+    for (const ollamaModel of usedOllamaModels) {
+      await unloadOllamaModel(input.settings.apiEndpoint, ollamaModel);
+    }
+
+    await db.ocrJob.update({
+      where: { id: input.jobId },
+      data: {
+        status: OcrJobStatus.QUEUED,
+        metadata: toJsonValue(latestMetadata),
+        processingMs: Date.now() - input.startedAtMs,
+      },
+    });
+    clearOcrJobRunning(input.jobId);
+    clearOcrJobStop(input.jobId);
+  };
+
   try {
     clearOcrJobStop(input.jobId);
     markOcrJobRunning(input.jobId);
@@ -1657,48 +1759,10 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
 
     for (let index = startIndex; index < input.inputPreviews.length; index++) {
       if (isOcrJobStopRequested(input.jobId)) {
-        progressEvents = appendProgressEvent(
-          progressEvents,
-          "paused",
-          `Paused at ${pageOutputs.length}/${input.inputPreviews.length} page(s)`
+        await pauseAtCheckpoint(
+          "Stopped. Resume to continue from checkpoint.",
+          `Stopped at ${pageOutputs.length}/${input.inputPreviews.length} page(s)`
         );
-        latestMetadata = buildProgressMetadata({
-          stage: "paused",
-          message: "Paused. Resume to continue from checkpoint.",
-          progressPct:
-            input.postProcessingPayload.enabled
-              ? (pageOutputs.length / input.inputPreviews.length) * 85
-              : (pageOutputs.length / input.inputPreviews.length) * 100,
-          pageCount: input.inputPreviews.length,
-          processedPages: pageOutputs.length,
-          currentPage: null,
-          etaSeconds: null,
-          startedAt: startedAtIso,
-          events: progressEvents,
-          checkpoints: pageOutputs.map((page) => ({
-            pageNumber: page.pageNumber,
-            status: "completed",
-            characterCount: page.text.length,
-            durationMs: page.durationMs,
-            previewText: page.text.trim().slice(0, 320),
-          })),
-          postProcessing: postProcessingMeta,
-        });
-
-        for (const ollamaModel of usedOllamaModels) {
-          await unloadOllamaModel(input.settings.apiEndpoint, ollamaModel);
-        }
-
-        await db.ocrJob.update({
-          where: { id: input.jobId },
-          data: {
-            status: OcrJobStatus.QUEUED,
-            metadata: toJsonValue(latestMetadata),
-            processingMs: Date.now() - input.startedAtMs,
-          },
-        });
-        clearOcrJobRunning(input.jobId);
-        clearOcrJobStop(input.jobId);
         return;
       }
 
@@ -1745,24 +1809,41 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       let pageText = "";
       let pageStructured: Record<string, unknown> = { markdown: "" };
       let pageMetadata: Record<string, unknown> = {};
-      if (input.provider === "ollama") {
-        ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runOllamaOcr(
-          input.settings.apiEndpoint,
-          input.model,
-          input.prompt,
-          pagePreview
-        ));
-      } else {
-        const mistralEndpoint =
-          input.settings.provider === "mistral"
-            ? input.settings.apiEndpoint
-            : DEFAULT_MISTRAL_API_URL;
-        ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runMistralOcr(
-          input.model,
-          pagePreview,
-          input.settings.apiKey || process.env.MISTRAL_API_KEY || "",
-          mistralEndpoint
-        ));
+      const pageAbortController = new AbortController();
+      registerOcrJobAbortController(input.jobId, pageAbortController);
+      try {
+        if (input.provider === "ollama") {
+          ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runOllamaOcr(
+            input.settings.apiEndpoint,
+            input.model,
+            input.prompt,
+            pagePreview,
+            pageAbortController.signal
+          ));
+        } else {
+          const mistralEndpoint =
+            input.settings.provider === "mistral"
+              ? input.settings.apiEndpoint
+              : DEFAULT_MISTRAL_API_URL;
+          ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runMistralOcr(
+            input.model,
+            pagePreview,
+            input.settings.apiKey || process.env.MISTRAL_API_KEY || "",
+            mistralEndpoint,
+            pageAbortController.signal
+          ));
+        }
+      } catch (error) {
+        if (error instanceof OcrStopRequestedError || isOcrJobStopRequested(input.jobId)) {
+          await pauseAtCheckpoint(
+            "Stopped during inference. Resume to continue from checkpoint.",
+            `Stopped during page ${pageNumber}/${input.inputPreviews.length} at ${pageOutputs.length}/${input.inputPreviews.length} page(s)`
+          );
+          return;
+        }
+        throw error;
+      } finally {
+        unregisterOcrJobAbortController(input.jobId, pageAbortController);
       }
 
       const durationMs = Date.now() - pageStartMs;

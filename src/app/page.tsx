@@ -157,8 +157,14 @@ interface HistoryJobDetail extends HistoryJobSummary {
   result?: unknown;
 }
 
+type ProviderKind = "ollama" | "mistral";
+type ProviderModelSelections = Partial<Record<ProviderKind, string>>;
+
 const DEFAULT_OLLAMA_ENDPOINT = "http://localhost:11434";
 const DEFAULT_MISTRAL_ENDPOINT = "https://api.mistral.ai/v1/ocr";
+const MODEL_SELECTIONS_STORAGE_KEY = "extracto:model-selections:v1";
+const POST_PROCESS_MODEL_SELECTIONS_STORAGE_KEY =
+  "extracto:post-process-model-selections:v1";
 
 function normalizeProvider(provider?: string): "ollama" | "mistral" {
   return provider?.trim().toLowerCase().split(":")[0] === "mistral" ? "mistral" : "ollama";
@@ -196,6 +202,53 @@ const LANGUAGES = [
   { code: "pt", name: "Portuguese" },
   { code: "it", name: "Italian" },
 ];
+
+function readProviderModelSelections(storageKey: string): ProviderModelSelections {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(storageKey);
+    if (!rawValue) {
+      return {};
+    }
+
+    const parsed = JSON.parse(rawValue) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+
+    const typed = parsed as Record<string, unknown>;
+    return {
+      ollama: typeof typed.ollama === "string" ? typed.ollama.trim() : "",
+      mistral: typeof typed.mistral === "string" ? typed.mistral.trim() : "",
+    };
+  } catch {
+    return {};
+  }
+}
+
+function writeProviderModelSelections(
+  storageKey: string,
+  selections: ProviderModelSelections
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        ollama: selections.ollama || "",
+        mistral: selections.mistral || "",
+      })
+    );
+  } catch {
+    // ignore storage errors
+  }
+}
 
 // Utility functions
 const formatFileSize = (bytes: number): string => {
@@ -559,6 +612,9 @@ export default function EstractoPage() {
   const [apiSettingsOpen, setApiSettingsOpen] = React.useState(false);
   const [viewMode, setViewMode] = React.useState<"preview" | "split" | "result">("split");
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const modelSelectionsRef = React.useRef<ProviderModelSelections>({});
+  const postProcessModelSelectionsRef = React.useRef<ProviderModelSelections>({});
+  const modelSelectionsHydratedRef = React.useRef(false);
   const [isLoadingModels, setIsLoadingModels] = React.useState(false);
   const [isSavingApiSettings, setIsSavingApiSettings] = React.useState(false);
   const [isSigningOut, setIsSigningOut] = React.useState(false);
@@ -613,6 +669,27 @@ export default function EstractoPage() {
     ? models.some((model) => model.id === postProcessing.model)
     : true;
 
+  const persistProviderSelection = React.useCallback(
+    (storageKey: string, provider: ProviderKind, value: string) => {
+      const normalizedValue = value.trim();
+      if (storageKey === MODEL_SELECTIONS_STORAGE_KEY) {
+        modelSelectionsRef.current = {
+          ...modelSelectionsRef.current,
+          [provider]: normalizedValue,
+        };
+        writeProviderModelSelections(storageKey, modelSelectionsRef.current);
+        return;
+      }
+
+      postProcessModelSelectionsRef.current = {
+        ...postProcessModelSelectionsRef.current,
+        [provider]: normalizedValue,
+      };
+      writeProviderModelSelections(storageKey, postProcessModelSelectionsRef.current);
+    },
+    []
+  );
+
   const fetchAvailableModels = React.useCallback(
     async (values: ApiSettings) => {
       setIsLoadingModels(true);
@@ -648,21 +725,59 @@ export default function EstractoPage() {
         const discoveredModels = Array.isArray(payload.models) ? payload.models : [];
         const nextModels =
           discoveredModels.length > 0 ? discoveredModels : FALLBACK_MODELS;
+        const providerModelIds = nextModels
+          .filter((model) => normalizeProvider(model.provider) === normalizedSettings.provider)
+          .map((model) => model.id);
+        const storedModel =
+          modelSelectionsRef.current[normalizedSettings.provider as ProviderKind]?.trim() || "";
+        const providerFirstModelId = providerModelIds[0] || nextModels[0]?.id || "";
 
         setModels(nextModels);
-        setSelectedModel((current) =>
-          nextModels.some((model) => model.id === current) ? current : nextModels[0]?.id || ""
-        );
+        setSelectedModel((current) => {
+          const currentInProvider = providerModelIds.includes(current);
+          const storedInProvider = storedModel && providerModelIds.includes(storedModel);
+          const nextValue = storedInProvider
+            ? storedModel
+            : currentInProvider
+              ? current
+              : providerFirstModelId;
+          if (nextValue) {
+            persistProviderSelection(
+              MODEL_SELECTIONS_STORAGE_KEY,
+              normalizedSettings.provider as ProviderKind,
+              nextValue
+            );
+          }
+          return nextValue;
+        });
         return nextModels;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unable to fetch models";
         setModelError(message);
         setModels(FALLBACK_MODELS);
-        setSelectedModel((current) =>
-          FALLBACK_MODELS.some((model) => model.id === current)
-            ? current
-            : FALLBACK_MODELS[0]?.id || ""
-        );
+        const providerModelIds = FALLBACK_MODELS
+          .filter((model) => normalizeProvider(model.provider) === normalizedSettings.provider)
+          .map((model) => model.id);
+        const storedModel =
+          modelSelectionsRef.current[normalizedSettings.provider as ProviderKind]?.trim() || "";
+        const providerFirstModelId = providerModelIds[0] || FALLBACK_MODELS[0]?.id || "";
+        setSelectedModel((current) => {
+          const currentInProvider = providerModelIds.includes(current);
+          const storedInProvider = storedModel && providerModelIds.includes(storedModel);
+          const nextValue = storedInProvider
+            ? storedModel
+            : currentInProvider
+              ? current
+              : providerFirstModelId;
+          if (nextValue) {
+            persistProviderSelection(
+              MODEL_SELECTIONS_STORAGE_KEY,
+              normalizedSettings.provider as ProviderKind,
+              nextValue
+            );
+          }
+          return nextValue;
+        });
         toast({
           title: "Model fetch failed",
           description: message,
@@ -673,7 +788,7 @@ export default function EstractoPage() {
         setIsLoadingModels(false);
       }
     },
-    [toast]
+    [persistProviderSelection, toast]
   );
 
   const loadSavedSettings = React.useCallback(async () => {
@@ -867,8 +982,68 @@ export default function EstractoPage() {
   };
 
   React.useEffect(() => {
+    modelSelectionsRef.current = readProviderModelSelections(MODEL_SELECTIONS_STORAGE_KEY);
+    postProcessModelSelectionsRef.current = readProviderModelSelections(
+      POST_PROCESS_MODEL_SELECTIONS_STORAGE_KEY
+    );
+    modelSelectionsHydratedRef.current = true;
+  }, []);
+
+  React.useEffect(() => {
     void loadSavedSettings();
   }, [loadSavedSettings]);
+
+  React.useEffect(() => {
+    if (!modelSelectionsHydratedRef.current || !selectedModel) {
+      return;
+    }
+
+    const provider = normalizeProvider(apiSettings.provider);
+    const selectedModelData = models.find((model) => model.id === selectedModel);
+    if (selectedModelData && normalizeProvider(selectedModelData.provider) !== provider) {
+      return;
+    }
+
+    persistProviderSelection(MODEL_SELECTIONS_STORAGE_KEY, provider, selectedModel);
+  }, [apiSettings.provider, models, persistProviderSelection, selectedModel]);
+
+  React.useEffect(() => {
+    if (!modelSelectionsHydratedRef.current) {
+      return;
+    }
+
+    const provider = normalizeProvider(apiSettings.provider);
+    const storedModel =
+      postProcessModelSelectionsRef.current[provider as ProviderKind]?.trim() || "";
+    const providerModelIds = models
+      .filter((model) => normalizeProvider(model.provider) === provider)
+      .map((model) => model.id);
+    const nextModel = storedModel && providerModelIds.includes(storedModel) ? storedModel : "";
+    setPostProcessing((prev) => (prev.model === nextModel ? prev : { ...prev, model: nextModel }));
+  }, [apiSettings.provider, models]);
+
+  React.useEffect(() => {
+    if (!modelSelectionsHydratedRef.current) {
+      return;
+    }
+
+    const provider = normalizeProvider(apiSettings.provider);
+    if (!postProcessing.model) {
+      persistProviderSelection(POST_PROCESS_MODEL_SELECTIONS_STORAGE_KEY, provider, "");
+      return;
+    }
+
+    const selectedModelData = models.find((model) => model.id === postProcessing.model);
+    if (selectedModelData && normalizeProvider(selectedModelData.provider) !== provider) {
+      return;
+    }
+
+    persistProviderSelection(
+      POST_PROCESS_MODEL_SELECTIONS_STORAGE_KEY,
+      provider,
+      postProcessing.model
+    );
+  }, [apiSettings.provider, models, persistProviderSelection, postProcessing.model]);
 
   React.useEffect(() => {
     if (!historyOpen) {
@@ -1373,14 +1548,14 @@ export default function EstractoPage() {
           entry.id === file.id
             ? {
                 ...entry,
-                stageMessage: "Stop requested. Finishing current page...",
+                stageMessage: "Stop requested. Aborting current inference...",
               }
             : entry
         )
       );
       toast({
         title: "Stop requested",
-        description: "Current page will finish, then OCR will pause and unload the model.",
+        description: "Aborting current inference now and unloading the model.",
       });
     } catch (error) {
       toast({
