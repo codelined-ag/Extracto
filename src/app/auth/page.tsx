@@ -2,11 +2,19 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { Languages } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
@@ -20,6 +28,9 @@ interface SessionResponse {
   authenticated?: boolean;
 }
 
+type UiLanguage = "it" | "en";
+const UI_LANGUAGE_STORAGE_KEY = "extracto:ui-language:v1";
+
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
@@ -29,12 +40,36 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [mode, setMode] = React.useState<"signin" | "signup">("signin");
   const [loading, setLoading] = React.useState(false);
+  const [uiLanguage, setUiLanguage] = React.useState<UiLanguage>("it");
   const [form, setForm] = React.useState<AuthFormState>({
     email: "",
     password: "",
     name: "",
   });
   const [authChecked, setAuthChecked] = React.useState(false);
+  const t = React.useCallback(
+    (it: string, en: string) => (uiLanguage === "it" ? it : en),
+    [uiLanguage]
+  );
+
+  React.useEffect(() => {
+    try {
+      const storedLanguage = window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
+      if (storedLanguage === "it" || storedLanguage === "en") {
+        setUiLanguage(storedLanguage);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, uiLanguage);
+    } catch {
+      // ignore storage errors
+    }
+  }, [uiLanguage]);
 
   React.useEffect(() => {
     let active = true;
@@ -66,8 +101,8 @@ export default function AuthPage() {
 
     if (!isValidEmail(form.email) || form.password.length < 8) {
       toast({
-        title: "Invalid input",
-        description: "Enter a valid email and a password with at least 8 characters.",
+        title: t("Input non valido", "Invalid input"),
+        description: t("Inserisci una email valida e una password di almeno 8 caratteri.", "Enter a valid email and a password with at least 8 characters."),
         variant: "destructive",
       });
       return;
@@ -93,14 +128,14 @@ export default function AuthPage() {
       };
 
       if (!response.ok) {
-        throw new Error(payload.error || "Authentication failed");
+        throw new Error(payload.error || t("Autenticazione non riuscita", "Authentication failed"));
       }
 
       router.push("/");
     } catch (error) {
       toast({
-        title: "Authentication failed",
-        description: error instanceof Error ? error.message : "Please try again",
+        title: t("Autenticazione non riuscita", "Authentication failed"),
+        description: error instanceof Error ? error.message : t("Riprova", "Please try again"),
         variant: "destructive",
       });
     } finally {
@@ -116,16 +151,30 @@ export default function AuthPage() {
     <div className="min-h-screen flex items-center justify-center px-4 py-10">
       <Card className="w-full max-w-md border-2">
         <CardHeader>
-          <CardTitle>Estracto Auth</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle>{t("Accesso Estracto", "Estracto Auth")}</CardTitle>
+            <Select value={uiLanguage} onValueChange={(value) => setUiLanguage(value as UiLanguage)}>
+              <SelectTrigger className="w-[90px] h-8" aria-label={t("Lingua", "Language")}>
+                <div className="flex items-center gap-1.5">
+                  <Languages className="h-3.5 w-3.5 text-primary" />
+                  <SelectValue />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="it">IT</SelectItem>
+                <SelectItem value="en">EN</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <CardDescription>
-            Sign in or create a free account to access OCR.
+            {t("Accedi o crea un account gratuito per usare l'OCR.", "Sign in or create a free account to access OCR.")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs value={mode} onValueChange={(next) => setMode(next as "signin" | "signup")}>
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              <TabsTrigger value="signin">{t("Accedi", "Sign In")}</TabsTrigger>
+              <TabsTrigger value="signup">{t("Registrati", "Sign Up")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="signin" className="mt-4 space-y-4">
@@ -142,7 +191,7 @@ export default function AuthPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">{t("Password", "Password")}</Label>
                   <Input
                     id="password"
                     type="password"
@@ -153,7 +202,7 @@ export default function AuthPage() {
                   />
                 </div>
                 <Button type="submit" disabled={loading} className="w-full">
-                  {loading ? "Signing in..." : "Sign In"}
+                  {loading ? t("Accesso in corso...", "Signing in...") : t("Accedi", "Sign In")}
                 </Button>
               </form>
             </TabsContent>
@@ -161,7 +210,7 @@ export default function AuthPage() {
             <TabsContent value="signup" className="mt-4 space-y-4">
               <form className="space-y-4" onSubmit={submit}>
                 <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
+                  <Label htmlFor="name">{t("Nome", "Name")}</Label>
                   <Input
                     id="name"
                     value={form.name}
@@ -171,7 +220,7 @@ export default function AuthPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
+                  <Label htmlFor="signup-email">{t("Email", "Email")}</Label>
                   <Input
                     id="signup-email"
                     type="email"
@@ -182,7 +231,7 @@ export default function AuthPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
+                  <Label htmlFor="signup-password">{t("Password", "Password")}</Label>
                   <Input
                     id="signup-password"
                     type="password"
@@ -193,7 +242,7 @@ export default function AuthPage() {
                   />
                 </div>
                 <Button type="submit" disabled={loading} className="w-full">
-                  {loading ? "Creating account..." : "Create Free Account"}
+                  {loading ? t("Creazione account...", "Creating account...") : t("Crea account gratuito", "Create Free Account")}
                 </Button>
               </form>
             </TabsContent>

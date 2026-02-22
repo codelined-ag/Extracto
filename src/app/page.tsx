@@ -159,12 +159,14 @@ interface HistoryJobDetail extends HistoryJobSummary {
 
 type ProviderKind = "ollama" | "mistral";
 type ProviderModelSelections = Partial<Record<ProviderKind, string>>;
+type UiLanguage = "it" | "en";
 
 const DEFAULT_OLLAMA_ENDPOINT = "http://localhost:11434";
 const DEFAULT_MISTRAL_ENDPOINT = "https://api.mistral.ai/v1/ocr";
 const MODEL_SELECTIONS_STORAGE_KEY = "extracto:model-selections:v1";
 const POST_PROCESS_MODEL_SELECTIONS_STORAGE_KEY =
   "extracto:post-process-model-selections:v1";
+const UI_LANGUAGE_STORAGE_KEY = "extracto:ui-language:v1";
 
 function normalizeProvider(provider?: string): "ollama" | "mistral" {
   return provider?.trim().toLowerCase().split(":")[0] === "mistral" ? "mistral" : "ollama";
@@ -191,16 +193,16 @@ const FALLBACK_MODELS: Model[] = [
 
 // Languages
 const LANGUAGES = [
-  { code: "auto", name: "Auto Detect" },
-  { code: "en", name: "English" },
-  { code: "es", name: "Spanish" },
-  { code: "fr", name: "French" },
-  { code: "de", name: "German" },
-  { code: "zh", name: "Chinese" },
-  { code: "ja", name: "Japanese" },
-  { code: "ko", name: "Korean" },
-  { code: "pt", name: "Portuguese" },
-  { code: "it", name: "Italian" },
+  { code: "auto", nameIt: "Rilevamento automatico", nameEn: "Auto Detect" },
+  { code: "en", nameIt: "Inglese", nameEn: "English" },
+  { code: "es", nameIt: "Spagnolo", nameEn: "Spanish" },
+  { code: "fr", nameIt: "Francese", nameEn: "French" },
+  { code: "de", nameIt: "Tedesco", nameEn: "German" },
+  { code: "zh", nameIt: "Cinese", nameEn: "Chinese" },
+  { code: "ja", nameIt: "Giapponese", nameEn: "Japanese" },
+  { code: "ko", nameIt: "Coreano", nameEn: "Korean" },
+  { code: "pt", nameIt: "Portoghese", nameEn: "Portuguese" },
+  { code: "it", nameIt: "Italiano", nameEn: "Italian" },
 ];
 
 function readProviderModelSelections(storageKey: string): ProviderModelSelections {
@@ -606,6 +608,7 @@ export default function EstractoPage() {
   const [apiSettingsDraft, setApiSettingsDraft] = React.useState<ApiSettings>(DEFAULT_API_SETTINGS);
   const [isDragOver, setIsDragOver] = React.useState(false);
   const [isProcessing, setIsProcessing] = React.useState(false);
+  const [uiLanguage, setUiLanguage] = React.useState<UiLanguage>("it");
   const [selectedFileId, setSelectedFileId] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState<"md" | "json" | null>(null);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = React.useState(true);
@@ -668,6 +671,10 @@ export default function EstractoPage() {
   const selectedPostProcessModelExists = postProcessing.model
     ? models.some((model) => model.id === postProcessing.model)
     : true;
+  const t = React.useCallback(
+    (it: string, en: string) => (uiLanguage === "it" ? it : en),
+    [uiLanguage]
+  );
 
   const persistProviderSelection = React.useCallback(
     (storageKey: string, provider: ProviderKind, value: string) => {
@@ -779,7 +786,7 @@ export default function EstractoPage() {
           return nextValue;
         });
         toast({
-          title: "Model fetch failed",
+          title: t("Recupero modelli non riuscito", "Model fetch failed"),
           description: message,
           variant: "destructive",
         });
@@ -816,11 +823,11 @@ export default function EstractoPage() {
       setApiSettingsDraft(DEFAULT_API_SETTINGS);
       await fetchAvailableModels(DEFAULT_API_SETTINGS);
       toast({
-        title: "Settings load failed",
+        title: t("Caricamento impostazioni non riuscito", "Settings load failed"),
         description:
           error instanceof Error
             ? error.message
-            : "Unable to load API settings, using defaults",
+            : t("Impossibile caricare le impostazioni API, uso i valori predefiniti", "Unable to load API settings, using defaults"),
         variant: "destructive",
       });
     }
@@ -854,13 +861,13 @@ export default function EstractoPage() {
       setApiSettingsOpen(false);
       await fetchAvailableModels(normalizedSettings);
       toast({
-        title: "Settings saved",
-        description: "API configuration has been updated",
+        title: t("Impostazioni salvate", "Settings saved"),
+        description: t("Configurazione API aggiornata", "API configuration has been updated"),
       });
     } catch (error) {
       toast({
-        title: "Save failed",
-        description: error instanceof Error ? error.message : "Unable to save API settings",
+        title: t("Salvataggio non riuscito", "Save failed"),
+        description: error instanceof Error ? error.message : t("Impossibile salvare le impostazioni API", "Unable to save API settings"),
         variant: "destructive",
       });
     } finally {
@@ -888,8 +895,8 @@ export default function EstractoPage() {
       }
     } catch (error) {
       toast({
-        title: "History load failed",
-        description: error instanceof Error ? error.message : "Unable to load OCR history",
+        title: t("Caricamento cronologia non riuscito", "History load failed"),
+        description: error instanceof Error ? error.message : t("Impossibile caricare la cronologia OCR", "Unable to load OCR history"),
         variant: "destructive",
       });
     } finally {
@@ -913,8 +920,8 @@ export default function EstractoPage() {
     } catch (error) {
       setSelectedHistoryJob(null);
       toast({
-        title: "Run load failed",
-        description: error instanceof Error ? error.message : "Unable to load OCR run",
+        title: t("Caricamento esecuzione non riuscito", "Run load failed"),
+        description: error instanceof Error ? error.message : t("Impossibile caricare l'esecuzione OCR", "Unable to load OCR run"),
         variant: "destructive",
       });
     } finally {
@@ -941,13 +948,13 @@ export default function EstractoPage() {
       await loadHistoryJobs();
 
       toast({
-        title: "Run deleted",
-        description: "Past OCR run removed from history",
+        title: t("Esecuzione eliminata", "Run deleted"),
+        description: t("Esecuzione OCR rimossa dalla cronologia", "Past OCR run removed from history"),
       });
     } catch (error) {
       toast({
-        title: "Delete failed",
-        description: error instanceof Error ? error.message : "Unable to delete OCR run",
+        title: t("Eliminazione non riuscita", "Delete failed"),
+        description: error instanceof Error ? error.message : t("Impossibile eliminare l'esecuzione OCR", "Unable to delete OCR run"),
         variant: "destructive",
       });
     } finally {
@@ -982,12 +989,29 @@ export default function EstractoPage() {
   };
 
   React.useEffect(() => {
+    try {
+      const storedLanguage = window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
+      if (storedLanguage === "it" || storedLanguage === "en") {
+        setUiLanguage(storedLanguage);
+      }
+    } catch {
+      // ignore storage errors
+    }
+
     modelSelectionsRef.current = readProviderModelSelections(MODEL_SELECTIONS_STORAGE_KEY);
     postProcessModelSelectionsRef.current = readProviderModelSelections(
       POST_PROCESS_MODEL_SELECTIONS_STORAGE_KEY
     );
     modelSelectionsHydratedRef.current = true;
   }, []);
+
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, uiLanguage);
+    } catch {
+      // ignore storage errors
+    }
+  }, [uiLanguage]);
 
   React.useEffect(() => {
     void loadSavedSettings();
@@ -1090,8 +1114,8 @@ export default function EstractoPage() {
     }
 
     toast({
-      title: "Files added",
-      description: `${newFiles.length} file(s) ready for OCR processing`,
+      title: t("File aggiunti", "Files added"),
+      description: t(`${newFiles.length} file pronti per l'OCR`, `${newFiles.length} file(s) ready for OCR processing`),
     });
   };
 
@@ -1141,8 +1165,8 @@ export default function EstractoPage() {
     setTimeout(() => setCopied(null), 2000);
 
     toast({
-      title: "Copied to clipboard!",
-      description: `${type === "md" ? "Markdown" : "JSON"} content has been copied`,
+      title: t("Copiato negli appunti", "Copied to clipboard!"),
+      description: t(`Contenuto ${type === "md" ? "Markdown" : "JSON"} copiato`, `${type === "md" ? "Markdown" : "JSON"} content has been copied`),
     });
   };
 
@@ -1162,8 +1186,8 @@ export default function EstractoPage() {
     URL.revokeObjectURL(url);
 
     toast({
-      title: "Download started",
-      description: `${selectedFile.name}.${type === "md" ? "md" : "json"} is being downloaded`,
+      title: t("Download avviato", "Download started"),
+      description: t(`${selectedFile.name}.${type === "md" ? "md" : "json"} in download`, `${selectedFile.name}.${type === "md" ? "md" : "json"} is being downloaded`),
     });
   };
 
@@ -1172,8 +1196,8 @@ export default function EstractoPage() {
     const completedFiles = files.filter((f) => f.status === "completed" && f.result);
     if (completedFiles.length === 0) {
       toast({
-        title: "No files to export",
-        description: "Process some files first before exporting",
+        title: t("Nessun file da esportare", "No files to export"),
+        description: t("Elabora prima alcuni file, poi esporta", "Process some files first before exporting"),
         variant: "destructive",
       });
       return;
@@ -1205,8 +1229,8 @@ export default function EstractoPage() {
     URL.revokeObjectURL(url);
 
     toast({
-      title: "Export complete!",
-      description: `${completedFiles.length} files exported to ZIP archive`,
+      title: t("Esportazione completata", "Export complete!"),
+      description: t(`${completedFiles.length} file esportati in ZIP`, `${completedFiles.length} files exported to ZIP archive`),
     });
   };
 
@@ -1365,7 +1389,7 @@ export default function EstractoPage() {
                       : entry.result,
                   error:
                     job.status === "FAILED"
-                      ? job.errorMessage || "Processing failed"
+                      ? job.errorMessage || t("Elaborazione non riuscita", "Processing failed")
                       : entry.error,
                 };
               })()
@@ -1384,7 +1408,7 @@ export default function EstractoPage() {
         };
       }
       if (job.status === "FAILED") {
-        throw new Error(job.errorMessage || "Processing failed");
+        throw new Error(job.errorMessage || t("Elaborazione non riuscita", "Processing failed"));
       }
       if (job.status === "QUEUED" && progressMeta?.stage === "paused") {
         return { status: "paused" };
@@ -1447,8 +1471,8 @@ export default function EstractoPage() {
               progress: Math.max(entry.progress, 1),
               stage: resume ? "resuming" : "queued",
               stageMessage: resume
-                ? "Resuming from checkpoint..."
-                : `Queued for OCR (${pagePreviews.length} pages)`,
+                ? t("Ripresa dal checkpoint...", "Resuming from checkpoint...")
+                : t(`In coda per OCR (${pagePreviews.length} pagine)`, `Queued for OCR (${pagePreviews.length} pages)`),
               pageCount: pagePreviews.length,
               processedPages: entry.processedPages || 0,
               etaSeconds: null,
@@ -1478,8 +1502,8 @@ export default function EstractoPage() {
     if (files.length === 0) return;
     if (!isPostProcessingReady) {
       toast({
-        title: "Missing post-processing instruction",
-        description: "Add an instruction or disable post-processing before running OCR.",
+        title: t("Istruzione post-processing mancante", "Missing post-processing instruction"),
+        description: t("Aggiungi un'istruzione o disattiva il post-processing prima di avviare l'OCR.", "Add an instruction or disable post-processing before running OCR."),
         variant: "destructive",
       });
       return;
@@ -1496,8 +1520,8 @@ export default function EstractoPage() {
           completedInRun += 1;
         } else if (result.status === "paused") {
           toast({
-            title: "OCR paused",
-            description: `${file.name} paused at checkpoint. Click Resume to continue.`,
+            title: t("OCR in pausa", "OCR paused"),
+            description: t(`${file.name} messo in pausa al checkpoint. Premi Riprendi per continuare.`, `${file.name} paused at checkpoint. Click Resume to continue.`),
           });
           break;
         }
@@ -1508,7 +1532,7 @@ export default function EstractoPage() {
               ? {
                   ...entry,
                   status: "error",
-                  error: error instanceof Error ? error.message : "Processing failed",
+                  error: error instanceof Error ? error.message : t("Elaborazione non riuscita", "Processing failed"),
                 }
               : entry
           )
@@ -1519,8 +1543,8 @@ export default function EstractoPage() {
     setIsProcessing(false);
     if (completedInRun > 0) {
       toast({
-        title: "Processing complete",
-        description: `${completedInRun} file(s) processed successfully`,
+        title: t("Elaborazione completata", "Processing complete"),
+        description: t(`${completedInRun} file elaborati con successo`, `${completedInRun} file(s) processed successfully`),
       });
     }
   };
@@ -1548,19 +1572,19 @@ export default function EstractoPage() {
           entry.id === file.id
             ? {
                 ...entry,
-                stageMessage: "Stop requested. Aborting current inference...",
+                stageMessage: t("Stop richiesto. Interruzione inferenza corrente...", "Stop requested. Aborting current inference..."),
               }
             : entry
         )
       );
       toast({
-        title: "Stop requested",
-        description: "Aborting current inference now and unloading the model.",
+        title: t("Stop richiesto", "Stop requested"),
+        description: t("Interruzione immediata dell'inferenza e scaricamento del modello.", "Aborting current inference now and unloading the model."),
       });
     } catch (error) {
       toast({
-        title: "Stop failed",
-        description: error instanceof Error ? error.message : "Unable to stop OCR",
+        title: t("Stop non riuscito", "Stop failed"),
+        description: error instanceof Error ? error.message : t("Impossibile fermare l'OCR", "Unable to stop OCR"),
         variant: "destructive",
       });
     }
@@ -1575,8 +1599,8 @@ export default function EstractoPage() {
       const result = await processSingleFile(file, true);
       if (result.status === "completed") {
         toast({
-          title: "Resume complete",
-          description: `${file.name} resumed and finished successfully.`,
+          title: t("Ripresa completata", "Resume complete"),
+          description: t(`${file.name} ripreso e completato con successo.`, `${file.name} resumed and finished successfully.`),
         });
       }
     } catch (error) {
@@ -1586,14 +1610,14 @@ export default function EstractoPage() {
             ? {
                 ...entry,
                 status: "error",
-                error: error instanceof Error ? error.message : "Resume failed",
+                error: error instanceof Error ? error.message : t("Ripresa non riuscita", "Resume failed"),
               }
             : entry
         )
       );
       toast({
-        title: "Resume failed",
-        description: error instanceof Error ? error.message : "Unable to resume OCR",
+        title: t("Ripresa non riuscita", "Resume failed"),
+        description: error instanceof Error ? error.message : t("Impossibile riprendere l'OCR", "Unable to resume OCR"),
         variant: "destructive",
       });
     } finally {
@@ -1612,8 +1636,8 @@ export default function EstractoPage() {
       router.replace("/auth");
     } catch (error) {
       toast({
-        title: "Sign out failed",
-        description: error instanceof Error ? error.message : "Please try again",
+        title: t("Disconnessione non riuscita", "Sign out failed"),
+        description: error instanceof Error ? error.message : t("Riprova", "Please try again"),
         variant: "destructive",
       });
     } finally {
@@ -1648,11 +1672,23 @@ export default function EstractoPage() {
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight">Estracto</h1>
-              <p className="text-xs text-muted-foreground -mt-0.5">AI Document OCR</p>
             </div>
           </motion.div>
 
           <div className="flex items-center gap-3">
+            <Select value={uiLanguage} onValueChange={(value) => setUiLanguage(value as UiLanguage)}>
+              <SelectTrigger className="w-[90px] h-9" aria-label={t("Lingua", "Language")}>
+                <div className="flex items-center gap-1.5">
+                  <Languages className="h-3.5 w-3.5 text-primary" />
+                  <SelectValue />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="it">IT</SelectItem>
+                <SelectItem value="en">EN</SelectItem>
+              </SelectContent>
+            </Select>
+
             {/* Model Selector */}
             <Select
               value={selectedModel}
@@ -1660,7 +1696,9 @@ export default function EstractoPage() {
               disabled={isLoadingModels || models.length === 0}
             >
               <SelectTrigger className="w-[180px] h-9">
-                <SelectValue placeholder={isLoadingModels ? "Loading models..." : "Select model"} />
+                <SelectValue
+                  placeholder={isLoadingModels ? t("Caricamento modelli...", "Loading models...") : t("Seleziona modello", "Select model")}
+                />
               </SelectTrigger>
               <SelectContent>
                 {models.map((model) => (
@@ -1677,8 +1715,8 @@ export default function EstractoPage() {
                 size="icon"
                 className="group"
                 onClick={openHistoryModal}
-                aria-label="Past OCR"
-                title="Past OCR"
+                aria-label={t("OCR passati", "Past OCR")}
+                title={t("OCR passati", "Past OCR")}
               >
                 <History className="h-4 w-4 text-sky-400 transition-transform duration-200 group-hover:-rotate-6 group-hover:scale-110" />
               </Button>
@@ -1693,8 +1731,8 @@ export default function EstractoPage() {
                   setApiSettingsDraft(apiSettings);
                   setApiSettingsOpen(true);
                 }}
-                aria-label="Settings"
-                title="Settings"
+                aria-label={t("Impostazioni", "Settings")}
+                title={t("Impostazioni", "Settings")}
               >
                 <Settings2 className="h-4 w-4 text-amber-400 transition-transform duration-200 group-hover:rotate-12 group-hover:scale-110" />
               </Button>
@@ -1710,7 +1748,7 @@ export default function EstractoPage() {
               >
                 <Button variant="outline" size="sm" className="group" onClick={exportAllAsZip}>
                   <FileArchive className="h-4 w-4 mr-1.5 text-violet-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-110" />
-                  Export ZIP
+                  {t("Esporta ZIP", "Export ZIP")}
                 </Button>
               </motion.div>
             )}
@@ -1731,14 +1769,14 @@ export default function EstractoPage() {
       >
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>API Endpoint Settings</DialogTitle>
+            <DialogTitle>{t("Impostazioni API", "API Endpoint Settings")}</DialogTitle>
             <DialogDescription>
-              Configure provider access and account actions.
+              {t("Configura provider, endpoint e account.", "Configure provider access and account actions.")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="provider">Provider</Label>
+              <Label htmlFor="provider">{t("Provider", "Provider")}</Label>
               <Select
                 value={apiSettingsDraft.provider}
                 onValueChange={(value) =>
@@ -1768,7 +1806,7 @@ export default function EstractoPage() {
                 }
               >
                 <SelectTrigger id="provider" className="w-full">
-                  <SelectValue placeholder="Select provider" />
+                  <SelectValue placeholder={t("Seleziona provider", "Select provider")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ollama">Ollama</SelectItem>
@@ -1777,7 +1815,7 @@ export default function EstractoPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="api-endpoint">API endpoint</Label>
+              <Label htmlFor="api-endpoint">{t("Endpoint API", "API endpoint")}</Label>
               <Input
                 id="api-endpoint"
                 value={apiSettingsDraft.apiEndpoint}
@@ -1792,7 +1830,7 @@ export default function EstractoPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="api-key">API key (optional)</Label>
+              <Label htmlFor="api-key">{t("API key (opzionale)", "API key (optional)")}</Label>
               <Input
                 id="api-key"
                 type="password"
@@ -1805,7 +1843,7 @@ export default function EstractoPage() {
             </div>
             <Separator />
             <div className="space-y-2">
-              <Label>Account</Label>
+              <Label>{t("Account", "Account")}</Label>
               <Button
                 variant="outline"
                 className="w-full justify-start group"
@@ -1817,7 +1855,7 @@ export default function EstractoPage() {
                 ) : (
                   <LogOut className="h-4 w-4 mr-1.5 text-rose-400 transition-transform duration-200 group-hover:translate-x-0.5" />
                 )}
-                Sign out
+                {t("Esci", "Sign out")}
               </Button>
             </div>
           </div>
@@ -1830,11 +1868,11 @@ export default function EstractoPage() {
               }}
               disabled={isSavingApiSettings}
             >
-              Cancel
+              {t("Annulla", "Cancel")}
             </Button>
             <Button onClick={saveApiSettings} disabled={isSavingApiSettings}>
               {isSavingApiSettings ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : null}
-              Save
+              {t("Salva", "Save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1852,16 +1890,16 @@ export default function EstractoPage() {
       >
         <DialogContent className="w-[96vw] !max-w-[96vw] h-[92vh] flex flex-col overflow-hidden p-4 sm:w-[94vw] sm:!max-w-[94vw] sm:h-[90vh] sm:p-5">
           <DialogHeader>
-            <DialogTitle>Past OCR Runs</DialogTitle>
+            <DialogTitle>{t("Esecuzioni OCR passate", "Past OCR Runs")}</DialogTitle>
             <DialogDescription>
-              Browse previous OCR runs, inspect output, download, or delete saved runs.
+              {t("Sfoglia le esecuzioni precedenti, visualizza output, scarica o elimina.", "Browse previous OCR runs, inspect output, download, or delete saved runs.")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid lg:grid-cols-[320px_minmax(0,1fr)] gap-4 flex-1 min-h-0 min-w-0 overflow-y-auto lg:overflow-hidden">
             <Card className="min-h-0 min-w-0 flex flex-col">
               <CardHeader className="py-3 px-4 border-b">
-                <CardTitle className="text-sm">History</CardTitle>
+                <CardTitle className="text-sm">{t("Cronologia", "History")}</CardTitle>
               </CardHeader>
               <CardContent className="p-0 flex-1 min-h-0">
                 {isLoadingHistory ? (
@@ -1870,7 +1908,7 @@ export default function EstractoPage() {
                   </div>
                 ) : historyJobs.length === 0 ? (
                   <div className="h-full flex items-center justify-center p-4 text-center">
-                    <p className="text-sm text-muted-foreground">No OCR runs saved yet.</p>
+                    <p className="text-sm text-muted-foreground">{t("Nessuna esecuzione OCR salvata.", "No OCR runs saved yet.")}</p>
                   </div>
                 ) : (
                   <ScrollArea className="h-full">
@@ -1902,7 +1940,11 @@ export default function EstractoPage() {
                               }
                               className="text-[10px]"
                             >
-                              {job.status.toLowerCase()}
+                              {job.status === "FAILED"
+                                ? t("fallito", "failed")
+                                : job.status === "COMPLETED"
+                                  ? t("completato", "completed")
+                                  : t("in corso", "running")}
                             </Badge>
                           </div>
                           <p className="text-[11px] text-muted-foreground truncate">{job.model}</p>
@@ -1919,7 +1961,7 @@ export default function EstractoPage() {
 
             <Card className="min-h-0 min-w-0 flex flex-col">
               <CardHeader className="py-3 px-4 border-b">
-                <CardTitle className="text-sm">Run Details</CardTitle>
+                <CardTitle className="text-sm">{t("Dettagli esecuzione", "Run Details")}</CardTitle>
               </CardHeader>
               <CardContent className="p-0 flex-1 min-h-0">
                 {isLoadingHistoryDetail ? (
@@ -1928,7 +1970,7 @@ export default function EstractoPage() {
                   </div>
                 ) : !selectedHistoryJob ? (
                   <div className="h-full flex items-center justify-center p-4 text-center">
-                    <p className="text-sm text-muted-foreground">Select a run to view details.</p>
+                    <p className="text-sm text-muted-foreground">{t("Seleziona un'esecuzione per vedere i dettagli.", "Select a run to view details.")}</p>
                   </div>
                 ) : (
                   <div className="h-full flex flex-col min-h-0 min-w-0">
@@ -1944,12 +1986,16 @@ export default function EstractoPage() {
                                 : "outline"
                           }
                         >
-                          {selectedHistoryJob.status.toLowerCase()}
+                          {selectedHistoryJob.status === "FAILED"
+                            ? t("fallito", "failed")
+                            : selectedHistoryJob.status === "COMPLETED"
+                              ? t("completato", "completed")
+                              : t("in corso", "running")}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">Model: {selectedHistoryJob.model}</p>
+                      <p className="text-xs text-muted-foreground">{t("Modello", "Model")}: {selectedHistoryJob.model}</p>
                       <p className="text-xs text-muted-foreground">
-                        Created: {formatTimestamp(selectedHistoryJob.createdAt)}
+                        {t("Creato", "Created")}: {formatTimestamp(selectedHistoryJob.createdAt)}
                       </p>
                     </div>
 
@@ -1964,7 +2010,7 @@ export default function EstractoPage() {
                         ) : (
                           <div className="text-center text-muted-foreground">
                             <ImageOff className="h-8 w-8 mx-auto mb-2" />
-                            <p className="text-xs">No preview saved</p>
+                            <p className="text-xs">{t("Anteprima non disponibile", "No preview saved")}</p>
                           </div>
                         )}
                       </div>
@@ -1977,7 +2023,7 @@ export default function EstractoPage() {
                             </TabsTrigger>
                             <TabsTrigger value="markdown-raw" className="text-xs h-6 shrink-0 gap-1.5 group">
                               <FileText className="h-3 w-3 text-lime-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
-                              Markdown raw
+                              {t("Markdown grezzo", "Markdown raw")}
                             </TabsTrigger>
                             <TabsTrigger value="json" className="text-xs h-6 shrink-0 gap-1.5 group">
                               <Code className="h-3 w-3 text-cyan-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
@@ -2022,7 +2068,7 @@ export default function EstractoPage() {
               className="group"
             >
               <Download className="h-4 w-4 mr-1.5 text-emerald-400 transition-transform duration-200 group-hover:-translate-y-0.5" />
-              Download MD
+              {t("Scarica MD", "Download MD")}
             </Button>
             <Button
               variant="outline"
@@ -2031,7 +2077,7 @@ export default function EstractoPage() {
               className="group"
             >
               <Download className="h-4 w-4 mr-1.5 text-cyan-400 transition-transform duration-200 group-hover:-translate-y-0.5" />
-              Download JSON
+              {t("Scarica JSON", "Download JSON")}
             </Button>
             <Button
               variant="destructive"
@@ -2040,7 +2086,7 @@ export default function EstractoPage() {
               className="group"
             >
               {isDeletingHistory ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1.5 transition-transform duration-200 group-hover:scale-110" />}
-              Delete Run
+              {t("Elimina esecuzione", "Delete Run")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2086,10 +2132,10 @@ export default function EstractoPage() {
                   </div>
                 </motion.div>
                 <p className="text-sm font-medium mb-1">
-                  {isDragOver ? "Drop files here" : "Drop documents or click to upload"}
+                  {isDragOver ? t("Rilascia qui i file", "Drop files here") : t("Trascina i documenti o clicca per caricare", "Drop documents or click to upload")}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Supports images, PDFs, and documents
+                  {t("Supporta immagini, PDF e documenti", "Supports images, PDFs, and documents")}
                 </p>
               </CardContent>
             </Card>
@@ -2111,31 +2157,31 @@ export default function EstractoPage() {
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-indigo-400" />
                     <span className="text-sm font-medium">
-                      {files.length} file{files.length !== 1 ? "s" : ""}
+                      {files.length} {t(files.length !== 1 ? "file" : "file", files.length !== 1 ? "files" : "file")}
                     </span>
                     {completedCount > 0 && (
                       <Badge variant="secondary" className="text-xs">
                         <CheckCircle2 className="h-3 w-3 mr-1" />
-                        {completedCount} done
+                        {t(`${completedCount} completati`, `${completedCount} done`)}
                       </Badge>
                     )}
                     {errorCount > 0 && (
                       <Badge variant="destructive" className="text-xs">
                         <AlertCircle className="h-3 w-3 mr-1" />
-                        {errorCount} failed
+                        {t(`${errorCount} falliti`, `${errorCount} failed`)}
                       </Badge>
                     )}
                   </div>
                   {files.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs text-muted-foreground hover:text-destructive group"
-                      onClick={clearAllFiles}
-                    >
-                      <Trash2 className="h-3 w-3 mr-1 transition-transform duration-200 group-hover:scale-110" />
-                      Clear
-                    </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-muted-foreground hover:text-destructive group"
+                        onClick={clearAllFiles}
+                      >
+                        <Trash2 className="h-3 w-3 mr-1 transition-transform duration-200 group-hover:scale-110" />
+                        {t("Pulisci", "Clear")}
+                      </Button>
                   )}
                 </div>
 
@@ -2181,7 +2227,7 @@ export default function EstractoPage() {
                                 </span>
                                 {typeof file.pageCount === "number" ? (
                                   <span className="text-[11px] text-muted-foreground">
-                                    {file.pageCount} page{file.pageCount === 1 ? "" : "s"}
+                                    {file.pageCount} {t(file.pageCount === 1 ? "pagina" : "pagine", file.pageCount === 1 ? "page" : "pages")}
                                   </span>
                                 ) : null}
                                 {file.status === "processing" && (
@@ -2193,7 +2239,7 @@ export default function EstractoPage() {
                                 {file.status === "paused" ? (
                                   <div className="flex items-center gap-1">
                                     <PauseCircle className="h-3 w-3 text-amber-500" />
-                                    <span className="text-xs text-amber-600">paused</span>
+                                    <span className="text-xs text-amber-600">{t("in pausa", "paused")}</span>
                                   </div>
                                 ) : null}
                               </div>
@@ -2202,10 +2248,10 @@ export default function EstractoPage() {
                                   <Progress value={file.progress} className="h-1 mt-1" />
                                   <div className="flex items-center justify-between mt-1">
                                     <span className="text-[11px] text-muted-foreground truncate max-w-[150px]">
-                                      {file.stageMessage || (file.status === "paused" ? "Paused" : "Working")}
+                                      {file.stageMessage || (file.status === "paused" ? t("In pausa", "Paused") : t("In lavorazione", "Working"))}
                                     </span>
                                     <span className="text-[11px] text-muted-foreground">
-                                      ETA {formatEta(file.etaSeconds)}
+                                      {t("ETA", "ETA")} {formatEta(file.etaSeconds)}
                                     </span>
                                   </div>
                                 </>
@@ -2254,9 +2300,9 @@ export default function EstractoPage() {
                       <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
                         <FileText className="h-6 w-6 text-muted-foreground" />
                       </div>
-                      <p className="text-sm font-medium">No files yet</p>
+                      <p className="text-sm font-medium">{t("Nessun file", "No files yet")}</p>
                       <p className="text-xs text-muted-foreground">
-                        Upload documents to start
+                        {t("Carica documenti per iniziare", "Upload documents to start")}
                       </p>
                     </div>
                   </div>
@@ -2282,7 +2328,7 @@ export default function EstractoPage() {
                     ) : (
                       <>
                         <Zap className="h-4 w-4 mr-2 text-amber-300 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6" />
-                        Run OCR ({pendingCount} pending)
+                        {t(`Avvia OCR (${pendingCount} in attesa)`, `Run OCR (${pendingCount} pending)`)}
                       </>
                     )}
                   </Button>
@@ -2293,7 +2339,7 @@ export default function EstractoPage() {
                       onClick={() => stopProcessingFile(activeProcessingFile)}
                     >
                       <PauseCircle className="h-4 w-4 mr-2 text-amber-500 transition-transform duration-200 group-hover:scale-110" />
-                      Stop Current OCR
+                      {t("Ferma OCR corrente", "Stop Current OCR")}
                     </Button>
                   ) : null}
                   {resumableSelectedFile ? (
@@ -2303,7 +2349,7 @@ export default function EstractoPage() {
                       onClick={() => resumeProcessingFile(resumableSelectedFile)}
                     >
                       <PlayCircle className="h-4 w-4 mr-2 text-emerald-400 transition-transform duration-200 group-hover:scale-110" />
-                      Resume From Checkpoint
+                      {t("Riprendi dal checkpoint", "Resume From Checkpoint")}
                     </Button>
                   ) : null}
                 </div>
@@ -2318,7 +2364,7 @@ export default function EstractoPage() {
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-sm font-medium flex items-center gap-2">
                         <Settings2 className="h-4 w-4 text-amber-400" />
-                        Advanced Settings
+                        {t("Impostazioni avanzate", "Advanced Settings")}
                       </CardTitle>
                       <motion.div
                         animate={{ rotate: advancedSettingsOpen ? 180 : 0 }}
@@ -2335,7 +2381,7 @@ export default function EstractoPage() {
                     <div className="space-y-2">
                       <Label className="text-xs flex items-center gap-1.5">
                         <Languages className="h-3 w-3" />
-                        Document Language
+                        {t("Lingua documento", "Document Language")}
                       </Label>
                       <Select
                         value={settings.language}
@@ -2347,7 +2393,7 @@ export default function EstractoPage() {
                         <SelectContent>
                           {LANGUAGES.map((lang) => (
                             <SelectItem key={lang.code} value={lang.code} className="text-xs">
-                              {lang.name}
+                              {uiLanguage === "it" ? lang.nameIt : lang.nameEn}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -2357,7 +2403,7 @@ export default function EstractoPage() {
                     {/* Toggle Settings */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs">Table Detection</Label>
+                        <Label className="text-xs">{t("Rilevamento tabelle", "Table Detection")}</Label>
                         <Switch
                           checked={settings.tableDetection}
                           onCheckedChange={(v) => setSettings((s) => ({ ...s, tableDetection: v }))}
@@ -2365,7 +2411,7 @@ export default function EstractoPage() {
                         />
                       </div>
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs">Handwriting Recognition</Label>
+                        <Label className="text-xs">{t("Riconoscimento scrittura a mano", "Handwriting Recognition")}</Label>
                         <Switch
                           checked={settings.handwritingRecognition}
                           onCheckedChange={(v) => setSettings((s) => ({ ...s, handwritingRecognition: v }))}
@@ -2373,7 +2419,7 @@ export default function EstractoPage() {
                         />
                       </div>
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs">Preserve Formatting</Label>
+                        <Label className="text-xs">{t("Mantieni formattazione", "Preserve Formatting")}</Label>
                         <Switch
                           checked={settings.preserveFormatting}
                           onCheckedChange={(v) => setSettings((s) => ({ ...s, preserveFormatting: v }))}
@@ -2385,7 +2431,7 @@ export default function EstractoPage() {
                     {/* Quality Slider */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs">Output Quality</Label>
+                        <Label className="text-xs">{t("Qualità output", "Output Quality")}</Label>
                         <span className="text-xs text-muted-foreground">{settings.quality}%</span>
                       </div>
                       <Slider
@@ -2400,9 +2446,9 @@ export default function EstractoPage() {
 
                     {/* Custom Prompt */}
                     <div className="space-y-2">
-                      <Label className="text-xs">Custom Instructions</Label>
+                      <Label className="text-xs">{t("Istruzioni personalizzate", "Custom Instructions")}</Label>
                       <Textarea
-                        placeholder="Add custom OCR instructions..."
+                        placeholder={t("Aggiungi istruzioni OCR personalizzate...", "Add custom OCR instructions...")}
                         value={settings.customPrompt}
                         onChange={(e) => setSettings((s) => ({ ...s, customPrompt: e.target.value }))}
                         className="h-16 text-xs resize-none"
@@ -2414,9 +2460,9 @@ export default function EstractoPage() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="space-y-1">
-                          <Label className="text-xs">Post-processing</Label>
+                          <Label className="text-xs">{t("Post-processing", "Post-processing")}</Label>
                           <p className="text-[11px] text-muted-foreground">
-                            Apply an extra model step after OCR extraction.
+                            {t("Applica un passaggio modello aggiuntivo dopo l'estrazione OCR.", "Apply an extra model step after OCR extraction.")}
                           </p>
                         </div>
                         <Switch
@@ -2431,9 +2477,9 @@ export default function EstractoPage() {
                       {postProcessing.enabled ? (
                         <div className="space-y-3 rounded-md border bg-muted/20 p-3">
                           <div className="space-y-2">
-                            <Label className="text-xs">Instruction</Label>
+                            <Label className="text-xs">{t("Istruzione", "Instruction")}</Label>
                             <Textarea
-                              placeholder="Example: Extract invoice number, due date, and totals from each page, then return one normalized table."
+                              placeholder={t("Esempio: estrai numero fattura, scadenza e totali da ogni pagina e restituisci una tabella normalizzata.", "Example: Extract invoice number, due date, and totals from each page, then return one normalized table.")}
                               value={postProcessing.instruction}
                               onChange={(event) =>
                                 setPostProcessing((prev) => ({
@@ -2445,7 +2491,7 @@ export default function EstractoPage() {
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label className="text-xs">Post-processing model</Label>
+                            <Label className="text-xs">{t("Modello post-processing", "Post-processing model")}</Label>
                             <Select
                               value={postProcessModelValue}
                               onValueChange={(value) =>
@@ -2460,7 +2506,7 @@ export default function EstractoPage() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="__same__" className="text-xs">
-                                  Same as OCR model ({selectedModel})
+                                  {t(`Uguale al modello OCR (${selectedModel})`, `Same as OCR model (${selectedModel})`)}
                                 </SelectItem>
                                 {!selectedPostProcessModelExists && postProcessing.model ? (
                                   <SelectItem value={postProcessing.model} className="text-xs">
@@ -2476,7 +2522,7 @@ export default function EstractoPage() {
                             </Select>
                           </div>
                           <div className="space-y-2">
-                            <Label className="text-xs">Output format</Label>
+                            <Label className="text-xs">{t("Formato output", "Output format")}</Label>
                             <Select
                               value={postProcessing.outputFormat}
                               onValueChange={(value: PostProcessOutputFormat) =>
@@ -2491,7 +2537,7 @@ export default function EstractoPage() {
                                   Markdown
                                 </SelectItem>
                                 <SelectItem value="json" className="text-xs">
-                                  Structured JSON
+                                  {t("JSON strutturato", "Structured JSON")}
                                 </SelectItem>
                               </SelectContent>
                             </Select>
@@ -2522,17 +2568,17 @@ export default function EstractoPage() {
                         {selectedFile.name}
                       </span>
                       {selectedFile.status === "completed" && (
-                        <Badge variant="outline" className="text-xs">
-                          <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-500" />
-                          Completed
-                        </Badge>
-                      )}
-                      {selectedFile.status === "paused" && (
-                        <Badge variant="outline" className="text-xs">
-                          <PauseCircle className="h-3 w-3 mr-1 text-amber-500" />
-                          Paused
-                        </Badge>
-                      )}
+                            <Badge variant="outline" className="text-xs">
+                              <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-500" />
+                              {t("Completato", "Completed")}
+                            </Badge>
+                          )}
+                          {selectedFile.status === "paused" && (
+                            <Badge variant="outline" className="text-xs">
+                              <PauseCircle className="h-3 w-3 mr-1 text-amber-500" />
+                              {t("In pausa", "Paused")}
+                            </Badge>
+                          )}
                     </div>
                     <div className="flex items-center gap-1">
                       {/* View Mode Toggle */}
@@ -2600,7 +2646,7 @@ export default function EstractoPage() {
                           )}
                         >
                           <div className="px-3 py-2 border-b bg-muted/30">
-                            <span className="text-xs font-medium text-muted-foreground">Document Preview</span>
+                            <span className="text-xs font-medium text-muted-foreground">{t("Anteprima documento", "Document Preview")}</span>
                           </div>
                           <ScrollArea className="flex-1">
                             <div className="p-4 flex items-center justify-center min-h-full">
@@ -2615,8 +2661,8 @@ export default function EstractoPage() {
                               ) : (
                                 <div className="flex flex-col items-center text-muted-foreground">
                                   <ImageOff className="h-12 w-12 mb-2" />
-                                  <p className="text-sm">No preview available</p>
-                                  <p className="text-xs">Preview could not be generated</p>
+                                  <p className="text-sm">{t("Anteprima non disponibile", "No preview available")}</p>
+                                  <p className="text-xs">{t("Impossibile generare l'anteprima", "Preview could not be generated")}</p>
                                 </div>
                               )}
                             </div>
@@ -2641,7 +2687,7 @@ export default function EstractoPage() {
                                 </TabsTrigger>
                                 <TabsTrigger value="markdown-raw" className="text-xs gap-1.5 h-6 shrink-0 group">
                                   <FileText className="h-3 w-3 text-lime-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
-                                  Markdown raw
+                                  {t("Markdown grezzo", "Markdown raw")}
                                 </TabsTrigger>
                                 <TabsTrigger value="json" className="text-xs gap-1.5 h-6 shrink-0 group">
                                   <Code className="h-3 w-3 text-cyan-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
@@ -2683,14 +2729,14 @@ export default function EstractoPage() {
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-medium">
-                              {selectedFile.status === "paused" ? "OCR Paused" : "Processing OCR"}
+                              {selectedFile.status === "paused" ? t("OCR in pausa", "OCR Paused") : t("OCR in elaborazione", "Processing OCR")}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {selectedFile.stageMessage || "Running extraction pipeline"}
+                              {selectedFile.stageMessage || t("Esecuzione pipeline di estrazione", "Running extraction pipeline")}
                             </p>
                           </div>
                           <Badge variant={selectedFile.status === "paused" ? "outline" : "secondary"}>
-                            {selectedFile.status === "paused" ? "paused" : "running"}
+                            {selectedFile.status === "paused" ? t("in pausa", "paused") : t("in esecuzione", "running")}
                           </Badge>
                         </div>
                         <Progress value={selectedFile.progress} className="w-full" />
@@ -2698,12 +2744,12 @@ export default function EstractoPage() {
                           <div className="flex items-center gap-1.5">
                             <ListChecks className="h-3.5 w-3.5" />
                             <span>
-                              {selectedFile.processedPages || 0}/{selectedFile.pageCount || 0} pages
+                              {selectedFile.processedPages || 0}/{selectedFile.pageCount || 0} {t("pagine", "pages")}
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <Clock3 className="h-3.5 w-3.5" />
-                            <span>ETA {formatEta(selectedFile.etaSeconds)}</span>
+                            <span>{t("ETA", "ETA")} {formatEta(selectedFile.etaSeconds)}</span>
                           </div>
                           <div className="truncate">
                             {models.find((m) => m.id === selectedModel)?.name || selectedModel}
@@ -2731,17 +2777,17 @@ export default function EstractoPage() {
                                 >
                                   <img
                                     src={preview}
-                                    alt={`${selectedFile.name} page ${pageNumber}`}
+                                    alt={`${selectedFile.name} ${t("pagina", "page")} ${pageNumber}`}
                                     className="w-full h-24 object-cover rounded"
                                   />
                                   <div className="flex items-center justify-between">
-                                    <p className="text-[11px] font-medium">Page {pageNumber}</p>
+                                    <p className="text-[11px] font-medium">{t("Pagina", "Page")} {pageNumber}</p>
                                     <Badge variant={processed ? "secondary" : "outline"} className="text-[10px]">
-                                      {processed ? "done" : "queued"}
+                                      {processed ? t("fatto", "done") : t("in coda", "queued")}
                                     </Badge>
                                   </div>
                                   <p className="text-[10px] text-muted-foreground line-clamp-3">
-                                    {checkpoint?.previewText || "Waiting for extraction..."}
+                                    {checkpoint?.previewText || t("In attesa di estrazione...", "Waiting for extraction...")}
                                   </p>
                                 </div>
                               );
@@ -2751,7 +2797,7 @@ export default function EstractoPage() {
                         <ScrollArea className="h-full">
                           <div className="p-4 space-y-2">
                             <p className="text-xs font-medium text-muted-foreground">
-                              Live model activity
+                              {t("Attività modello in tempo reale", "Live model activity")}
                             </p>
                             {(selectedFile.events || []).length > 0 ? (
                               [...(selectedFile.events || [])]
@@ -2775,7 +2821,7 @@ export default function EstractoPage() {
                                 ))
                             ) : (
                               <p className="text-xs text-muted-foreground">
-                                Waiting for progress events...
+                                {t("In attesa di eventi di avanzamento...", "Waiting for progress events...")}
                               </p>
                             )}
                           </div>
@@ -2792,9 +2838,9 @@ export default function EstractoPage() {
                         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-destructive/10 flex items-center justify-center">
                           <AlertCircle className="h-8 w-8 text-destructive" />
                         </div>
-                        <p className="text-sm font-medium mb-1">Processing Failed</p>
+                        <p className="text-sm font-medium mb-1">{t("Elaborazione non riuscita", "Processing Failed")}</p>
                         <p className="text-xs text-muted-foreground max-w-xs">
-                          {selectedFile.error || "An error occurred during OCR processing"}
+                          {selectedFile.error || t("Si è verificato un errore durante l'elaborazione OCR", "An error occurred during OCR processing")}
                         </p>
                       </motion.div>
                     </div>
@@ -2810,9 +2856,9 @@ export default function EstractoPage() {
                             alt={selectedFile.name}
                             className="max-w-full max-h-[400px] object-contain rounded-md shadow-sm mb-4"
                           />
-                          <p className="text-sm font-medium mb-1">Ready for OCR</p>
+                          <p className="text-sm font-medium mb-1">{t("Pronto per OCR", "Ready for OCR")}</p>
                           <p className="text-xs text-muted-foreground">
-                            Click "Run OCR" to extract text from this document
+                            {t('Clicca "Avvia OCR" per estrarre il testo da questo documento', 'Click "Run OCR" to extract text from this document')}
                           </p>
                         </div>
                       ) : (
@@ -2824,9 +2870,9 @@ export default function EstractoPage() {
                           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
                             <ScanLine className="h-8 w-8 text-muted-foreground" />
                           </div>
-                          <p className="text-sm font-medium mb-1">Ready for OCR</p>
+                          <p className="text-sm font-medium mb-1">{t("Pronto per OCR", "Ready for OCR")}</p>
                           <p className="text-xs text-muted-foreground">
-                            Click "Run OCR" to extract text
+                            {t('Clicca "Avvia OCR" per estrarre il testo', 'Click "Run OCR" to extract text')}
                           </p>
                         </motion.div>
                       )}
@@ -2845,9 +2891,9 @@ export default function EstractoPage() {
                     <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
                       <Sparkles className="h-10 w-10 text-primary" />
                     </div>
-                    <h3 className="text-lg font-semibold mb-2">Select a document</h3>
+                    <h3 className="text-lg font-semibold mb-2">{t("Seleziona un documento", "Select a document")}</h3>
                     <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                      Upload files and select one to view the OCR extraction results
+                      {t("Carica file e selezionane uno per vedere il risultato OCR", "Upload files and select one to view the OCR extraction results")}
                     </p>
                   </motion.div>
                 </CardContent>
@@ -2864,16 +2910,10 @@ export default function EstractoPage() {
         transition={{ duration: 0.4, delay: 0.3 }}
         className="border-t mt-auto"
       >
-        <div className="container mx-auto px-4 h-14 flex items-center justify-between">
+        <div className="container mx-auto px-4 h-14 flex items-center">
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Estracto. AI-powered document OCR.
+            © {new Date().getFullYear()} Estracto.
           </p>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Powered by VLM
-            </span>
-          </div>
         </div>
       </motion.footer>
     </div>
