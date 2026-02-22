@@ -166,6 +166,7 @@ interface ObsidianPageContext {
 }
 
 interface ObsidianPagePlan extends ObsidianPageContext {
+  title: string;
   primaryTopic: string;
   relatedTopics: string[];
 }
@@ -206,6 +207,7 @@ interface ObsidianExportMetadata {
   }>;
   pages?: Array<{
     pageNumber: number;
+    title?: string;
     summary: string;
     primaryTopic: string;
     relatedTopics: string[];
@@ -679,24 +681,17 @@ function buildObsidianPostProcessingInstruction(customInstruction: string): stri
     '  "markdown": "merged markdown for the entire document",',
     '  "vault": {',
     '    "name": "short vault name",',
-    '    "indexMarkdown": "top-level index note in markdown",',
     '    "topics": [',
     "      {",
     '        "name": "topic name",',
     '        "summary": "topic summary",',
-    '        "pageNumbers": [1, 2],',
-    '        "notes": [',
-    "          {",
-    '            "title": "note title",',
-    '            "markdown": "note markdown content",',
-    '            "sourcePages": [1, 2]',
-    "          }",
-    "        ]",
+    '        "pageNumbers": [1, 2]',
     "      }",
     "    ],",
     '    "pages": [',
     "      {",
     '        "pageNumber": 1,',
+    '        "title": "generated page title",',
     '        "summary": "2-3 sentence page summary",',
     '        "primaryTopic": "topic name from vault.topics",',
     '        "relatedTopics": ["another topic"],',
@@ -711,9 +706,9 @@ function buildObsidianPostProcessingInstruction(customInstruction: string): stri
     '- "markdown" must always be present.',
     '- Every page must appear exactly once in "vault.pages".',
     '- Every page must have exactly one "primaryTopic".',
+    '- Every page must have a concise title suitable as a note filename.',
     '- "primaryTopic" and "relatedTopics" must reference existing topic names.',
     '- Keep summaries short (2-3 sentences).',
-    '- Keep "sourcePages" to real page numbers only.',
     "- Do not wrap JSON in markdown code fences.",
   ].join("\n");
 }
@@ -853,6 +848,50 @@ function buildPageSummary(markdown: string): string {
     return clipText(plain, MAX_OBSIDIAN_SUMMARY_LENGTH);
   }
   return clipText(picked.join(" "), MAX_OBSIDIAN_SUMMARY_LENGTH);
+}
+
+function derivePageTitle(input: {
+  pageNumber: number;
+  summary: string;
+  markdown: string;
+  topicName: string;
+  preferredTitle?: string;
+}): string {
+  const normalizeTitleCandidate = (value: string): string => {
+    const cleaned = sanitizeFileSegment(
+      value
+        .replace(/^#+\s*/u, "")
+        .replace(/\[[^\]]+\]\([^)]+\)/g, " ")
+        .replace(/[`*_>#|]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim(),
+      ""
+    );
+    return clipText(cleaned, 90);
+  };
+
+  const preferred = normalizeTitleCandidate(input.preferredTitle || "");
+  if (preferred && !/^page\s+\d+$/iu.test(preferred)) {
+    return preferred;
+  }
+
+  const headingMatch = input.markdown.match(/^\s{0,3}#{1,6}\s+([^\n]+)/m);
+  const fromHeading = normalizeTitleCandidate(headingMatch?.[1] || "");
+  if (fromHeading) {
+    return fromHeading;
+  }
+
+  const sentenceSource = input.summary || input.markdown;
+  const firstSentenceMatch = sentenceSource.match(/[^.!?\n]+[.!?]?/u);
+  const fromSentence = normalizeTitleCandidate(firstSentenceMatch?.[0] || "");
+  if (
+    fromSentence &&
+    !/^no meaningful text extracted/iu.test(fromSentence)
+  ) {
+    return fromSentence;
+  }
+
+  return sanitizeFileSegment(`${input.topicName} Page ${input.pageNumber}`, `Page ${input.pageNumber}`);
 }
 
 function extractStructuredPageEntryMarkdown(
@@ -1035,21 +1074,18 @@ function scoreTopicForPage(page: ObsidianPageContext, topic: ObsidianTopicPlan):
 
 function buildGeneratedObsidianIndex(topics: ObsidianTopicPlan[], pages: ObsidianPagePlan[]): string {
   return [
-    "# Vault Index",
+    "# Topics",
     "",
     ...topics.flatMap((topic) => {
       const assignedPages = pages.filter((page) => page.primaryTopic === topic.name);
       const section: string[] = [
         `## ${topic.name}`,
         topic.summary || "_No summary available._",
-        `- Topic note: [[01 Topics/${topic.name}/_index|${topic.name}]]`,
       ];
       if (assignedPages.length > 0) {
-        section.push("- Pages:");
+        section.push("- Pages in topic:");
         for (const page of assignedPages) {
-          section.push(
-            `  - [[01 Topics/${topic.name}/Pages/Page-${String(page.pageNumber).padStart(3, "0")}|Page ${page.pageNumber}]]`
-          );
+          section.push(`  - ${page.title} (page ${page.pageNumber})`);
         }
       }
       section.push("");
@@ -1172,6 +1208,7 @@ function normalizeObsidianPlan(
   };
 
   const pageOverrideMap = new Map<number, {
+    title: string;
     summary: string;
     primaryTopic: string;
     relatedTopics: string[];
@@ -1194,6 +1231,7 @@ function normalizeObsidianPlan(
       continue;
     }
     pageOverrideMap.set(pageNumber, {
+      title: clipText(getString(typedPage.title), 90),
       summary: clipText(getString(typedPage.summary), MAX_OBSIDIAN_SUMMARY_LENGTH),
       primaryTopic: getString(typedPage.primaryTopic),
       relatedTopics: getStringArray(typedPage.relatedTopics, 8),
@@ -1262,9 +1300,17 @@ function normalizeObsidianPlan(
           .filter((name) => name && name !== primaryTopic)
       )
     ).slice(0, 6);
+    const title = derivePageTitle({
+      pageNumber: page.pageNumber,
+      summary,
+      markdown: markdownValue,
+      topicName: primaryTopic,
+      preferredTitle: override?.title,
+    });
 
     return {
       pageNumber: page.pageNumber,
+      title,
       markdown: markdownValue.trim(),
       summary,
       keywords,
@@ -1313,8 +1359,7 @@ function resolveObsidianRootPath(requestedRoot: string): {
 } {
   const safeBaseDir = path.resolve(OBSIDIAN_EXPORT_BASE_DIR || "/host-vaults");
   const hostRootRaw = OBSIDIAN_EXPORT_HOST_ROOT.trim();
-  const hostRootAbsolute =
-    hostRootRaw && path.isAbsolute(hostRootRaw) ? path.resolve(hostRootRaw) : "";
+  const hostRootAbsolute = hostRootRaw ? path.resolve(hostRootRaw) : "";
   const trimmedRoot = requestedRoot.trim();
 
   let containerRoot = safeBaseDir;
@@ -1352,11 +1397,7 @@ function resolveObsidianRootPath(requestedRoot: string): {
   const relativeFromBase = path.relative(safeBaseDir, containerRoot);
   const hostDisplayRoot = hostRootAbsolute
     ? path.join(hostRootAbsolute, relativeFromBase)
-    : hostRootRaw
-      ? [hostRootRaw.replace(/[\\/]+$/u, ""), relativeFromBase.replace(/\\/g, "/")]
-          .filter(Boolean)
-          .join("/")
-      : undefined;
+    : undefined;
 
   return {
     requestedRoot: trimmedRoot || safeBaseDir,
@@ -1369,7 +1410,6 @@ async function writeObsidianVault(input: {
   plan: ObsidianVaultPlan;
   fileName: string;
   requestedRoot: string;
-  includePageNotes: boolean;
 }): Promise<{
   vaultPath: string;
   hostVaultPath?: string;
@@ -1385,39 +1425,12 @@ async function writeObsidianVault(input: {
       ? `[${values.map((value) => `"${value.replace(/"/g, '\\"')}"`).join(", ")}]`
       : "[]";
 
-  const buildTopicIndexMarkdown = (topic: ObsidianTopicPlan, pages: ObsidianPagePlan[]): string => {
-    const topicPages = pages.filter((page) => page.primaryTopic === topic.name);
-    return [
-      `# ${topic.name}`,
-      "",
-      topic.summary || "_No summary available._",
-      "",
-      "## Pages",
-      ...(topicPages.length
-        ? topicPages.map((page) => {
-            const summary = clipText(page.summary, MAX_OBSIDIAN_SUMMARY_LENGTH);
-            return `- [[Pages/Page-${String(page.pageNumber).padStart(3, "0")}|Page ${page.pageNumber}]] - ${summary}`;
-          })
-        : ["- No primary pages assigned."]),
-      "",
-      "## Related Notes",
-      ...(topic.notes.length
-        ? topic.notes.map((note) => `- ${note.title}`)
-        : ["- No additional topic notes."]),
-      "",
-    ].join("\n");
-  };
-
   const root = resolveObsidianRootPath(input.requestedRoot);
   const safeBaseDir = path.resolve(OBSIDIAN_EXPORT_BASE_DIR || "/host-vaults");
   const vaultPath = path.join(root.containerRoot, input.plan.vaultName);
   const hostVaultPath = root.hostRoot
     ? path.join(root.hostRoot, input.plan.vaultName)
     : undefined;
-
-  const topicRoot = path.join(vaultPath, "01 Topics");
-  const rawRoot = path.join(vaultPath, "03 Raw");
-  const indexRoot = path.join(vaultPath, "00 Index");
   const createdDirs: string[] = [];
   const createdFiles: string[] = [];
 
@@ -1444,20 +1457,6 @@ async function writeObsidianVault(input: {
   })();
 
   await ensureDir(vaultPath);
-  await ensureDir(path.join(vaultPath, ".obsidian"));
-  await ensureDir(topicRoot);
-  await ensureDir(rawRoot);
-  await ensureDir(indexRoot);
-
-  await writeVaultFile(
-    path.join(vaultPath, ".obsidian", "app.json"),
-    JSON.stringify({ }, null, 2),
-  );
-  await writeVaultFile(path.join(indexRoot, "Home.md"), `${input.plan.indexMarkdown.trim()}\n`);
-  await writeVaultFile(
-    path.join(rawRoot, "Full OCR.md"),
-    `${input.plan.markdown.trim()}\n`,
-  );
 
   const usedNamesByFolder = new Map<string, Set<string>>();
   const pagesByTopic = new Map<string, ObsidianPagePlan[]>();
@@ -1471,81 +1470,48 @@ async function writeObsidianVault(input: {
   }
 
   let noteCount = 0;
-  let fileCount = 3;
+  let fileCount = 0;
 
   for (const topic of input.plan.topics) {
     const topicDirName = sanitizeFileSegment(topic.name, "topic");
-    const topicDirPath = path.join(topicRoot, topicDirName);
-    const topicNotesDirPath = path.join(topicDirPath, "Notes");
-    const topicPagesDirPath = path.join(topicDirPath, "Pages");
+    const topicDirPath = path.join(vaultPath, topicDirName);
     const topicPages = pagesByTopic.get(topic.name) || [];
+    if (topicPages.length === 0) {
+      continue;
+    }
 
     await ensureDir(topicDirPath);
-    fileCount += 1;
-
-    await writeVaultFile(
-      path.join(topicDirPath, "_index.md"),
-      `${buildTopicIndexMarkdown(topic, input.plan.pages).trim()}\n`
-    );
-    noteCount += 1;
-    fileCount += 1;
-
-    if (topic.notes.length > 0) {
-      await ensureDir(topicNotesDirPath);
-      fileCount += 1;
-    }
     const used = usedNamesByFolder.get(topicDirPath) || new Set<string>();
     usedNamesByFolder.set(topicDirPath, used);
 
-    for (const note of topic.notes) {
-      const noteFileName = makeUniqueMarkdownFileName(note.title, used);
-      const notePath = path.join(topicNotesDirPath, noteFileName);
-      const sourcePagesLine = note.sourcePages.length
-        ? `source_pages: [${note.sourcePages.join(", ")}]`
-        : "source_pages: []";
-      const noteContent = [
+    for (const page of topicPages) {
+      const fallbackTitle = derivePageTitle({
+        pageNumber: page.pageNumber,
+        summary: page.summary,
+        markdown: page.markdown,
+        topicName: topic.name,
+        preferredTitle: page.title,
+      });
+      const pageFileName = makeUniqueMarkdownFileName(fallbackTitle, used);
+      const pagePath = path.join(topicDirPath, pageFileName);
+      const pageContent = [
         "---",
-        `title: "${note.title.replace(/"/g, '\\"')}"`,
+        `title: "${fallbackTitle.replace(/"/g, '\\"')}"`,
         `source_file: "${input.fileName.replace(/"/g, '\\"')}"`,
-        sourcePagesLine,
+        `page: ${page.pageNumber}`,
+        `topic: "${topic.name.replace(/"/g, '\\"')}"`,
+        `related_topics: ${serializeYamlStringList(page.relatedTopics)}`,
+        `summary: "${clipText(page.summary, MAX_OBSIDIAN_SUMMARY_LENGTH).replace(/"/g, '\\"')}"`,
+        `keywords: ${serializeYamlStringList(page.keywords)}`,
+        `entities: ${serializeYamlStringList(page.entities)}`,
         "---",
         "",
-        note.markdown.trim(),
+        page.markdown.trim(),
         "",
-      ]
-        .filter((line) => line.length > 0)
-        .join("\n");
-      await writeVaultFile(notePath, noteContent);
+      ].join("\n");
+      await writeVaultFile(pagePath, pageContent);
       noteCount += 1;
       fileCount += 1;
-    }
-
-    if (input.includePageNotes && topicPages.length > 0) {
-      await ensureDir(topicPagesDirPath);
-      fileCount += 1;
-      for (const page of topicPages) {
-        const pagePath = path.join(
-          topicPagesDirPath,
-          `Page-${String(page.pageNumber).padStart(3, "0")}.md`
-        );
-        const pageContent = [
-          "---",
-          `source_file: "${input.fileName.replace(/"/g, '\\"')}"`,
-          `page: ${page.pageNumber}`,
-          `summary: "${clipText(page.summary, MAX_OBSIDIAN_SUMMARY_LENGTH).replace(/"/g, '\\"')}"`,
-          `primary_topic: "${page.primaryTopic.replace(/"/g, '\\"')}"`,
-          `related_topics: ${serializeYamlStringList(page.relatedTopics)}`,
-          `keywords: ${serializeYamlStringList(page.keywords)}`,
-          `entities: ${serializeYamlStringList(page.entities)}`,
-          "---",
-          "",
-          page.markdown.trim(),
-          "",
-        ].join("\n");
-        await writeVaultFile(pagePath, pageContent);
-        noteCount += 1;
-        fileCount += 1;
-      }
     }
   }
 
@@ -1553,6 +1519,13 @@ async function writeObsidianVault(input: {
     .filter((page) => !page.primaryTopic || !pagesByTopic.has(page.primaryTopic))
     .map((page) => page.pageNumber)
     .sort((a, b) => a - b);
+  const exportedTopics = input.plan.topics
+    .filter((topic) => (pagesByTopic.get(topic.name) || []).length > 0)
+    .map((topic) => ({
+      name: topic.name,
+      summary: topic.summary,
+      pageNumbers: topic.pageNumbers,
+    }));
 
   let chownApplied = false;
   if (ownership) {
@@ -1594,16 +1567,12 @@ async function writeObsidianVault(input: {
   return {
     vaultPath,
     hostVaultPath,
-    topicCount: input.plan.topics.length,
+    topicCount: exportedTopics.length,
     noteCount,
     fileCount,
     pageAssignmentCount: input.plan.pages.length - unassignedPages.length,
     unassignedPages,
-    topics: input.plan.topics.map((topic) => ({
-      name: topic.name,
-      summary: topic.summary,
-      pageNumbers: topic.pageNumbers,
-    })),
+    topics: exportedTopics,
   };
 }
 
@@ -3259,7 +3228,6 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
         plan,
         fileName: input.fileName,
         requestedRoot: input.obsidianPayload.vaultRoot,
-        includePageNotes: input.obsidianPayload.includePageNotes,
       });
 
       obsidianMeta = {
@@ -3280,6 +3248,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
         topics: exportOutput.topics,
         pages: plan.pages.map((page) => ({
           pageNumber: page.pageNumber,
+          title: page.title,
           summary: page.summary,
           primaryTopic: page.primaryTopic,
           relatedTopics: page.relatedTopics,

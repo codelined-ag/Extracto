@@ -411,18 +411,107 @@ function getLastPathSegment(value: string): string {
   return segments[segments.length - 1] || "";
 }
 
-function buildObsidianOpenUriCandidates(vaultPath: string): string[] {
-  const normalizedPath = vaultPath.trim();
-  if (!normalizedPath) {
-    return [];
+function normalizePathCandidate(value: string): string {
+  return value.replace(/\\/g, "/").replace(/\/+$/g, "").trim();
+}
+
+function isAbsoluteFsPath(value: string): boolean {
+  const normalized = normalizePathCandidate(value);
+  return normalized.startsWith("/") || /^[a-zA-Z]:\//.test(normalized) || normalized.startsWith("//");
+}
+
+function joinFsPath(base: string, suffix: string): string {
+  const normalizedBase = normalizePathCandidate(base);
+  const normalizedSuffix = normalizePathCandidate(suffix).replace(/^\/+/g, "");
+  if (!normalizedBase) {
+    return normalizedSuffix;
+  }
+  if (!normalizedSuffix) {
+    return normalizedBase;
+  }
+  return `${normalizedBase}/${normalizedSuffix}`;
+}
+
+function buildObsidianOpenUriCandidates(input: {
+  vaultPath?: string;
+  vaultName?: string;
+  hostRoot?: string;
+  requestedRoot?: string;
+  fallbackRoot?: string;
+}): string[] {
+  const hostLikePathCandidates: string[] = [];
+  const containerLikePathCandidates: string[] = [];
+  const isContainerLikePath = (candidate: string): boolean =>
+    candidate.startsWith("/host-vaults") || candidate.startsWith("/app/");
+
+  const addAbsolutePath = (candidate: string) => {
+    const normalized = normalizePathCandidate(candidate);
+    if (!normalized || !isAbsoluteFsPath(normalized)) {
+      return;
+    }
+    if (isContainerLikePath(normalized)) {
+      containerLikePathCandidates.push(normalized);
+      return;
+    }
+    hostLikePathCandidates.push(normalized);
+  };
+  const addJoinedPath = (rootCandidate: string, pathCandidate: string) => {
+    const rootNormalized = normalizePathCandidate(rootCandidate);
+    if (!rootNormalized || !isAbsoluteFsPath(rootNormalized)) {
+      return;
+    }
+    const pathNormalized = normalizePathCandidate(pathCandidate);
+    if (!pathNormalized) {
+      return;
+    }
+    addAbsolutePath(joinFsPath(rootNormalized, pathNormalized));
+  };
+
+  const normalizedVaultPath = normalizePathCandidate(input.vaultPath || "");
+  const normalizedVaultName = normalizePathCandidate(input.vaultName || "");
+  const normalizedHostRoot = normalizePathCandidate(input.hostRoot || "");
+  const normalizedRequestedRoot = normalizePathCandidate(input.requestedRoot || "");
+  const normalizedFallbackRoot = normalizePathCandidate(input.fallbackRoot || "");
+
+  if (normalizedVaultPath) {
+    addAbsolutePath(normalizedVaultPath);
   }
 
-  const candidates = [`obsidian://open?path=${encodeURIComponent(normalizedPath)}`];
-  const vaultName = getLastPathSegment(normalizedPath);
-  if (vaultName) {
-    candidates.push(`obsidian://open?vault=${encodeURIComponent(vaultName)}`);
+  for (const rootCandidate of [normalizedHostRoot, normalizedRequestedRoot, normalizedFallbackRoot]) {
+    if (!rootCandidate) {
+      continue;
+    }
+    if (normalizedVaultPath && !isAbsoluteFsPath(normalizedVaultPath)) {
+      addJoinedPath(rootCandidate, normalizedVaultPath);
+    }
+    if (normalizedVaultName) {
+      addJoinedPath(rootCandidate, normalizedVaultName);
+    }
   }
-  return Array.from(new Set(candidates));
+
+  const uriCandidates = hostLikePathCandidates.map(
+    (candidate) => `obsidian://open?path=${encodeURIComponent(candidate)}`
+  );
+  if (normalizedVaultName) {
+    uriCandidates.push(`obsidian://open?vault=${encodeURIComponent(normalizedVaultName)}`);
+  } else {
+    const fallbackName = getLastPathSegment(normalizedVaultPath);
+    if (fallbackName) {
+      uriCandidates.push(`obsidian://open?vault=${encodeURIComponent(fallbackName)}`);
+    }
+  }
+
+  uriCandidates.push(
+    ...containerLikePathCandidates.map(
+      (candidate) => `obsidian://open?path=${encodeURIComponent(candidate)}`
+    )
+  );
+
+  if (normalizedVaultPath && !isAbsoluteFsPath(normalizedVaultPath)) {
+    uriCandidates.push(`obsidian://open?path=${encodeURIComponent(normalizedVaultPath)}`);
+  }
+
+  return Array.from(new Set(uriCandidates));
 }
 
 // Utility functions
@@ -839,6 +928,12 @@ export default function EstractoPage() {
     : {};
   const selectedFileObsidianPath =
     typeof selectedFileObsidian.vaultPath === "string" ? selectedFileObsidian.vaultPath : "";
+  const selectedFileObsidianVaultName =
+    typeof selectedFileObsidian.vaultName === "string" ? selectedFileObsidian.vaultName : "";
+  const selectedFileObsidianHostRoot =
+    typeof selectedFileObsidian.hostRoot === "string" ? selectedFileObsidian.hostRoot : "";
+  const selectedFileObsidianRequestedRoot =
+    typeof selectedFileObsidian.requestedRoot === "string" ? selectedFileObsidian.requestedRoot : "";
   const selectedHistoryMarkdown = selectedHistoryJob
     ? getMarkdownFromJsonPayload(selectedHistoryJob.result, selectedHistoryJob.extractedText || "")
     : "";
@@ -851,6 +946,14 @@ export default function EstractoPage() {
   const selectedHistoryObsidianPath =
     typeof selectedHistoryObsidian.vaultPath === "string"
       ? selectedHistoryObsidian.vaultPath
+      : "";
+  const selectedHistoryObsidianVaultName =
+    typeof selectedHistoryObsidian.vaultName === "string" ? selectedHistoryObsidian.vaultName : "";
+  const selectedHistoryObsidianHostRoot =
+    typeof selectedHistoryObsidian.hostRoot === "string" ? selectedHistoryObsidian.hostRoot : "";
+  const selectedHistoryObsidianRequestedRoot =
+    typeof selectedHistoryObsidian.requestedRoot === "string"
+      ? selectedHistoryObsidian.requestedRoot
       : "";
   const completedCount = files.filter((f) => f.status === "completed").length;
   const canExportZip = Boolean(completedCount > 0 || selectedFile?.status === "completed");
@@ -876,12 +979,26 @@ export default function EstractoPage() {
   );
 
   const openVaultInObsidian = React.useCallback(
-    (vaultPath: string) => {
-      const candidates = buildObsidianOpenUriCandidates(vaultPath);
+    (metadata: {
+      vaultPath?: string;
+      vaultName?: string;
+      hostRoot?: string;
+      requestedRoot?: string;
+    }) => {
+      const candidates = buildObsidianOpenUriCandidates({
+        vaultPath: metadata.vaultPath,
+        vaultName: metadata.vaultName,
+        hostRoot: metadata.hostRoot,
+        requestedRoot: metadata.requestedRoot,
+        fallbackRoot: apiSettings.obsidianBaseDir,
+      });
       if (candidates.length === 0) {
         toast({
           title: t("Vault non disponibile", "Vault not available"),
-          description: t("Percorso vault Obsidian non valido.", "Obsidian vault path is invalid."),
+          description: t(
+            "Percorso vault Obsidian non valido o non assoluto.",
+            "Obsidian vault path is invalid or not absolute."
+          ),
           variant: "destructive",
         });
         return;
@@ -890,21 +1007,41 @@ export default function EstractoPage() {
       window.location.href = candidates[0];
       toast({
         title: t("Apertura in Obsidian...", "Opening in Obsidian..."),
-        description: vaultPath,
+        description: metadata.vaultPath || metadata.vaultName || "",
       });
     },
-    [t, toast]
+    [apiSettings.obsidianBaseDir, t, toast]
   );
 
   const openSelectedVaultInObsidian = React.useCallback(() => {
-    if (!selectedFileObsidianPath) return;
-    openVaultInObsidian(selectedFileObsidianPath);
-  }, [openVaultInObsidian, selectedFileObsidianPath]);
+    openVaultInObsidian({
+      vaultPath: selectedFileObsidianPath,
+      vaultName: selectedFileObsidianVaultName,
+      hostRoot: selectedFileObsidianHostRoot,
+      requestedRoot: selectedFileObsidianRequestedRoot,
+    });
+  }, [
+    openVaultInObsidian,
+    selectedFileObsidianHostRoot,
+    selectedFileObsidianPath,
+    selectedFileObsidianRequestedRoot,
+    selectedFileObsidianVaultName,
+  ]);
 
   const openSelectedHistoryVaultInObsidian = React.useCallback(() => {
-    if (!selectedHistoryObsidianPath) return;
-    openVaultInObsidian(selectedHistoryObsidianPath);
-  }, [openVaultInObsidian, selectedHistoryObsidianPath]);
+    openVaultInObsidian({
+      vaultPath: selectedHistoryObsidianPath,
+      vaultName: selectedHistoryObsidianVaultName,
+      hostRoot: selectedHistoryObsidianHostRoot,
+      requestedRoot: selectedHistoryObsidianRequestedRoot,
+    });
+  }, [
+    openVaultInObsidian,
+    selectedHistoryObsidianHostRoot,
+    selectedHistoryObsidianPath,
+    selectedHistoryObsidianRequestedRoot,
+    selectedHistoryObsidianVaultName,
+  ]);
 
   const persistProviderSelection = React.useCallback(
     (storageKey: string, provider: ProviderKind, value: string) => {
@@ -2395,7 +2532,7 @@ export default function EstractoPage() {
             <Button
               variant="outline"
               onClick={openSelectedHistoryVaultInObsidian}
-              disabled={!selectedHistoryObsidianPath}
+              disabled={!selectedHistoryObsidianPath && !selectedHistoryObsidianVaultName}
               className="group"
             >
               <FolderOpen className="h-4 w-4 mr-1.5 text-violet-400 transition-transform duration-200 group-hover:scale-110" />
@@ -3109,7 +3246,8 @@ export default function EstractoPage() {
                           >
                             <Download className="h-3.5 w-3.5 text-emerald-400 transition-transform duration-200 group-hover:-translate-y-0.5" />
                           </Button>
-                          {selectedFile.status === "completed" && selectedFileObsidianPath ? (
+                          {selectedFile.status === "completed" &&
+                          (selectedFileObsidianPath || selectedFileObsidianVaultName) ? (
                             <Button
                               variant="ghost"
                               size="sm"
