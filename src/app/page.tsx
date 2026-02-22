@@ -2362,8 +2362,8 @@ export default function EstractoPage() {
       </Dialog>
 
       {/* Main Content */}
-      <main className="flex-1 min-h-0 overflow-hidden container mx-auto px-4 py-6">
-        <div className="grid lg:grid-cols-[380px_1fr] gap-6 min-h-0 lg:h-full">
+      <main className="flex-1 min-h-0 overflow-y-auto scrollbar-hide lg:overflow-hidden container mx-auto px-4 py-6">
+        <div className="grid lg:grid-cols-[420px_1fr] gap-6 min-h-0 lg:h-full">
           {/* Left Panel - File Upload & List */}
           <motion.div
             initial={{ x: -20, opacity: 0 }}
@@ -2419,8 +2419,8 @@ export default function EstractoPage() {
             />
 
             {/* File List */}
-            <Card className="min-h-0 lg:flex-1">
-              <CardContent className="p-0 flex flex-col h-full">
+            <Card className="min-h-0 overflow-hidden lg:flex-1">
+              <CardContent className="p-0 flex flex-col min-h-0">
                 {/* File List Header */}
                 <div className="flex items-center justify-between p-3 border-b">
                   <div className="flex items-center gap-2">
