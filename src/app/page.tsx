@@ -1496,28 +1496,34 @@ export default function EstractoPage() {
               </SelectContent>
             </Select>
 
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={openHistoryModal}
-              aria-label="Past OCR"
-              title="Past OCR"
-            >
-              <History className="h-4 w-4" />
-            </Button>
+            <motion.div whileHover={{ y: -1, scale: 1.05 }} whileTap={{ scale: 0.95 }} transition={{ duration: 0.16 }}>
+              <Button
+                variant="outline"
+                size="icon"
+                className="group"
+                onClick={openHistoryModal}
+                aria-label="Past OCR"
+                title="Past OCR"
+              >
+                <History className="h-4 w-4 text-sky-400 transition-transform duration-200 group-hover:-rotate-6 group-hover:scale-110" />
+              </Button>
+            </motion.div>
 
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => {
-                setApiSettingsDraft(apiSettings);
-                setApiSettingsOpen(true);
-              }}
-              aria-label="Settings"
-              title="Settings"
-            >
-              <Settings2 className="h-4 w-4" />
-            </Button>
+            <motion.div whileHover={{ y: -1, scale: 1.05 }} whileTap={{ scale: 0.95 }} transition={{ duration: 0.16 }}>
+              <Button
+                variant="outline"
+                size="icon"
+                className="group"
+                onClick={() => {
+                  setApiSettingsDraft(apiSettings);
+                  setApiSettingsOpen(true);
+                }}
+                aria-label="Settings"
+                title="Settings"
+              >
+                <Settings2 className="h-4 w-4 text-amber-400 transition-transform duration-200 group-hover:rotate-12 group-hover:scale-110" />
+              </Button>
+            </motion.div>
 
             {modelError ? <p className="text-xs text-destructive max-w-[180px] truncate">{modelError}</p> : null}
 
@@ -1527,8 +1533,8 @@ export default function EstractoPage() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
               >
-                <Button variant="outline" size="sm" onClick={exportAllAsZip}>
-                  <FileArchive className="h-4 w-4 mr-1.5" />
+                <Button variant="outline" size="sm" className="group" onClick={exportAllAsZip}>
+                  <FileArchive className="h-4 w-4 mr-1.5 text-violet-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-110" />
                   Export ZIP
                 </Button>
               </motion.div>
@@ -1627,14 +1633,14 @@ export default function EstractoPage() {
               <Label>Account</Label>
               <Button
                 variant="outline"
-                className="w-full justify-start"
+                className="w-full justify-start group"
                 onClick={signOut}
                 disabled={isSigningOut}
               >
                 {isSigningOut ? (
                   <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
                 ) : (
-                  <LogOut className="h-4 w-4 mr-1.5" />
+                  <LogOut className="h-4 w-4 mr-1.5 text-rose-400 transition-transform duration-200 group-hover:translate-x-0.5" />
                 )}
                 Sign out
               </Button>
@@ -1695,10 +1701,13 @@ export default function EstractoPage() {
                   <ScrollArea className="h-full">
                     <div className="p-2 space-y-1">
                       {historyJobs.map((job) => (
-                        <button
+                        <motion.button
                           key={job.id}
                           type="button"
                           onClick={() => setSelectedHistoryId(job.id)}
+                          whileHover={{ x: 2, scale: 1.01 }}
+                          whileTap={{ scale: 0.99 }}
+                          transition={{ duration: 0.15 }}
                           className={cn(
                             "w-full text-left p-2 rounded-md border transition-colors",
                             selectedHistoryId === job.id
@@ -1725,7 +1734,7 @@ export default function EstractoPage() {
                           <p className="text-[10px] text-muted-foreground">
                             {formatTimestamp(job.createdAt)}
                           </p>
-                        </button>
+                        </motion.button>
                       ))}
                     </div>
                   </ScrollArea>
@@ -1787,9 +1796,18 @@ export default function EstractoPage() {
                       <Tabs defaultValue="markdown" className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
                         <div className="px-3 pt-2 border-b">
                           <TabsList className="h-8 w-full justify-start overflow-x-auto">
-                            <TabsTrigger value="markdown" className="text-xs h-6 shrink-0">Markdown</TabsTrigger>
-                            <TabsTrigger value="markdown-raw" className="text-xs h-6 shrink-0">Markdown raw</TabsTrigger>
-                            <TabsTrigger value="json" className="text-xs h-6 shrink-0">JSON</TabsTrigger>
+                            <TabsTrigger value="markdown" className="text-xs h-6 shrink-0 gap-1.5 group">
+                              <FileText className="h-3 w-3 text-emerald-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
+                              Markdown
+                            </TabsTrigger>
+                            <TabsTrigger value="markdown-raw" className="text-xs h-6 shrink-0 gap-1.5 group">
+                              <FileText className="h-3 w-3 text-lime-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
+                              Markdown raw
+                            </TabsTrigger>
+                            <TabsTrigger value="json" className="text-xs h-6 shrink-0 gap-1.5 group">
+                              <Code className="h-3 w-3 text-cyan-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
+                              JSON
+                            </TabsTrigger>
                           </TabsList>
                         </div>
                         <TabsContent value="markdown" className="flex-1 m-0 min-h-0 min-w-0">
@@ -1826,24 +1844,27 @@ export default function EstractoPage() {
               variant="outline"
               onClick={() => downloadHistoryResult("md")}
               disabled={!selectedHistoryJob}
+              className="group"
             >
-              <Download className="h-4 w-4 mr-1.5" />
+              <Download className="h-4 w-4 mr-1.5 text-emerald-400 transition-transform duration-200 group-hover:-translate-y-0.5" />
               Download MD
             </Button>
             <Button
               variant="outline"
               onClick={() => downloadHistoryResult("json")}
               disabled={!selectedHistoryJob}
+              className="group"
             >
-              <Download className="h-4 w-4 mr-1.5" />
+              <Download className="h-4 w-4 mr-1.5 text-cyan-400 transition-transform duration-200 group-hover:-translate-y-0.5" />
               Download JSON
             </Button>
             <Button
               variant="destructive"
               onClick={deleteHistoryJob}
               disabled={!selectedHistoryId || isDeletingHistory}
+              className="group"
             >
-              {isDeletingHistory ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1.5" />}
+              {isDeletingHistory ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1.5 transition-transform duration-200 group-hover:scale-110" />}
               Delete Run
             </Button>
           </DialogFooter>
@@ -1913,7 +1934,7 @@ export default function EstractoPage() {
                 {/* File List Header */}
                 <div className="flex items-center justify-between p-3 border-b">
                   <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <FileText className="h-4 w-4 text-indigo-400" />
                     <span className="text-sm font-medium">
                       {files.length} file{files.length !== 1 ? "s" : ""}
                     </span>
@@ -1934,10 +1955,10 @@ export default function EstractoPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                      className="h-7 text-xs text-muted-foreground hover:text-destructive group"
                       onClick={clearAllFiles}
                     >
-                      <Trash2 className="h-3 w-3 mr-1" />
+                      <Trash2 className="h-3 w-3 mr-1 transition-transform duration-200 group-hover:scale-110" />
                       Clear
                     </Button>
                   )}
@@ -2069,7 +2090,7 @@ export default function EstractoPage() {
                 {/* Process Button */}
                 <div className="p-3 border-t space-y-2">
                   <Button
-                    className="w-full"
+                    className="w-full group"
                     onClick={processFiles}
                     disabled={
                       isProcessing ||
@@ -2085,7 +2106,7 @@ export default function EstractoPage() {
                       </>
                     ) : (
                       <>
-                        <Zap className="h-4 w-4 mr-2" />
+                        <Zap className="h-4 w-4 mr-2 text-amber-300 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6" />
                         Run OCR ({pendingCount} pending)
                       </>
                     )}
@@ -2093,20 +2114,20 @@ export default function EstractoPage() {
                   {activeProcessingFile ? (
                     <Button
                       variant="outline"
-                      className="w-full"
+                      className="w-full group"
                       onClick={() => stopProcessingFile(activeProcessingFile)}
                     >
-                      <PauseCircle className="h-4 w-4 mr-2" />
+                      <PauseCircle className="h-4 w-4 mr-2 text-amber-500 transition-transform duration-200 group-hover:scale-110" />
                       Stop Current OCR
                     </Button>
                   ) : null}
                   {resumableSelectedFile ? (
                     <Button
                       variant="secondary"
-                      className="w-full"
+                      className="w-full group"
                       onClick={() => resumeProcessingFile(resumableSelectedFile)}
                     >
-                      <PlayCircle className="h-4 w-4 mr-2" />
+                      <PlayCircle className="h-4 w-4 mr-2 text-emerald-400 transition-transform duration-200 group-hover:scale-110" />
                       Resume From Checkpoint
                     </Button>
                   ) : null}
@@ -2121,7 +2142,7 @@ export default function EstractoPage() {
                   <CardHeader className="p-3 cursor-pointer hover:bg-muted/50 transition-colors">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-sm font-medium flex items-center gap-2">
-                        <Settings2 className="h-4 w-4" />
+                        <Settings2 className="h-4 w-4 text-amber-400" />
                         Advanced Settings
                       </CardTitle>
                       <motion.div
@@ -2345,47 +2366,47 @@ export default function EstractoPage() {
                           <Button
                             variant={viewMode === "preview" ? "secondary" : "ghost"}
                             size="sm"
-                            className="h-7 px-2"
+                            className="h-7 px-2 group"
                             onClick={() => setViewMode("preview")}
                           >
-                            <Eye className="h-3.5 w-3.5" />
+                            <Eye className="h-3.5 w-3.5 text-sky-400 transition-transform duration-200 group-hover:scale-110" />
                           </Button>
                           <Button
                             variant={viewMode === "split" ? "secondary" : "ghost"}
                             size="sm"
-                            className="h-7 px-2"
+                            className="h-7 px-2 group"
                             onClick={() => setViewMode("split")}
                           >
-                            <Columns className="h-3.5 w-3.5" />
+                            <Columns className="h-3.5 w-3.5 text-violet-400 transition-transform duration-200 group-hover:scale-110" />
                           </Button>
                           <Button
                             variant={viewMode === "result" ? "secondary" : "ghost"}
                             size="sm"
-                            className="h-7 px-2"
+                            className="h-7 px-2 group"
                             onClick={() => setViewMode("result")}
                           >
-                            <FileText className="h-3.5 w-3.5" />
+                            <FileText className="h-3.5 w-3.5 text-emerald-400 transition-transform duration-200 group-hover:scale-110" />
                           </Button>
                           <Separator orientation="vertical" className="h-5 mx-1" />
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7"
+                            className="h-7 group"
                             onClick={() => copyToClipboard("md")}
                           >
                             {copied === "md" ? (
                               <Check className="h-3.5 w-3.5 text-emerald-500" />
                             ) : (
-                              <Copy className="h-3.5 w-3.5" />
+                              <Copy className="h-3.5 w-3.5 text-cyan-400 transition-transform duration-200 group-hover:scale-110" />
                             )}
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7"
+                            className="h-7 group"
                             onClick={() => downloadResult("md")}
                           >
-                            <Download className="h-3.5 w-3.5" />
+                            <Download className="h-3.5 w-3.5 text-emerald-400 transition-transform duration-200 group-hover:-translate-y-0.5" />
                           </Button>
                         </>
                       )}
@@ -2439,16 +2460,16 @@ export default function EstractoPage() {
                           <Tabs defaultValue="markdown" className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
                             <div className="px-3 pt-2 border-b">
                               <TabsList className="h-8 w-full justify-start overflow-x-auto">
-                                <TabsTrigger value="markdown" className="text-xs gap-1.5 h-6 shrink-0">
-                                  <FileText className="h-3 w-3" />
+                                <TabsTrigger value="markdown" className="text-xs gap-1.5 h-6 shrink-0 group">
+                                  <FileText className="h-3 w-3 text-emerald-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
                                   Markdown
                                 </TabsTrigger>
-                                <TabsTrigger value="markdown-raw" className="text-xs gap-1.5 h-6 shrink-0">
-                                  <FileText className="h-3 w-3" />
+                                <TabsTrigger value="markdown-raw" className="text-xs gap-1.5 h-6 shrink-0 group">
+                                  <FileText className="h-3 w-3 text-lime-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
                                   Markdown raw
                                 </TabsTrigger>
-                                <TabsTrigger value="json" className="text-xs gap-1.5 h-6 shrink-0">
-                                  <Code className="h-3 w-3" />
+                                <TabsTrigger value="json" className="text-xs gap-1.5 h-6 shrink-0 group">
+                                  <Code className="h-3 w-3 text-cyan-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
                                   JSON
                                 </TabsTrigger>
                               </TabsList>
