@@ -18,6 +18,7 @@ SCRIPT_DIR="$(resolve_source_path)"
 PROJECT_DIR="${EXTRACTO_PROJECT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd -P)}"
 USER_BIN="${HOME}/.local/bin/extracto"
 LOG_DIR="${EXTRACTO_LOG_DIR:-$HOME/.local/state/extracto/logs}"
+RUNTIME_ENV_FILE="${PROJECT_DIR}/.extracto.env"
 if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
   LOG_DIR="/tmp/extracto/logs"
   mkdir -p "$LOG_DIR"
@@ -62,8 +63,79 @@ ensure_project() {
   command -v docker >/dev/null 2>&1 || die "docker is not installed"
 }
 
+generate_auth_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+    return
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - <<'PY'
+import secrets
+print(secrets.token_hex(32))
+PY
+    return
+  fi
+
+  if command -v od >/dev/null 2>&1; then
+    od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
+    echo
+    return
+  fi
+
+  die "Unable to generate AUTH_SECRET (missing openssl/python3/od)"
+}
+
+env_file_auth_secret() {
+  local env_file="$1"
+  [ -f "$env_file" ] || return 0
+
+  awk -F= '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*AUTH_SECRET[[:space:]]*=/ {
+      val = substr($0, index($0, "=") + 1)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
+      gsub(/^"|"$/, "", val)
+      gsub(/^'\''|'\''$/, "", val)
+      print val
+      exit
+    }
+  ' "$env_file"
+}
+
+ensure_auth_secret() {
+  local current="${AUTH_SECRET:-}"
+  if [ -n "$current" ]; then
+    return 0
+  fi
+
+  local docker_env_secret
+  docker_env_secret="$(env_file_auth_secret "${PROJECT_DIR}/docker.env")"
+  if [ -n "$docker_env_secret" ]; then
+    return 0
+  fi
+
+  local runtime_secret
+  runtime_secret="$(env_file_auth_secret "$RUNTIME_ENV_FILE")"
+  if [ -n "$runtime_secret" ]; then
+    return 0
+  fi
+
+  local generated
+  generated="$(generate_auth_secret)"
+  [ -n "$generated" ] || die "Generated AUTH_SECRET is empty"
+  umask 077
+  printf "AUTH_SECRET=%s\n" "$generated" > "$RUNTIME_ENV_FILE"
+  ok "Generated local AUTH_SECRET in ${RUNTIME_ENV_FILE}"
+}
+
 compose() {
-  (cd "${PROJECT_DIR}" && docker compose --env-file docker.env "$@")
+  local compose_args=(docker compose --env-file docker.env)
+  if [ -f "$RUNTIME_ENV_FILE" ]; then
+    compose_args+=(--env-file "$RUNTIME_ENV_FILE")
+  fi
+
+  (cd "${PROJECT_DIR}" && "${compose_args[@]}" "$@")
 }
 
 remove_extracto_block() {
@@ -129,6 +201,7 @@ run_step() {
 
 cmd_on() {
   ensure_project
+  ensure_auth_secret
   run_step "Turning up Extracto..." compose up -d --build
   run_step "Checking Extracto health..." compose ps
   ok "Extracto is running at http://localhost:3000"
@@ -148,6 +221,9 @@ cmd_uninstall() {
 
   if [ -L "$USER_BIN" ]; then
     run_step "Removing extracto command..." rm -f "$USER_BIN"
+  fi
+  if [ -f "$RUNTIME_ENV_FILE" ]; then
+    run_step "Removing local runtime env..." rm -f "$RUNTIME_ENV_FILE"
   fi
 
   ok "Extracto has been uninstalled"

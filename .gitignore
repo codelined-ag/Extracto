@@ -37,6 +37,7 @@ server.log
 .env.*
 !.env.example
 local-*
+.extracto.env
 .z-ai-config
 .claude
 
