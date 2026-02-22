@@ -30,6 +30,7 @@ import {
   PlayCircle,
   Clock3,
   ListChecks,
+  FolderOpen,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -139,6 +140,16 @@ interface PostProcessingSettings {
   model: string;
 }
 
+type OcrRunMode = "ocr" | "pdf_to_obsidian";
+
+interface ObsidianSettings {
+  vaultRoot: string;
+  vaultNamePrefix: string;
+  instruction: string;
+  includePageNotes: boolean;
+  model: string;
+}
+
 interface HistoryJobSummary {
   id: string;
   status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
@@ -167,6 +178,9 @@ const MODEL_SELECTIONS_STORAGE_KEY = "extracto:model-selections:v1";
 const POST_PROCESS_MODEL_SELECTIONS_STORAGE_KEY =
   "extracto:post-process-model-selections:v1";
 const UI_LANGUAGE_STORAGE_KEY = "extracto:ui-language:v1";
+const OCR_RUN_MODE_STORAGE_KEY = "extracto:ocr-run-mode:v1";
+const OBSIDIAN_SETTINGS_STORAGE_KEY = "extracto:obsidian-settings:v1";
+const DEFAULT_OBSIDIAN_VAULT_ROOT = "/host-vaults";
 
 function normalizeProvider(provider?: string): "ollama" | "mistral" {
   return provider?.trim().toLowerCase().split(":")[0] === "mistral" ? "mistral" : "ollama";
@@ -250,6 +264,123 @@ function writeProviderModelSelections(
   } catch {
     // ignore storage errors
   }
+}
+
+function readObsidianSettings(): ObsidianSettings {
+  if (typeof window === "undefined") {
+    return {
+      vaultRoot: DEFAULT_OBSIDIAN_VAULT_ROOT,
+      vaultNamePrefix: "",
+      instruction: "",
+      includePageNotes: true,
+      model: "",
+    };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(OBSIDIAN_SETTINGS_STORAGE_KEY);
+    if (!raw) {
+      return {
+        vaultRoot: DEFAULT_OBSIDIAN_VAULT_ROOT,
+        vaultNamePrefix: "",
+        instruction: "",
+        includePageNotes: true,
+        model: "",
+      };
+    }
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {
+        vaultRoot: DEFAULT_OBSIDIAN_VAULT_ROOT,
+        vaultNamePrefix: "",
+        instruction: "",
+        includePageNotes: true,
+        model: "",
+      };
+    }
+
+    const typed = parsed as Record<string, unknown>;
+    return {
+      vaultRoot:
+        typeof typed.vaultRoot === "string" && typed.vaultRoot.trim()
+          ? typed.vaultRoot.trim()
+          : DEFAULT_OBSIDIAN_VAULT_ROOT,
+      vaultNamePrefix: typeof typed.vaultNamePrefix === "string" ? typed.vaultNamePrefix.trim() : "",
+      instruction: typeof typed.instruction === "string" ? typed.instruction : "",
+      includePageNotes:
+        typeof typed.includePageNotes === "boolean" ? typed.includePageNotes : true,
+      model: typeof typed.model === "string" ? typed.model.trim() : "",
+    };
+  } catch {
+    return {
+      vaultRoot: DEFAULT_OBSIDIAN_VAULT_ROOT,
+      vaultNamePrefix: "",
+      instruction: "",
+      includePageNotes: true,
+      model: "",
+    };
+  }
+}
+
+function writeObsidianSettings(settings: ObsidianSettings): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      OBSIDIAN_SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        vaultRoot: settings.vaultRoot,
+        vaultNamePrefix: settings.vaultNamePrefix,
+        instruction: settings.instruction,
+        includePageNotes: settings.includePageNotes,
+        model: settings.model,
+      })
+    );
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function getObsidianMetadata(payload: unknown): Record<string, unknown> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return {};
+  }
+
+  const typed = payload as Record<string, unknown>;
+  if (
+    typed.structured &&
+    typeof typed.structured === "object" &&
+    !Array.isArray(typed.structured)
+  ) {
+    const structured = typed.structured as Record<string, unknown>;
+    if (
+      structured.obsidian &&
+      typeof structured.obsidian === "object" &&
+      !Array.isArray(structured.obsidian)
+    ) {
+      return structured.obsidian as Record<string, unknown>;
+    }
+  }
+
+  if (
+    typed.metadata &&
+    typeof typed.metadata === "object" &&
+    !Array.isArray(typed.metadata)
+  ) {
+    const metadata = typed.metadata as Record<string, unknown>;
+    if (
+      metadata.obsidian &&
+      typeof metadata.obsidian === "object" &&
+      !Array.isArray(metadata.obsidian)
+    ) {
+      return metadata.obsidian as Record<string, unknown>;
+    }
+  }
+
+  return {};
 }
 
 // Utility functions
@@ -609,6 +740,7 @@ export default function EstractoPage() {
   const [isDragOver, setIsDragOver] = React.useState(false);
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [uiLanguage, setUiLanguage] = React.useState<UiLanguage>("it");
+  const [runMode, setRunMode] = React.useState<OcrRunMode>("ocr");
   const [selectedFileId, setSelectedFileId] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState<"md" | "json" | null>(null);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = React.useState(true);
@@ -645,6 +777,13 @@ export default function EstractoPage() {
     outputFormat: "markdown",
     model: "",
   });
+  const [obsidianSettings, setObsidianSettings] = React.useState<ObsidianSettings>({
+    vaultRoot: DEFAULT_OBSIDIAN_VAULT_ROOT,
+    vaultNamePrefix: "",
+    instruction: "",
+    includePageNotes: true,
+    model: "",
+  });
 
   const selectedFile = files.find((f) => f.id === selectedFileId);
   const selectedFileMarkdown = selectedFile?.result
@@ -653,12 +792,24 @@ export default function EstractoPage() {
   const selectedFileStructuredJson = selectedFile?.result
     ? getStructuredJsonPayload(selectedFile.result.json)
     : {};
+  const selectedFileObsidian = selectedFile?.result
+    ? getObsidianMetadata(selectedFile.result.json)
+    : {};
+  const selectedFileObsidianPath =
+    typeof selectedFileObsidian.vaultPath === "string" ? selectedFileObsidian.vaultPath : "";
   const selectedHistoryMarkdown = selectedHistoryJob
     ? getMarkdownFromJsonPayload(selectedHistoryJob.result, selectedHistoryJob.extractedText || "")
     : "";
   const selectedHistoryStructuredJson = selectedHistoryJob
     ? getStructuredJsonPayload(selectedHistoryJob.result)
     : {};
+  const selectedHistoryObsidian = selectedHistoryJob
+    ? getObsidianMetadata(selectedHistoryJob.result)
+    : {};
+  const selectedHistoryObsidianPath =
+    typeof selectedHistoryObsidian.vaultPath === "string"
+      ? selectedHistoryObsidian.vaultPath
+      : "";
   const completedCount = files.filter((f) => f.status === "completed").length;
   const canExportZip = Boolean(completedCount > 0 || selectedFile?.status === "completed");
   const errorCount = files.filter((f) => f.status === "error").length;
@@ -667,9 +818,15 @@ export default function EstractoPage() {
   const resumableSelectedFile = selectedFile?.status === "paused" ? selectedFile : null;
   const isPostProcessingReady =
     !postProcessing.enabled || postProcessing.instruction.trim().length > 0;
+  const isObsidianReady = runMode !== "pdf_to_obsidian" || obsidianSettings.vaultRoot.trim().length > 0;
+  const isRunReady = runMode === "pdf_to_obsidian" ? isObsidianReady : isPostProcessingReady;
   const postProcessModelValue = postProcessing.model || "__same__";
+  const obsidianModelValue = obsidianSettings.model || "__same__";
   const selectedPostProcessModelExists = postProcessing.model
     ? models.some((model) => model.id === postProcessing.model)
+    : true;
+  const selectedObsidianModelExists = obsidianSettings.model
+    ? models.some((model) => model.id === obsidianSettings.model)
     : true;
   const t = React.useCallback(
     (it: string, en: string) => (uiLanguage === "it" ? it : en),
@@ -994,10 +1151,16 @@ export default function EstractoPage() {
       if (storedLanguage === "it" || storedLanguage === "en") {
         setUiLanguage(storedLanguage);
       }
+
+      const storedRunMode = window.localStorage.getItem(OCR_RUN_MODE_STORAGE_KEY);
+      if (storedRunMode === "ocr" || storedRunMode === "pdf_to_obsidian") {
+        setRunMode(storedRunMode);
+      }
     } catch {
       // ignore storage errors
     }
 
+    setObsidianSettings(readObsidianSettings());
     modelSelectionsRef.current = readProviderModelSelections(MODEL_SELECTIONS_STORAGE_KEY);
     postProcessModelSelectionsRef.current = readProviderModelSelections(
       POST_PROCESS_MODEL_SELECTIONS_STORAGE_KEY
@@ -1012,6 +1175,18 @@ export default function EstractoPage() {
       // ignore storage errors
     }
   }, [uiLanguage]);
+
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(OCR_RUN_MODE_STORAGE_KEY, runMode);
+    } catch {
+      // ignore storage errors
+    }
+  }, [runMode]);
+
+  React.useEffect(() => {
+    writeObsidianSettings(obsidianSettings);
+  }, [obsidianSettings]);
 
   React.useEffect(() => {
     void loadSavedSettings();
@@ -1433,10 +1608,19 @@ export default function EstractoPage() {
         resume,
         fileName: file.name,
         model: selectedModel,
+        mode: runMode,
         preview: pagePreviews[0],
         pages: pagePreviews,
         settings,
         postProcessing,
+        obsidian: {
+          enabled: runMode === "pdf_to_obsidian",
+          vaultRoot: obsidianSettings.vaultRoot,
+          vaultNamePrefix: obsidianSettings.vaultNamePrefix,
+          instruction: obsidianSettings.instruction,
+          includePageNotes: obsidianSettings.includePageNotes,
+          model: obsidianSettings.model,
+        },
         apiSettings,
       }),
     });
@@ -1472,7 +1656,12 @@ export default function EstractoPage() {
               stage: resume ? "resuming" : "queued",
               stageMessage: resume
                 ? t("Ripresa dal checkpoint...", "Resuming from checkpoint...")
-                : t(`In coda per OCR (${pagePreviews.length} pagine)`, `Queued for OCR (${pagePreviews.length} pages)`),
+                : runMode === "pdf_to_obsidian"
+                  ? t(
+                      `In coda per PDF→Obsidian (${pagePreviews.length} pagine)`,
+                      `Queued for PDF→Obsidian (${pagePreviews.length} pages)`
+                    )
+                  : t(`In coda per OCR (${pagePreviews.length} pagine)`, `Queued for OCR (${pagePreviews.length} pages)`),
               pageCount: pagePreviews.length,
               processedPages: entry.processedPages || 0,
               etaSeconds: null,
@@ -1500,7 +1689,15 @@ export default function EstractoPage() {
   // Process files with OCR
   const processFiles = async () => {
     if (files.length === 0) return;
-    if (!isPostProcessingReady) {
+    if (!isRunReady) {
+      if (runMode === "pdf_to_obsidian") {
+        toast({
+          title: t("Percorso vault mancante", "Missing vault root path"),
+          description: t("Imposta il percorso root dove creare i vault Obsidian.", "Set the root path where Obsidian vaults should be created."),
+          variant: "destructive",
+        });
+        return;
+      }
       toast({
         title: t("Istruzione post-processing mancante", "Missing post-processing instruction"),
         description: t("Aggiungi un'istruzione o disattiva il post-processing prima di avviare l'OCR.", "Add an instruction or disable post-processing before running OCR."),
@@ -1518,6 +1715,17 @@ export default function EstractoPage() {
         const result = await processSingleFile(file, false);
         if (result.status === "completed") {
           completedInRun += 1;
+          if (runMode === "pdf_to_obsidian" && result.json) {
+            const obsidian = getObsidianMetadata(result.json);
+            const vaultPath =
+              typeof obsidian.vaultPath === "string" ? obsidian.vaultPath : "";
+            if (vaultPath) {
+              toast({
+                title: t("Vault Obsidian creato", "Obsidian vault created"),
+                description: vaultPath,
+              });
+            }
+          }
         } else if (result.status === "paused") {
           toast({
             title: t("OCR in pausa", "OCR paused"),
@@ -1997,6 +2205,11 @@ export default function EstractoPage() {
                       <p className="text-xs text-muted-foreground">
                         {t("Creato", "Created")}: {formatTimestamp(selectedHistoryJob.createdAt)}
                       </p>
+                      {selectedHistoryObsidianPath ? (
+                        <p className="text-xs text-muted-foreground break-all">
+                          {t("Vault Obsidian", "Obsidian vault")}: {selectedHistoryObsidianPath}
+                        </p>
+                      ) : null}
                     </div>
 
                     <div className="grid xl:grid-cols-[240px_minmax(0,1fr)] flex-1 min-h-0 min-w-0">
@@ -2316,19 +2529,26 @@ export default function EstractoPage() {
                     disabled={
                       isProcessing ||
                       pendingCount === 0 ||
-                      !isPostProcessingReady ||
+                      !isRunReady ||
                       activeProcessingFile !== null
                     }
                   >
                     {isProcessing ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Processing...
+                        {runMode === "pdf_to_obsidian"
+                          ? t("Elaborazione PDF→Obsidian...", "Running PDF→Obsidian...")
+                          : t("Elaborazione...", "Processing...")}
                       </>
                     ) : (
                       <>
                         <Zap className="h-4 w-4 mr-2 text-amber-300 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6" />
-                        {t(`Avvia OCR (${pendingCount} in attesa)`, `Run OCR (${pendingCount} pending)`)}
+                        {runMode === "pdf_to_obsidian"
+                          ? t(
+                              `Avvia PDF→Obsidian (${pendingCount} in attesa)`,
+                              `Run PDF→Obsidian (${pendingCount} pending)`
+                            )
+                          : t(`Avvia OCR (${pendingCount} in attesa)`, `Run OCR (${pendingCount} pending)`)}
                       </>
                     )}
                   </Button>
@@ -2377,6 +2597,23 @@ export default function EstractoPage() {
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <CardContent className="pt-0 px-3 pb-3 space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs">{t("Modalità", "Mode")}</Label>
+                      <Select value={runMode} onValueChange={(value) => setRunMode(value as OcrRunMode)}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ocr" className="text-xs">
+                            {t("OCR standard", "Standard OCR")}
+                          </SelectItem>
+                          <SelectItem value="pdf_to_obsidian" className="text-xs">
+                            {t("PDF → Obsidian", "PDF → Obsidian")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                     {/* Language Selection */}
                     <div className="space-y-2">
                       <Label className="text-xs flex items-center gap-1.5">
@@ -2457,94 +2694,203 @@ export default function EstractoPage() {
 
                     <Separator />
 
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <Label className="text-xs">{t("Post-processing", "Post-processing")}</Label>
+                    {runMode === "pdf_to_obsidian" ? (
+                      <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+                        <div className="flex items-start gap-2">
+                          <FolderOpen className="h-4 w-4 mt-0.5 text-violet-400" />
                           <p className="text-[11px] text-muted-foreground">
-                            {t("Applica un passaggio modello aggiuntivo dopo l'estrazione OCR.", "Apply an extra model step after OCR extraction.")}
+                            {t(
+                              "In questa modalità il post-processing è obbligatorio e genera automaticamente una struttura Obsidian per argomenti.",
+                              "In this mode post-processing is mandatory and automatically generates an Obsidian topic-based structure."
+                            )}
                           </p>
                         </div>
-                        <Switch
-                          checked={postProcessing.enabled}
-                          onCheckedChange={(enabled) =>
-                            setPostProcessing((prev) => ({ ...prev, enabled }))
-                          }
-                          className="data-[state=checked]:bg-primary"
-                        />
-                      </div>
-
-                      {postProcessing.enabled ? (
-                        <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-                          <div className="space-y-2">
-                            <Label className="text-xs">{t("Istruzione", "Instruction")}</Label>
-                            <Textarea
-                              placeholder={t("Esempio: estrai numero fattura, scadenza e totali da ogni pagina e restituisci una tabella normalizzata.", "Example: Extract invoice number, due date, and totals from each page, then return one normalized table.")}
-                              value={postProcessing.instruction}
-                              onChange={(event) =>
-                                setPostProcessing((prev) => ({
-                                  ...prev,
-                                  instruction: event.target.value,
-                                }))
-                              }
-                              className="h-24 text-xs resize-none"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label className="text-xs">{t("Modello post-processing", "Post-processing model")}</Label>
-                            <Select
-                              value={postProcessModelValue}
-                              onValueChange={(value) =>
-                                setPostProcessing((prev) => ({
-                                  ...prev,
-                                  model: value === "__same__" ? "" : value,
-                                }))
-                              }
-                            >
-                              <SelectTrigger className="h-8 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__same__" className="text-xs">
-                                  {t(`Uguale al modello OCR (${selectedModel})`, `Same as OCR model (${selectedModel})`)}
-                                </SelectItem>
-                                {!selectedPostProcessModelExists && postProcessing.model ? (
-                                  <SelectItem value={postProcessing.model} className="text-xs">
-                                    {postProcessing.model}
-                                  </SelectItem>
-                                ) : null}
-                                {models.map((model) => (
-                                  <SelectItem key={`post-model-${model.id}`} value={model.id} className="text-xs">
-                                    {model.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label className="text-xs">{t("Formato output", "Output format")}</Label>
-                            <Select
-                              value={postProcessing.outputFormat}
-                              onValueChange={(value: PostProcessOutputFormat) =>
-                                setPostProcessing((prev) => ({ ...prev, outputFormat: value }))
-                              }
-                            >
-                              <SelectTrigger className="h-8 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="markdown" className="text-xs">
-                                  Markdown
-                                </SelectItem>
-                                <SelectItem value="json" className="text-xs">
-                                  {t("JSON strutturato", "Structured JSON")}
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">{t("Percorso root vault", "Vault root path")}</Label>
+                          <Input
+                            value={obsidianSettings.vaultRoot}
+                            onChange={(event) =>
+                              setObsidianSettings((prev) => ({
+                                ...prev,
+                                vaultRoot: event.target.value,
+                              }))
+                            }
+                            placeholder={DEFAULT_OBSIDIAN_VAULT_ROOT}
+                            className="h-8 text-xs"
+                          />
+                          <p className="text-[10px] text-muted-foreground">
+                            {t(
+                              "Percorso host o percorso montato nel container dove creare nuovi vault.",
+                              "Host path or container-mounted path where new vaults will be created."
+                            )}
+                          </p>
                         </div>
-                      ) : null}
-                    </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">{t("Prefisso nome vault (opzionale)", "Vault name prefix (optional)")}</Label>
+                          <Input
+                            value={obsidianSettings.vaultNamePrefix}
+                            onChange={(event) =>
+                              setObsidianSettings((prev) => ({
+                                ...prev,
+                                vaultNamePrefix: event.target.value,
+                              }))
+                            }
+                            placeholder="project-notes"
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">{t("Istruzione organizzazione (opzionale)", "Organization instruction (optional)")}</Label>
+                          <Textarea
+                            placeholder={t(
+                              "Esempio: crea cartelle per cliente, fatture, scadenze e una nota riepilogo con task.",
+                              "Example: create folders for client, invoices, deadlines, and a summary note with tasks."
+                            )}
+                            value={obsidianSettings.instruction}
+                            onChange={(event) =>
+                              setObsidianSettings((prev) => ({
+                                ...prev,
+                                instruction: event.target.value,
+                              }))
+                            }
+                            className="h-20 text-xs resize-none"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">{t("Modello analisi Obsidian", "Obsidian analysis model")}</Label>
+                          <Select
+                            value={obsidianModelValue}
+                            onValueChange={(value) =>
+                              setObsidianSettings((prev) => ({
+                                ...prev,
+                                model: value === "__same__" ? "" : value,
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__same__" className="text-xs">
+                                {t(`Uguale al modello OCR (${selectedModel})`, `Same as OCR model (${selectedModel})`)}
+                              </SelectItem>
+                              {!selectedObsidianModelExists && obsidianSettings.model ? (
+                                <SelectItem value={obsidianSettings.model} className="text-xs">
+                                  {obsidianSettings.model}
+                                </SelectItem>
+                              ) : null}
+                              {models.map((model) => (
+                                <SelectItem key={`obsidian-model-${model.id}`} value={model.id} className="text-xs">
+                                  {model.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">{t("Includi note per pagina", "Include per-page notes")}</Label>
+                          <Switch
+                            checked={obsidianSettings.includePageNotes}
+                            onCheckedChange={(checked) =>
+                              setObsidianSettings((prev) => ({
+                                ...prev,
+                                includePageNotes: checked,
+                              }))
+                            }
+                            className="data-[state=checked]:bg-primary"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <Label className="text-xs">{t("Post-processing", "Post-processing")}</Label>
+                            <p className="text-[11px] text-muted-foreground">
+                              {t("Applica un passaggio modello aggiuntivo dopo l'estrazione OCR.", "Apply an extra model step after OCR extraction.")}
+                            </p>
+                          </div>
+                          <Switch
+                            checked={postProcessing.enabled}
+                            onCheckedChange={(enabled) =>
+                              setPostProcessing((prev) => ({ ...prev, enabled }))
+                            }
+                            className="data-[state=checked]:bg-primary"
+                          />
+                        </div>
+
+                        {postProcessing.enabled ? (
+                          <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+                            <div className="space-y-2">
+                              <Label className="text-xs">{t("Istruzione", "Instruction")}</Label>
+                              <Textarea
+                                placeholder={t("Esempio: estrai numero fattura, scadenza e totali da ogni pagina e restituisci una tabella normalizzata.", "Example: Extract invoice number, due date, and totals from each page, then return one normalized table.")}
+                                value={postProcessing.instruction}
+                                onChange={(event) =>
+                                  setPostProcessing((prev) => ({
+                                    ...prev,
+                                    instruction: event.target.value,
+                                  }))
+                                }
+                                className="h-24 text-xs resize-none"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs">{t("Modello post-processing", "Post-processing model")}</Label>
+                              <Select
+                                value={postProcessModelValue}
+                                onValueChange={(value) =>
+                                  setPostProcessing((prev) => ({
+                                    ...prev,
+                                    model: value === "__same__" ? "" : value,
+                                  }))
+                                }
+                              >
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__same__" className="text-xs">
+                                    {t(`Uguale al modello OCR (${selectedModel})`, `Same as OCR model (${selectedModel})`)}
+                                  </SelectItem>
+                                  {!selectedPostProcessModelExists && postProcessing.model ? (
+                                    <SelectItem value={postProcessing.model} className="text-xs">
+                                      {postProcessing.model}
+                                    </SelectItem>
+                                  ) : null}
+                                  {models.map((model) => (
+                                    <SelectItem key={`post-model-${model.id}`} value={model.id} className="text-xs">
+                                      {model.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs">{t("Formato output", "Output format")}</Label>
+                              <Select
+                                value={postProcessing.outputFormat}
+                                onValueChange={(value: PostProcessOutputFormat) =>
+                                  setPostProcessing((prev) => ({ ...prev, outputFormat: value }))
+                                }
+                              >
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="markdown" className="text-xs">
+                                    Markdown
+                                  </SelectItem>
+                                  <SelectItem value="json" className="text-xs">
+                                    {t("JSON strutturato", "Structured JSON")}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
                   </CardContent>
                 </CollapsibleContent>
               </Card>
@@ -2573,6 +2919,12 @@ export default function EstractoPage() {
                               {t("Completato", "Completed")}
                             </Badge>
                           )}
+                          {selectedFile.status === "completed" && selectedFileObsidianPath ? (
+                            <Badge variant="secondary" className="text-[10px] max-w-[280px] truncate">
+                              <FolderOpen className="h-3 w-3 mr-1 text-violet-400" />
+                              {selectedFileObsidianPath}
+                            </Badge>
+                          ) : null}
                           {selectedFile.status === "paused" && (
                             <Badge variant="outline" className="text-xs">
                               <PauseCircle className="h-3 w-3 mr-1 text-amber-500" />

@@ -2,7 +2,7 @@
 
 Extracto is a self-hosted OCR web app with a proper backend, persistent settings, authentication, OCR history, and Docker-first operations.
 
-It supports Ollama on your host machine, Mistral OCR API, multi-page PDF extraction, and optional AI post-processing with custom instructions.
+It supports Ollama on your host machine, Mistral OCR API, multi-page PDF extraction, optional AI post-processing, and a `PDF → Obsidian` mode that creates vaults automatically.
 
 ## Why Extracto
 
@@ -28,6 +28,11 @@ It supports Ollama on your host machine, Mistral OCR API, multi-page PDF extract
   - Custom instruction input.
   - Output mode: `Markdown` or structured `JSON`.
   - Runs after OCR extraction.
+- `PDF → Obsidian` mode:
+  - Forces a full-document analysis step after OCR.
+  - Produces topic-organized notes/folders.
+  - Writes a new Obsidian vault to a host-mounted directory.
+  - Stores vault path metadata in job history/results.
 - Past OCR runs modal:
   - Run list with status.
   - Detail view.
@@ -94,6 +99,8 @@ Important variables:
 - `APP_NETWORK_MODE`: `host` (default here) or `bridge`.
 - `OLLAMA_HOST`: Ollama base URL used by backend discovery and OCR calls.
 - `OLLAMA_HOST_FALLBACKS`: optional comma-separated fallback hosts.
+- `OBSIDIAN_EXPORT_BASE_DIR`: container path where vault exports are written.
+- `OBSIDIAN_EXPORT_HOST_ROOT`: host path bind-mounted to `OBSIDIAN_EXPORT_BASE_DIR`.
 
 ## Ollama Host Connectivity
 
@@ -121,6 +128,7 @@ API endpoints:
 ## OCR and Jobs API (High Level)
 
 - `POST /api/ocr`: process a file/pages.
+  - Supports `mode: "ocr" | "pdf_to_obsidian"` plus `obsidian` export settings.
 - `GET /api/models`: discover models from configured host.
 - `GET /api/jobs`: list user OCR jobs.
 - `GET /api/jobs/:id`: get OCR job detail.
