@@ -872,6 +872,7 @@ async function writeObsidianVault(input: {
   fileCount: number;
 }> {
   const root = resolveObsidianRootPath(input.requestedRoot);
+  const safeBaseDir = path.resolve(OBSIDIAN_EXPORT_BASE_DIR || "/host-vaults");
   const vaultPath = path.join(root.containerRoot, input.plan.vaultName);
   const hostVaultPath = root.hostRoot
     ? path.join(root.hostRoot, input.plan.vaultName)
@@ -893,6 +894,18 @@ async function writeObsidianVault(input: {
     await writeFile(target, contents, "utf8");
     createdFiles.push(target);
   };
+
+  const ownership = await (async () => {
+    try {
+      const info = await stat(safeBaseDir);
+      if (typeof info.uid === "number" && typeof info.gid === "number") {
+        return { uid: info.uid, gid: info.gid };
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  })();
 
   await ensureDir(vaultPath);
   await ensureDir(path.join(vaultPath, ".obsidian"));
@@ -967,18 +980,6 @@ async function writeObsidianVault(input: {
       fileCount += 1;
     }
   }
-
-  const ownership = await (async () => {
-    try {
-      const info = await stat(root.containerRoot);
-      if (typeof info.uid === "number" && typeof info.gid === "number") {
-        return { uid: info.uid, gid: info.gid };
-      }
-    } catch {
-      // ignore
-    }
-    return null;
-  })();
 
   let chownApplied = false;
   if (ownership) {
