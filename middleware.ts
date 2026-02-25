@@ -7,7 +7,12 @@ const PUBLIC_PATHS = [
   "/auth",
   "/api/auth",
   "/api/health",
+  "/manifest.webmanifest",
+  "/sw.js",
   "/favicon.ico",
+  "/extracto-favicon.svg",
+  "/extracto-icon.svg",
+  "/extracto-maskable.svg",
   "/logo.svg",
   "/robots.txt",
 ];

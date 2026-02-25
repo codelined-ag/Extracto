@@ -41,6 +41,18 @@ const DEFAULT_MISTRAL_ENDPOINT = normalizeHostEndpoint(
   process.env.MISTRAL_OCR_API_URL || "",
   "https://api.mistral.ai/v1/ocr"
 );
+const DEFAULT_MISTRAL_MODELS = (() => {
+  const configured = (process.env.MISTRAL_MODELS || "")
+    .split(",")
+    .map((model) => model.trim())
+    .filter(Boolean);
+
+  if (configured.length > 0) {
+    return Array.from(new Set(configured));
+  }
+
+  return ["mistral-ocr-latest", "mistral-ocr", "pixtral-12b"];
+})();
 
 function parseProviderHint(rawProvider: string | null): "ollama" | "mistral" | "" {
   const normalized = rawProvider?.trim().toLowerCase().split(":")[0] ?? "";
@@ -83,10 +95,19 @@ export async function GET(request: NextRequest) {
     );
   }
   if (providerHint === "mistral" && !apiKey) {
-    return NextResponse.json(
-      { error: "Missing API key. Set MISTRAL_API_KEY in settings to discover Mistral models." },
-      { status: 400 }
-    );
+    const fallbackModels: NormalizedModel[] = DEFAULT_MISTRAL_MODELS.map((id) => ({
+      id,
+      name: id,
+      provider: "mistral",
+    }));
+    return NextResponse.json({
+      provider: "mistral",
+      endpoint: enforceProviderEndpointPolicy("mistral", rawHost, DEFAULT_MISTRAL_ENDPOINT),
+      attemptedHosts: [],
+      models: fallbackModels,
+      warning:
+        "MISTRAL_API_KEY is not configured. Returning configured fallback models only.",
+    });
   }
 
   try {
