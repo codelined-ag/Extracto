@@ -736,7 +736,7 @@ const PDFJS_MODULE_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/
 const PDFJS_WORKER_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
 
 let pdfJsLibPromise: Promise<Record<string, unknown>> | null = null;
-const pdfArrayBufferCache = new WeakMap<File, Promise<ArrayBuffer>>();
+const pdfBytesCache = new WeakMap<File, Promise<Uint8Array>>();
 
 function isPdfFile(file: File): boolean {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -768,15 +768,18 @@ async function loadPdfJsLib(): Promise<Record<string, unknown>> {
   return pdfjsLib;
 }
 
-function getPdfArrayBuffer(file: File): Promise<ArrayBuffer> {
-  const cached = pdfArrayBufferCache.get(file);
+async function getPdfArrayBuffer(file: File): Promise<ArrayBuffer> {
+  const cached = pdfBytesCache.get(file);
   if (cached) {
-    return cached;
+    const bytes = await cached;
+    return bytes.slice().buffer;
   }
 
-  const next = file.arrayBuffer();
-  pdfArrayBufferCache.set(file, next);
-  return next;
+  // Cache immutable bytes and always hand pdf.js a fresh ArrayBuffer copy.
+  const next = file.arrayBuffer().then((buffer) => Uint8Array.from(new Uint8Array(buffer)));
+  pdfBytesCache.set(file, next);
+  const bytes = await next;
+  return bytes.slice().buffer;
 }
 
 async function renderPdfPagesAsImages(
