@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { authenticateRequest, requireScope } from "@/lib/auth/request";
-import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
+import { enforceProviderEndpointPolicy, normalizeProvider, ProviderKind } from "@/lib/endpoint-policy";
 import { getApiSettings } from "@/lib/settings-store";
 import {
   buildOllamaHostCandidates,
@@ -54,23 +54,9 @@ const DEFAULT_MISTRAL_MODELS = (() => {
   return ["mistral-ocr-latest", "mistral-ocr", "pixtral-12b"];
 })();
 
-function parseProviderHint(rawProvider: string | null): "ollama" | "mistral" | "" {
-  const normalized = rawProvider?.trim().toLowerCase().split(":")[0] ?? "";
-  if (normalized === "mistral") return "mistral";
-  if (normalized === "ollama") return "ollama";
-  return "";
-}
-
-function getModelPaths(providerHint?: "ollama" | "mistral" | ""): readonly string[] {
-  if (providerHint === "ollama") {
-    return OLLAMA_MODEL_PATHS;
-  }
-
-  if (providerHint === "mistral") {
-    return MISTRAL_MODEL_PATHS;
-  }
-
-  return DEFAULT_MODEL_PATHS;
+function getModelPaths(providerHint: ProviderKind): readonly string[] {
+  if (providerHint === "ollama") return OLLAMA_MODEL_PATHS;
+  return MISTRAL_MODEL_PATHS;
 }
 
 export async function GET(request: NextRequest) {
@@ -85,7 +71,7 @@ export async function GET(request: NextRequest) {
   const settings = await getApiSettings(userId);
   const query = new URL(request.url).searchParams;
 
-  const providerHint = parseProviderHint(query.get("provider")) || parseProviderHint(settings.provider) || "ollama";
+  const providerHint: ProviderKind = normalizeProvider(query.get("provider") || settings.provider);
   const defaultHost = providerHint === "mistral" ? DEFAULT_MISTRAL_ENDPOINT : DISCOVERY_FALLBACK_HOST;
   const rawHost = settings.apiEndpoint || defaultHost;
   const apiKey = settings.apiKey || process.env.MISTRAL_API_KEY || "";
@@ -136,12 +122,13 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function buildCandidateHosts(
-  rawHost: string,
-  providerHint: "ollama" | "mistral" | ""
-): string[] {
+function buildCandidateHosts(rawHost: string, providerHint: ProviderKind): string[] {
   if (providerHint === "mistral") {
     return [enforceProviderEndpointPolicy("mistral", rawHost, DEFAULT_MISTRAL_ENDPOINT)];
+  }
+
+  if (providerHint === "openrouter" || providerHint === "openai_compat") {
+    return [enforceProviderEndpointPolicy(providerHint, rawHost, rawHost)];
   }
 
   const safeOllamaHost = enforceProviderEndpointPolicy("ollama", rawHost, DISCOVERY_FALLBACK_HOST);
@@ -162,10 +149,9 @@ function buildCandidateHosts(
 async function discoverModels(
   candidateHosts: string[],
   apiKey: string,
-  providerHint?: "ollama" | "mistral" | ""
+  providerHint: ProviderKind
 ): Promise<NormalizedModel[]> {
-  const provider = providerHint || "";
-  const candidates = getModelPaths(provider);
+  const candidates = getModelPaths(providerHint);
 
   const errors: string[] = [];
 
@@ -181,19 +167,20 @@ async function discoverModels(
   for (const hostCandidate of candidateHosts) {
     const normalizedHost = normalizeHostEndpoint(
       hostCandidate,
-      provider === "mistral" ? DEFAULT_MISTRAL_ENDPOINT : DISCOVERY_FALLBACK_HOST
+      providerHint === "mistral" ? DEFAULT_MISTRAL_ENDPOINT : DISCOVERY_FALLBACK_HOST
     );
     if (!normalizedHost) {
       continue;
     }
 
-    const candidateBases = provider === "mistral"
+    const isMistralLike = providerHint === "mistral" || providerHint === "openrouter" || providerHint === "openai_compat";
+    const candidateBases = isMistralLike
       ? buildMistralEndpointBases(normalizedHost)
       : buildEndpointBases(normalizedHost);
     const rawCandidateUrls = Array.from(
       new Set(candidateBases.flatMap((base) => candidates.map((path) => `${base}/${path}`)))
     );
-    const candidateUrls = provider === "mistral"
+    const candidateUrls = isMistralLike
       ? Array.from(
           new Set(
             rawCandidateUrls.flatMap((url) => [url, `${url}?object=list`])
@@ -215,7 +202,7 @@ async function discoverModels(
           : url.endsWith("/models")
             ? "models"
             : "v1/models";
-        const models = normalizeModelsFromPayload(payload, pathHint, provider);
+        const models = normalizeModelsFromPayload(payload, pathHint, providerHint);
         if (models.length > 0) {
           return dedupeModels(models);
         }
@@ -295,7 +282,7 @@ function buildEndpointBases(rawEndpoint: string): string[] {
 function normalizeModelsFromPayload(
   payload: unknown,
   path: string,
-  providerHint: "ollama" | "mistral" | ""
+  providerHint: ProviderKind
 ): NormalizedModel[] {
   if (!payload || typeof payload !== "object") return [];
 
@@ -304,11 +291,9 @@ function normalizeModelsFromPayload(
     data?: unknown[];
   };
   const fallbackProvider =
-    providerHint === "mistral"
-      ? "mistral"
-      : path === "api/tags"
-        ? "ollama"
-        : "openai-compatible";
+    providerHint === "ollama"
+      ? path === "api/tags" ? "ollama" : "openai-compatible"
+      : providerHint;
 
   if (Array.isArray(entries.models)) {
     return entries.models
