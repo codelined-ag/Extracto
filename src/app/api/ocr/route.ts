@@ -1247,63 +1247,12 @@ async function resolveOllamaEndpoint(endpoint: string): Promise<string> {
   return result.host;
 }
 
-async function resolveProvider(
-  model: string,
-  settings: ApiProviderSettings
-): Promise<"ollama" | "mistral" | "openrouter" | "openai_compat"> {
+function resolveProvider(model: string, settings: ApiProviderSettings): ProviderKind {
   const normalizedModel = model.trim();
-  const providerHint = parseProviderHint(settings.provider);
   if (!normalizedModel) {
     throw new ApiRouteError("Model is required", 400);
   }
-
-  if (providerHint === "mistral") {
-    return "mistral";
-  }
-
-  if (providerHint === "openrouter") {
-    return "openrouter";
-  }
-
-  if (providerHint === "openai_compat") {
-    return "openai_compat";
-  }
-
-  if (providerHint === "ollama") {
-    return "ollama";
-  }
-
-  if (DEFAULT_MISTRAL_MODEL_SET.has(normalizedModel.toLowerCase())) {
-    return "mistral";
-  }
-
-  if (isLikelyMistralModel(normalizedModel)) {
-    return "mistral";
-  }
-
-  if (isLikelyOpenRouterModel(normalizedModel)) {
-    return "openrouter";
-  }
-
-  try {
-    const availableModels = await getOllamaModels(settings.apiEndpoint);
-    if (availableModels.models.includes(normalizedModel)) {
-      return "ollama";
-    }
-  } catch (error) {
-    if (isLikelyOllamaModel(normalizedModel)) {
-      return "ollama";
-    }
-    throw error instanceof ApiRouteError
-      ? error
-      : new ApiRouteError(`Cannot resolve provider for model "${normalizedModel}"`, 502);
-  }
-
-  if (isLikelyOllamaModel(normalizedModel)) {
-    return "ollama";
-  }
-
-  throw new ApiRouteError(`Model "${normalizedModel}" is not available on this backend`, 400);
+  return parseProviderHint(settings.provider);
 }
 
 async function runOllamaOcr(
@@ -2766,7 +2715,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
 
     if (input.postProcessingPayload.enabled) {
       const postProcessingModel = selectedPostProcessModel;
-      const postProcessingProvider = await resolveProvider(postProcessingModel, input.settings);
+      const postProcessingProvider = resolveProvider(postProcessingModel, input.settings);
       if (postProcessingProvider === "ollama") {
         usedOllamaModels.add(postProcessingModel);
         await warmupOllamaModel(input.settings.apiEndpoint, postProcessingModel);
@@ -3176,7 +3125,7 @@ export async function POST(request: NextRequest) {
     const resumeRequested = body.resume === true || body.resume === "true";
     const resumeJobId = typeof body.jobId === "string" ? body.jobId.trim() : "";
 
-    const provider = await resolveProvider(model, settings);
+    const provider = resolveProvider(model, settings);
     const ocrModel = provider === "mistral" ? resolveMistralOcrModel(model) : model;
     const prompt = buildPrompt(settingsPayload);
     const sourcePreview = normalizePreviewForHistory(inputPreviews[0] || "");
