@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { authenticateMutation, authHasScope } from "@/lib/auth/request";
+import { buildOcrForwardHeaders } from "@/lib/ocr/forward";
 import { db } from "@/lib/db";
 import { readResultText } from "@/lib/result-store";
 
@@ -108,15 +109,7 @@ export async function POST(request: NextRequest) {
   }
 
   const origin = request.nextUrl.origin;
-  const cookie = request.headers.get("cookie") || "";
-  const authHeader = request.headers.get("authorization") || "";
-  const fetchHeaders: Record<string, string> = {
-    "Content-Type": "application/json",
-    Origin: origin,
-    Referer: origin,
-  };
-  if (cookie) fetchHeaders.Cookie = cookie;
-  if (authHeader) fetchHeaders.Authorization = authHeader;
+  const fetchHeaders = buildOcrForwardHeaders(request);
 
   const submitResponse = await fetch(`${origin}/api/ocr`, {
     method: "POST",
