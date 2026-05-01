@@ -68,6 +68,7 @@ import {
 } from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
+import { type ProviderKind } from "@/lib/endpoint-policy";
 import ReactMarkdown from "react-markdown";
 
 // Types
@@ -158,7 +159,6 @@ interface HistoryJobDetail extends HistoryJobSummary {
   result?: unknown;
 }
 
-type ProviderKind = "ollama" | "mistral" | "openrouter" | "openai_compat";
 type ProviderModelSelections = Partial<Record<ProviderKind, string>>;
 type UiLanguage = "it" | "en" | "fr" | "es" | "de";
 

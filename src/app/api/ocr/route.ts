@@ -10,7 +10,7 @@ import {
 } from "@/lib/result-store";
 import { dispatchJobWebhooks } from "@/lib/webhooks";
 import { db } from "@/lib/db";
-import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
+import { enforceProviderEndpointPolicy, ProviderKind } from "@/lib/endpoint-policy";
 import {
   clearOcrJobRunning,
   clearOcrJobStop,
@@ -330,9 +330,7 @@ function getOllamaCandidatesForOcr(endpoint: string): string[] {
   return Array.from(new Set(candidates));
 }
 
-type ProviderHint = "ollama" | "mistral" | "openrouter" | "openai_compat";
-
-function parseProviderHint(rawProvider: string | undefined): ProviderHint {
+function parseProviderHint(rawProvider: string | undefined): ProviderKind {
   const value = rawProvider?.trim().toLowerCase().split(":")[0] || "ollama";
   if (value === "mistral") return "mistral";
   if (value === "openrouter") return "openrouter";

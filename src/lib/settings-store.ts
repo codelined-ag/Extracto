@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
+import { enforceProviderEndpointPolicy, ProviderKind } from "@/lib/endpoint-policy";
 import {
   isLikelyLocalhostEndpoint,
   normalizeHostEndpoint,
@@ -40,9 +40,9 @@ const DATA_ROOT = (() => {
   return path.dirname(databaseFile);
 })();
 
-export type ProviderId = "ollama" | "mistral" | "openrouter" | "openai_compat";
+export type { ProviderKind as ProviderId };
 
-function normalizeProvider(rawProvider?: string): ProviderId {
+function normalizeProvider(rawProvider?: string): ProviderKind {
   const provider = (rawProvider || "").trim().toLowerCase().split(":")[0];
   if (provider === "mistral") return "mistral";
   if (provider === "openrouter") return "openrouter";
@@ -143,7 +143,7 @@ function normalizeOpenAICompatEndpoint(rawEndpoint?: string): string {
   }
 }
 
-function normalizeApiEndpoint(rawEndpoint: string | undefined, provider: ProviderId): string {
+function normalizeApiEndpoint(rawEndpoint: string | undefined, provider: ProviderKind): string {
   if (provider === "mistral") {
     return normalizeMistralEndpoint(rawEndpoint);
   }
