@@ -48,17 +48,6 @@ interface PostProcessingSettings {
   model: string;
 }
 
-type OcrRunMode = "ocr" | "pdf_to_obsidian";
-
-interface ObsidianSettings {
-  enabled: boolean;
-  vaultRoot: string;
-  vaultNamePrefix: string;
-  instruction: string;
-  includePageNotes: boolean;
-  model: string;
-}
-
 interface OCRRequestBody {
   jobId?: unknown;
   resume?: unknown;
@@ -70,8 +59,6 @@ interface OCRRequestBody {
   batchId?: unknown;
   settings?: Partial<AdvancedSettings>;
   postProcessing?: Partial<PostProcessingSettings>;
-  mode?: unknown;
-  obsidian?: Partial<ObsidianSettings>;
   provider?: unknown;
   apiEndpoint?: unknown;
   apiKey?: unknown;
@@ -79,7 +66,6 @@ interface OCRRequestBody {
     provider?: unknown;
     apiEndpoint?: unknown;
     apiKey?: unknown;
-    obsidianBaseDir?: unknown;
   };
 }
 
@@ -169,68 +155,6 @@ interface OcrProgressMetadata {
   };
 }
 
-interface ObsidianTopicNote {
-  title: string;
-  markdown: string;
-  sourcePages: number[];
-}
-
-interface ObsidianPageContext {
-  pageNumber: number;
-  markdown: string;
-  summary: string;
-  keywords: string[];
-  entities: string[];
-}
-
-interface ObsidianPagePlan extends ObsidianPageContext {
-  title: string;
-  primaryTopic: string;
-  relatedTopics: string[];
-}
-
-interface ObsidianTopicPlan {
-  name: string;
-  summary: string;
-  pageNumbers: number[];
-  notes: ObsidianTopicNote[];
-}
-
-interface ObsidianVaultPlan {
-  planVersion: 2;
-  vaultName: string;
-  markdown: string;
-  indexMarkdown: string;
-  topics: ObsidianTopicPlan[];
-  pages: ObsidianPagePlan[];
-}
-
-interface ObsidianExportMetadata {
-  enabled: boolean;
-  requestedRoot: string;
-  containerRoot: string;
-  hostRoot?: string;
-  vaultName?: string;
-  vaultPath?: string;
-  noteCount?: number;
-  topicCount?: number;
-  fileCount?: number;
-  planVersion?: number;
-  pageAssignmentCount?: number;
-  unassignedPages?: number[];
-  topics?: Array<{
-    name: string;
-    summary: string;
-    pageNumbers: number[];
-  }>;
-  pages?: Array<{
-    pageNumber: number;
-    title?: string;
-    summary: string;
-    primaryTopic: string;
-    relatedTopics: string[];
-  }>;
-}
 
 class ApiRouteError extends Error {
   public status: number;
@@ -301,13 +225,6 @@ const REQUEST_TIMEOUT_MS = 60_000;
 const OLLAMA_MODEL_CACHE_TTL_MS = 60_000;
 const MAX_STORED_PREVIEW_LENGTH = 1_500_000;
 const MAX_POST_PROCESS_INSTRUCTION_LENGTH = 6000;
-const MAX_OBSIDIAN_INSTRUCTION_LENGTH = 6000;
-const MAX_OBSIDIAN_ROOT_LENGTH = 500;
-const MAX_OBSIDIAN_TOPICS = 24;
-const MAX_OBSIDIAN_KEYWORDS = 12;
-const MAX_OBSIDIAN_ENTITIES = 8;
-const MAX_OBSIDIAN_SUMMARY_LENGTH = 320;
-const MAX_OBSIDIAN_PAGE_CONTEXT_CHARS = 2400;
 const OCR_RATE_LIMIT_WINDOW_MS = 60_000;
 const OCR_RATE_LIMIT_MAX = 6;
 const OLLAMA_DISCOVERY_FALLBACK_HOST =
@@ -315,8 +232,6 @@ const OLLAMA_DISCOVERY_FALLBACK_HOST =
 const OLLAMA_DISCOVERY_PATHS = ["/api/tags", "/v1/models"] as const;
 const OLLAMA_NETWORK_HINT =
   "If Ollama runs on the host machine, ensure it is bound to 0.0.0.0:11434 (not only 127.0.0.1), and from the container use a host-reachable address.";
-const OBSIDIAN_EXPORT_BASE_DIR = (process.env.OBSIDIAN_EXPORT_BASE_DIR || "/host-vaults").trim();
-const OBSIDIAN_EXPORT_HOST_ROOT = (process.env.OBSIDIAN_EXPORT_HOST_ROOT || "").trim();
 
 let ollamaModelCache: {
   values: string[];
@@ -445,7 +360,6 @@ function normalizeApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
     provider,
     apiEndpoint: safeEndpoint,
     apiKey: raw.apiKey?.trim() || "",
-    obsidianBaseDir: raw.obsidianBaseDir?.trim() || OBSIDIAN_EXPORT_BASE_DIR,
   };
 }
 
@@ -580,61 +494,6 @@ function sanitizePostProcessing(
     outputFormat,
     model,
   };
-}
-
-function parseRunMode(raw: unknown): OcrRunMode {
-  return typeof raw === "string" && raw.trim().toLowerCase() === "pdf_to_obsidian"
-    ? "pdf_to_obsidian"
-    : "ocr";
-}
-
-function sanitizeObsidianSettings(raw: Partial<ObsidianSettings> | undefined): ObsidianSettings {
-  const vaultRoot = typeof raw?.vaultRoot === "string" ? raw.vaultRoot.trim() : "";
-  const vaultNamePrefix =
-    typeof raw?.vaultNamePrefix === "string" ? raw.vaultNamePrefix.trim() : "";
-  const instruction = typeof raw?.instruction === "string" ? raw.instruction.trim() : "";
-  const model = typeof raw?.model === "string" ? raw.model.trim() : "";
-
-  return {
-    enabled: Boolean(raw?.enabled),
-    vaultRoot: vaultRoot.slice(0, MAX_OBSIDIAN_ROOT_LENGTH),
-    vaultNamePrefix: vaultNamePrefix.slice(0, 120),
-    instruction: instruction.slice(0, MAX_OBSIDIAN_INSTRUCTION_LENGTH),
-    includePageNotes: typeof raw?.includePageNotes === "boolean" ? raw.includePageNotes : true,
-    model,
-  };
-}
-
-function toSlugSegment(value: string): string {
-  const normalized = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return normalized || "note";
-}
-
-function sanitizeFileSegment(value: string, fallback: string): string {
-  const cleaned = value
-    .replace(/[<>:"/\\|?*\x00-\x1f]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const normalized = cleaned || fallback;
-  return normalized.slice(0, 120);
-}
-
-function buildObsidianVaultName(
-  fileName: string,
-  prefix: string,
-  timestamp = new Date()
-): string {
-  const fileStem = fileName.replace(/\.[^/.]+$/u, "").trim() || "document";
-  const datePart = [
-    timestamp.getFullYear().toString(),
-    String(timestamp.getMonth() + 1).padStart(2, "0"),
-    String(timestamp.getDate()).padStart(2, "0"),
-  ].join("-");
-  const base = prefix ? `${prefix}-${fileStem}` : fileStem;
-  return sanitizeFileSegment(`${base}-${datePart}`, "extracto-vault");
 }
 
 function isLikelyMistralModel(model: string): boolean {
@@ -778,233 +637,6 @@ function buildPostProcessingPrompt(
   };
 }
 
-function buildObsidianPostProcessingInstruction(customInstruction: string): string {
-  const userInstruction = customInstruction.trim()
-    ? `Additional user instruction:\n${customInstruction.trim()}\n\n`
-    : "";
-
-  return [
-    "Transform OCR output into an Obsidian-ready knowledge structure.",
-    "Use all pages and infer coherent topics with page-level routing.",
-    userInstruction,
-    "Return ONLY valid JSON with this exact schema:",
-    "{",
-    '  "markdown": "merged markdown for the entire document",',
-    '  "vault": {',
-    '    "name": "short vault name",',
-    '    "topics": [',
-    "      {",
-    '        "name": "topic name",',
-    '        "summary": "topic summary",',
-    '        "pageNumbers": [1, 2]',
-    "      }",
-    "    ],",
-    '    "pages": [',
-    "      {",
-    '        "pageNumber": 1,',
-    '        "title": "generated page title",',
-    '        "summary": "2-3 sentence page summary",',
-    '        "primaryTopic": "topic name from vault.topics",',
-    '        "relatedTopics": ["another topic"],',
-    '        "keywords": ["keyword"],',
-    '        "entities": ["Entity Name"]',
-    "      }",
-    "    ]",
-    "  }",
-    "}",
-    "",
-    "Rules:",
-    '- "markdown" must always be present.',
-    '- Every page must appear exactly once in "vault.pages".',
-    '- Every page must have exactly one "primaryTopic".',
-    '- Every page must have a concise title suitable as a note filename.',
-    '- "primaryTopic" and "relatedTopics" must reference existing topic names.',
-    '- Keep summaries short (2-3 sentences).',
-    "- Do not wrap JSON in markdown code fences.",
-  ].join("\n");
-}
-
-function parseSourcePages(value: unknown, maxPageNumber = Number.MAX_SAFE_INTEGER): number[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return Array.from(
-    new Set(
-      value
-        .map((entry) => (typeof entry === "number" ? Math.floor(entry) : NaN))
-        .filter((entry) => Number.isFinite(entry) && entry > 0 && entry <= maxPageNumber)
-    )
-  ).sort((a, b) => a - b);
-}
-
-function getString(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function getStringArray(value: unknown, maxItems = MAX_OBSIDIAN_KEYWORDS): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const values = value
-    .map((entry) => getString(entry))
-    .filter(Boolean);
-
-  return Array.from(new Set(values)).slice(0, maxItems);
-}
-
-function makeUniqueMarkdownFileName(baseName: string, used: Set<string>): string {
-  const baseSlug = toSlugSegment(baseName);
-  let attempt = `${baseSlug}.md`;
-  let counter = 2;
-  while (used.has(attempt)) {
-    attempt = `${baseSlug}-${counter}.md`;
-    counter += 1;
-  }
-  used.add(attempt);
-  return attempt;
-}
-
-const COMMON_STOP_WORDS = new Set([
-  "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "have", "if", "in",
-  "into", "is", "it", "its", "of", "on", "or", "that", "the", "their", "there", "this", "to",
-  "was", "were", "will", "with", "without", "not", "but", "you", "your", "we", "our", "they",
-  "them", "his", "her", "she", "he", "also", "than", "then", "can", "could", "should", "would",
-  "about", "after", "before", "over", "under", "between", "during", "using", "used", "use",
-  "page", "pages", "document", "section", "table", "figure", "chapter",
-]);
-
-function normalizeWhitespace(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function clipText(value: string, maxLength: number): string {
-  const trimmed = value.trim();
-  if (trimmed.length <= maxLength) {
-    return trimmed;
-  }
-  return `${trimmed.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
-}
-
-function extractKeywordsFromText(text: string, maxItems = MAX_OBSIDIAN_KEYWORDS): string[] {
-  const frequencies = new Map<string, number>();
-  const tokenMatches = text.toLowerCase().match(/[a-z0-9][a-z0-9'-]{2,}/g) || [];
-  for (const token of tokenMatches) {
-    const cleaned = token.replace(/^[-']+|[-']+$/g, "");
-    if (!cleaned || COMMON_STOP_WORDS.has(cleaned)) {
-      continue;
-    }
-    frequencies.set(cleaned, (frequencies.get(cleaned) || 0) + 1);
-  }
-
-  return Array.from(frequencies.entries())
-    .sort((a, b) => {
-      if (b[1] !== a[1]) {
-        return b[1] - a[1];
-      }
-      return a[0].localeCompare(b[0]);
-    })
-    .slice(0, maxItems)
-    .map(([keyword]) => keyword);
-}
-
-function extractEntitiesFromText(text: string, maxItems = MAX_OBSIDIAN_ENTITIES): string[] {
-  const entities = new Set<string>();
-  const matches = text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\b/g) || [];
-  for (const candidate of matches) {
-    const normalized = normalizeWhitespace(candidate);
-    if (!normalized || normalized.length < 3) {
-      continue;
-    }
-    entities.add(normalized);
-    if (entities.size >= maxItems) {
-      break;
-    }
-  }
-  return Array.from(entities);
-}
-
-function buildPageSummary(markdown: string): string {
-  const plain = normalizeWhitespace(
-    markdown
-      .replace(/[`*_>#\-]/g, " ")
-      .replace(/\[[^\]]+\]\([^)]+\)/g, " ")
-      .replace(/\|/g, " ")
-  );
-  if (!plain) {
-    return "No meaningful text extracted from this page.";
-  }
-
-  const sentenceCandidates = plain.match(/[^.!?]+[.!?]?/g) || [plain];
-  const picked: string[] = [];
-  let totalLength = 0;
-  for (const sentence of sentenceCandidates) {
-    const normalized = normalizeWhitespace(sentence);
-    if (!normalized) {
-      continue;
-    }
-    if (picked.length >= 3) {
-      break;
-    }
-    const projected = totalLength + normalized.length + (picked.length > 0 ? 1 : 0);
-    if (projected > MAX_OBSIDIAN_SUMMARY_LENGTH && picked.length > 0) {
-      break;
-    }
-    picked.push(normalized);
-    totalLength = projected;
-  }
-
-  if (picked.length === 0) {
-    return clipText(plain, MAX_OBSIDIAN_SUMMARY_LENGTH);
-  }
-  return clipText(picked.join(" "), MAX_OBSIDIAN_SUMMARY_LENGTH);
-}
-
-function derivePageTitle(input: {
-  pageNumber: number;
-  summary: string;
-  markdown: string;
-  topicName: string;
-  preferredTitle?: string;
-}): string {
-  const normalizeTitleCandidate = (value: string): string => {
-    const cleaned = sanitizeFileSegment(
-      value
-        .replace(/^#+\s*/u, "")
-        .replace(/\[[^\]]+\]\([^)]+\)/g, " ")
-        .replace(/[`*_>#|]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim(),
-      ""
-    );
-    return clipText(cleaned, 90);
-  };
-
-  const preferred = normalizeTitleCandidate(input.preferredTitle || "");
-  if (preferred && !/^page\s+\d+$/iu.test(preferred)) {
-    return preferred;
-  }
-
-  const headingMatch = input.markdown.match(/^\s{0,3}#{1,6}\s+([^\n]+)/m);
-  const fromHeading = normalizeTitleCandidate(headingMatch?.[1] || "");
-  if (fromHeading) {
-    return fromHeading;
-  }
-
-  const sentenceSource = input.summary || input.markdown;
-  const firstSentenceMatch = sentenceSource.match(/[^.!?\n]+[.!?]?/u);
-  const fromSentence = normalizeTitleCandidate(firstSentenceMatch?.[0] || "");
-  if (
-    fromSentence &&
-    !/^no meaningful text extracted/iu.test(fromSentence)
-  ) {
-    return fromSentence;
-  }
-
-  return sanitizeFileSegment(`${input.topicName} Page ${input.pageNumber}`, `Page ${input.pageNumber}`);
-}
-
 function extractStructuredPageEntryMarkdown(
   structured: Record<string, unknown>,
   pageNumber: number
@@ -1061,662 +693,6 @@ function getPageMarkdownForRouting(page: {
   return coerceMarkdownText(directMarkdown || pageEntryMarkdown || fallback, fallback);
 }
 
-function buildPageIntelligence(
-  pages: Array<{
-    pageNumber: number;
-    text: string;
-    structured: Record<string, unknown>;
-  }>
-): ObsidianPageContext[] {
-  return pages
-    .map((page) => {
-      const markdown = getPageMarkdownForRouting(page);
-      const summary = buildPageSummary(markdown);
-      return {
-        pageNumber: page.pageNumber,
-        markdown,
-        summary,
-        keywords: extractKeywordsFromText(`${summary}\n${markdown}`, MAX_OBSIDIAN_KEYWORDS),
-        entities: extractEntitiesFromText(markdown, MAX_OBSIDIAN_ENTITIES),
-      } satisfies ObsidianPageContext;
-    })
-    .sort((a, b) => a.pageNumber - b.pageNumber);
-}
-
-function formatPageRoutingContext(pages: ObsidianPageContext[]): string {
-  return pages
-    .map((page) => {
-      const clippedMarkdown = page.markdown.length > MAX_OBSIDIAN_PAGE_CONTEXT_CHARS
-        ? `${page.markdown.slice(0, MAX_OBSIDIAN_PAGE_CONTEXT_CHARS).trimEnd()}\n[truncated]`
-        : page.markdown;
-      const keywordLine = page.keywords.length ? page.keywords.join(", ") : "none";
-      const entityLine = page.entities.length ? page.entities.join(", ") : "none";
-      return [
-        `[PAGE ${page.pageNumber}]`,
-        `Summary: ${page.summary}`,
-        `Keywords: ${keywordLine}`,
-        `Entities: ${entityLine}`,
-        "Markdown:",
-        clippedMarkdown,
-        `[END PAGE ${page.pageNumber}]`,
-      ].join("\n");
-    })
-    .join("\n\n");
-}
-
-function resolveTopicNameCandidate(candidate: string, availableTopics: string[]): string | null {
-  const normalized = candidate.trim();
-  if (!normalized) {
-    return null;
-  }
-
-  const exactMatch = availableTopics.find(
-    (topicName) => topicName.toLowerCase() === normalized.toLowerCase()
-  );
-  if (exactMatch) {
-    return exactMatch;
-  }
-
-  const candidateSlug = toSlugSegment(normalized);
-  const slugMatch = availableTopics.find((topicName) => toSlugSegment(topicName) === candidateSlug);
-  return slugMatch || null;
-}
-
-function parseTopicNotes(
-  rawValue: unknown,
-  topicName: string,
-  maxPageNumber: number
-): ObsidianTopicNote[] {
-  if (!Array.isArray(rawValue)) {
-    return [];
-  }
-
-  return rawValue
-    .map((note, noteIndex) => {
-      if (!note || typeof note !== "object" || Array.isArray(note)) {
-        return null;
-      }
-      const noteObject = note as Record<string, unknown>;
-      const noteMarkdown = coerceMarkdownText(
-        noteObject.markdown ?? noteObject.text ?? noteObject.content,
-        ""
-      );
-      if (!noteMarkdown.trim()) {
-        return null;
-      }
-      return {
-        title: sanitizeFileSegment(getString(noteObject.title), `${topicName} ${noteIndex + 1}`),
-        markdown: noteMarkdown,
-        sourcePages: parseSourcePages(noteObject.sourcePages, maxPageNumber),
-      } satisfies ObsidianTopicNote;
-    })
-    .filter((note): note is ObsidianTopicNote => Boolean(note));
-}
-
-function scoreTopicForPage(page: ObsidianPageContext, topic: ObsidianTopicPlan): number {
-  const topicText = `${topic.name} ${topic.summary}`.trim();
-  if (!topicText) {
-    return 0;
-  }
-
-  const topicLower = topicText.toLowerCase();
-  const topicKeywords = new Set(extractKeywordsFromText(topicText, MAX_OBSIDIAN_KEYWORDS * 2));
-  let score = 0;
-
-  if (page.summary.toLowerCase().includes(topic.name.toLowerCase())) {
-    score += 6;
-  }
-  if (topic.pageNumbers.includes(page.pageNumber)) {
-    score += 8;
-  }
-  for (const keyword of page.keywords) {
-    if (topicKeywords.has(keyword)) {
-      score += 2;
-    }
-  }
-  for (const entity of page.entities) {
-    if (topicLower.includes(entity.toLowerCase())) {
-      score += 1;
-    }
-  }
-
-  return score;
-}
-
-function buildGeneratedObsidianIndex(topics: ObsidianTopicPlan[], pages: ObsidianPagePlan[]): string {
-  return [
-    "# Topics",
-    "",
-    ...topics.flatMap((topic) => {
-      const assignedPages = pages.filter((page) => page.primaryTopic === topic.name);
-      const section: string[] = [
-        `## ${topic.name}`,
-        topic.summary || "_No summary available._",
-      ];
-      if (assignedPages.length > 0) {
-        section.push("- Pages in topic:");
-        for (const page of assignedPages) {
-          section.push(`  - ${page.title} (page ${page.pageNumber})`);
-        }
-      }
-      section.push("");
-      return section;
-    }),
-  ]
-    .join("\n")
-    .trim();
-}
-
-function normalizeObsidianPlan(
-  rawJson: unknown,
-  fallbackMarkdown: string,
-  fileName: string,
-  vaultNamePrefix: string,
-  pageContexts: ObsidianPageContext[]
-): ObsidianVaultPlan {
-  const fallbackText = fallbackMarkdown.trim();
-  const fallbackVaultName = buildObsidianVaultName(fileName, vaultNamePrefix);
-  const pageNumberSet = new Set(pageContexts.map((page) => page.pageNumber));
-  const maxPageNumber = pageContexts.reduce((max, page) => Math.max(max, page.pageNumber), 0);
-  const rootObject =
-    rawJson && typeof rawJson === "object" && !Array.isArray(rawJson)
-      ? (rawJson as Record<string, unknown>)
-      : {};
-  const pageMarkdownFallback = pageContexts
-    .map((page) => page.markdown.trim())
-    .filter(Boolean)
-    .join(pageContexts.length > 1 ? "\n\n---\n\n" : "\n");
-  const markdown = coerceMarkdownText(rootObject.markdown, fallbackText || pageMarkdownFallback);
-  const vaultObject =
-    rootObject.vault && typeof rootObject.vault === "object" && !Array.isArray(rootObject.vault)
-      ? (rootObject.vault as Record<string, unknown>)
-      : {};
-  const vaultName = sanitizeFileSegment(getString(vaultObject.name), fallbackVaultName);
-  const rawTopics = Array.isArray(vaultObject.topics) ? vaultObject.topics : [];
-  const rawPages = Array.isArray(vaultObject.pages)
-    ? vaultObject.pages
-    : Array.isArray(rootObject.pages)
-      ? rootObject.pages
-      : [];
-
-  const topicMap = new Map<string, ObsidianTopicPlan>();
-  const topicOrder: string[] = [];
-  const upsertTopic = (
-    nameValue: string,
-    summaryValue: string,
-    pageNumbersValue: number[],
-    notesValue: ObsidianTopicNote[]
-  ): string | null => {
-    const sanitizedName = sanitizeFileSegment(nameValue, "Inbox");
-    const key = toSlugSegment(sanitizedName);
-    const existing = topicMap.get(key);
-    if (existing) {
-      if (!existing.summary && summaryValue) {
-        existing.summary = clipText(summaryValue, MAX_OBSIDIAN_SUMMARY_LENGTH);
-      }
-      existing.pageNumbers = Array.from(new Set([...existing.pageNumbers, ...pageNumbersValue]))
-        .filter((pageNumber) => pageNumberSet.has(pageNumber))
-        .sort((a, b) => a - b);
-      existing.notes = [...existing.notes, ...notesValue];
-      return existing.name;
-    }
-    if (topicMap.size >= MAX_OBSIDIAN_TOPICS) {
-      return null;
-    }
-    topicMap.set(key, {
-      name: sanitizedName,
-      summary: clipText(summaryValue, MAX_OBSIDIAN_SUMMARY_LENGTH),
-      pageNumbers: pageNumbersValue,
-      notes: notesValue,
-    });
-    topicOrder.push(key);
-    return sanitizedName;
-  };
-
-  rawTopics.forEach((topic, topicIndex) => {
-      if (!topic || typeof topic !== "object" || Array.isArray(topic)) {
-        return;
-      }
-      const topicObject = topic as Record<string, unknown>;
-      const topicName = getString(topicObject.name) || `Topic ${topicIndex + 1}`;
-      const pageNumbers = parseSourcePages(
-        topicObject.pageNumbers ?? topicObject.sourcePages,
-        maxPageNumber
-      );
-      const noteListRaw = Array.isArray(topicObject.notes)
-        ? topicObject.notes
-        : Array.isArray(topicObject.files)
-          ? topicObject.files
-          : [];
-      const notes = parseTopicNotes(noteListRaw, topicName, maxPageNumber);
-      upsertTopic(topicName, getString(topicObject.summary), pageNumbers, notes);
-    });
-
-  const topics: ObsidianTopicPlan[] = topicOrder
-    .map((key) => topicMap.get(key))
-    .filter((topic): topic is ObsidianTopicPlan => Boolean(topic));
-
-  const ensureTopic = (candidateName: string, fallbackName = "Inbox"): string => {
-    const availableNames = topics.map((topic) => topic.name);
-    const resolved = resolveTopicNameCandidate(candidateName, availableNames);
-    if (resolved) {
-      return resolved;
-    }
-    const sanitized = sanitizeFileSegment(candidateName || fallbackName, fallbackName);
-    const existing = resolveTopicNameCandidate(sanitized, availableNames);
-    if (existing) {
-      return existing;
-    }
-    const createdName = upsertTopic(sanitized, "", [], []);
-    if (!createdName) {
-      return topics[0]?.name || "Inbox";
-    }
-    const createdTopic = topicMap.get(toSlugSegment(createdName));
-    if (createdTopic) {
-      topics.push(createdTopic);
-    }
-    return createdName;
-  };
-
-  const pageOverrideMap = new Map<number, {
-    title: string;
-    summary: string;
-    primaryTopic: string;
-    relatedTopics: string[];
-    keywords: string[];
-    entities: string[];
-    markdown: string;
-  }>();
-
-  for (const rawPage of rawPages) {
-    if (!rawPage || typeof rawPage !== "object" || Array.isArray(rawPage)) {
-      continue;
-    }
-    const typedPage = rawPage as Record<string, unknown>;
-    const pageNumber = typeof typedPage.pageNumber === "number"
-      ? Math.floor(typedPage.pageNumber)
-      : typeof typedPage.page === "number"
-        ? Math.floor(typedPage.page)
-        : NaN;
-    if (!Number.isFinite(pageNumber) || pageNumber <= 0 || !pageNumberSet.has(pageNumber)) {
-      continue;
-    }
-    pageOverrideMap.set(pageNumber, {
-      title: clipText(getString(typedPage.title), 90),
-      summary: clipText(getString(typedPage.summary), MAX_OBSIDIAN_SUMMARY_LENGTH),
-      primaryTopic: getString(typedPage.primaryTopic),
-      relatedTopics: getStringArray(typedPage.relatedTopics, 8),
-      keywords: getStringArray(typedPage.keywords, MAX_OBSIDIAN_KEYWORDS),
-      entities: getStringArray(typedPage.entities, MAX_OBSIDIAN_ENTITIES),
-      markdown: coerceMarkdownText(
-        typedPage.markdown ?? typedPage.text ?? typedPage.content,
-        ""
-      ),
-    });
-  }
-
-  if (topics.length === 0) {
-    upsertTopic("Inbox", "", [], []);
-    const inbox = topicMap.get("inbox");
-    if (inbox) {
-      topics.push(inbox);
-    }
-  }
-
-  const pages: ObsidianPagePlan[] = pageContexts.map((page) => {
-    const override = pageOverrideMap.get(page.pageNumber);
-    const summary = override?.summary || page.summary;
-    const markdownValue = override?.markdown || page.markdown;
-    const keywords = override?.keywords.length ? override.keywords : page.keywords;
-    const entities = override?.entities.length ? override.entities : page.entities;
-
-    let primaryTopic = override?.primaryTopic || "";
-    if (!primaryTopic) {
-      const topicFromPageList = topics.find((topic) => topic.pageNumbers.includes(page.pageNumber));
-      if (topicFromPageList) {
-        primaryTopic = topicFromPageList.name;
-      }
-    }
-    if (!primaryTopic) {
-      let bestTopic = topics[0]?.name || "Inbox";
-      let bestScore = Number.NEGATIVE_INFINITY;
-      const scoringPage: ObsidianPageContext = {
-        pageNumber: page.pageNumber,
-        markdown: markdownValue,
-        summary,
-        keywords,
-        entities,
-      };
-      for (const topic of topics) {
-        const score = scoreTopicForPage(scoringPage, topic);
-        if (score > bestScore) {
-          bestScore = score;
-          bestTopic = topic.name;
-        }
-      }
-      primaryTopic = bestScore > 0 ? bestTopic : "Inbox";
-    }
-    primaryTopic = ensureTopic(primaryTopic, "Inbox");
-
-    const relatedCandidates = [
-      ...(override?.relatedTopics || []),
-      ...topics
-        .filter((topic) => topic.name !== primaryTopic && topic.pageNumbers.includes(page.pageNumber))
-        .map((topic) => topic.name),
-    ];
-    const relatedTopics = Array.from(
-      new Set(
-        relatedCandidates
-          .map((name) => ensureTopic(name, primaryTopic))
-          .filter((name) => name && name !== primaryTopic)
-      )
-    ).slice(0, 6);
-    const title = derivePageTitle({
-      pageNumber: page.pageNumber,
-      summary,
-      markdown: markdownValue,
-      topicName: primaryTopic,
-      preferredTitle: override?.title,
-    });
-
-    return {
-      pageNumber: page.pageNumber,
-      title,
-      markdown: markdownValue.trim(),
-      summary,
-      keywords,
-      entities,
-      primaryTopic,
-      relatedTopics,
-    } satisfies ObsidianPagePlan;
-  });
-
-  const topicPagesMap = new Map<string, Set<number>>();
-  for (const topic of topics) {
-    topicPagesMap.set(topic.name, new Set<number>());
-  }
-  for (const page of pages) {
-    if (!topicPagesMap.has(page.primaryTopic)) {
-      topicPagesMap.set(page.primaryTopic, new Set<number>());
-    }
-    topicPagesMap.get(page.primaryTopic)?.add(page.pageNumber);
-  }
-  for (const topic of topics) {
-    const declaredPages = topic.pageNumbers.filter((pageNumber) => pageNumberSet.has(pageNumber));
-    const assigned = topicPagesMap.get(topic.name) || new Set<number>();
-    for (const pageNumber of declaredPages) {
-      assigned.add(pageNumber);
-    }
-    topic.pageNumbers = Array.from(assigned).sort((a, b) => a - b);
-    topic.summary = clipText(topic.summary, MAX_OBSIDIAN_SUMMARY_LENGTH);
-  }
-
-  const generatedIndex = buildGeneratedObsidianIndex(topics, pages);
-
-  return {
-    planVersion: 2,
-    vaultName,
-    markdown,
-    indexMarkdown: getString(vaultObject.indexMarkdown) || generatedIndex,
-    topics,
-    pages,
-  };
-}
-
-function resolveObsidianRootPath(requestedRoot: string): {
-  requestedRoot: string;
-  containerRoot: string;
-  hostRoot?: string;
-} {
-  const safeBaseDir = path.resolve(OBSIDIAN_EXPORT_BASE_DIR || "/host-vaults");
-  const hostRootRaw = OBSIDIAN_EXPORT_HOST_ROOT.trim();
-  const hostRootAbsolute = hostRootRaw ? path.resolve(hostRootRaw) : "";
-  const trimmedRoot = requestedRoot.trim();
-
-  let containerRoot = safeBaseDir;
-  if (trimmedRoot) {
-    if (path.isAbsolute(trimmedRoot)) {
-      if (
-        hostRootAbsolute &&
-        (trimmedRoot === hostRootAbsolute || trimmedRoot.startsWith(`${hostRootAbsolute}${path.sep}`))
-      ) {
-        const relativeFromHost = path.relative(hostRootAbsolute, trimmedRoot);
-        containerRoot = path.resolve(path.join(safeBaseDir, relativeFromHost));
-      } else if (
-        trimmedRoot === safeBaseDir ||
-        trimmedRoot.startsWith(`${safeBaseDir}${path.sep}`)
-      ) {
-        containerRoot = path.resolve(trimmedRoot);
-      } else {
-        throw new ApiRouteError(
-          `Vault root must be inside ${hostRootAbsolute || safeBaseDir}`,
-          400
-        );
-      }
-    } else {
-      containerRoot = path.resolve(path.join(safeBaseDir, trimmedRoot));
-    }
-  }
-
-  if (
-    containerRoot !== safeBaseDir &&
-    !containerRoot.startsWith(`${safeBaseDir}${path.sep}`)
-  ) {
-    throw new ApiRouteError(`Vault root must be inside ${safeBaseDir}`, 400);
-  }
-
-  const relativeFromBase = path.relative(safeBaseDir, containerRoot);
-  const hostDisplayRoot = hostRootAbsolute
-    ? path.join(hostRootAbsolute, relativeFromBase)
-    : undefined;
-
-  return {
-    requestedRoot: trimmedRoot || safeBaseDir,
-    containerRoot,
-    hostRoot: hostDisplayRoot,
-  };
-}
-
-async function runWithConcurrency<T>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T) => Promise<void>
-): Promise<void> {
-  if (items.length === 0) {
-    return;
-  }
-
-  const maxWorkers = Math.max(1, Math.min(concurrency, items.length));
-  let nextIndex = 0;
-
-  await Promise.all(
-    Array.from({ length: maxWorkers }, async () => {
-      while (nextIndex < items.length) {
-        const currentIndex = nextIndex;
-        nextIndex += 1;
-        await worker(items[currentIndex]);
-      }
-    })
-  );
-}
-
-async function writeObsidianVault(input: {
-  plan: ObsidianVaultPlan;
-  fileName: string;
-  requestedRoot: string;
-}): Promise<{
-  vaultPath: string;
-  hostVaultPath?: string;
-  topicCount: number;
-  noteCount: number;
-  fileCount: number;
-  pageAssignmentCount: number;
-  unassignedPages: number[];
-  topics: Array<{ name: string; summary: string; pageNumbers: number[] }>;
-}> {
-  const serializeYamlStringList = (values: string[]): string =>
-    values.length
-      ? `[${values.map((value) => `"${value.replace(/"/g, '\\"')}"`).join(", ")}]`
-      : "[]";
-
-  const root = resolveObsidianRootPath(input.requestedRoot);
-  const safeBaseDir = path.resolve(OBSIDIAN_EXPORT_BASE_DIR || "/host-vaults");
-  const vaultPath = path.join(root.containerRoot, input.plan.vaultName);
-  const hostVaultPath = root.hostRoot
-    ? path.join(root.hostRoot, input.plan.vaultName)
-    : undefined;
-  const createdDirs: string[] = [];
-  const createdFiles: string[] = [];
-
-  const ensureDir = async (target: string) => {
-    await mkdir(target, { recursive: true });
-    createdDirs.push(target);
-  };
-
-  const writeVaultFile = async (target: string, contents: string) => {
-    await writeFile(target, contents, "utf8");
-    createdFiles.push(target);
-  };
-
-  const ownership = await (async () => {
-    try {
-      const info = await stat(safeBaseDir);
-      if (typeof info.uid === "number" && typeof info.gid === "number") {
-        return { uid: info.uid, gid: info.gid };
-      }
-    } catch {
-      // ignore
-    }
-    return null;
-  })();
-
-  await ensureDir(vaultPath);
-
-  const usedNamesByFolder = new Map<string, Set<string>>();
-  const pagesByTopic = new Map<string, ObsidianPagePlan[]>();
-  for (const topic of input.plan.topics) {
-    pagesByTopic.set(
-      topic.name,
-      input.plan.pages
-        .filter((page) => page.primaryTopic === topic.name)
-        .sort((a, b) => a.pageNumber - b.pageNumber)
-    );
-  }
-
-  let noteCount = 0;
-  let fileCount = 0;
-  const pendingWrites: Array<{ target: string; contents: string }> = [];
-
-  for (const topic of input.plan.topics) {
-    const topicDirName = sanitizeFileSegment(topic.name, "topic");
-    const topicDirPath = path.join(vaultPath, topicDirName);
-    const topicPages = pagesByTopic.get(topic.name) || [];
-    if (topicPages.length === 0) {
-      continue;
-    }
-
-    await ensureDir(topicDirPath);
-    const used = usedNamesByFolder.get(topicDirPath) || new Set<string>();
-    usedNamesByFolder.set(topicDirPath, used);
-
-    for (const page of topicPages) {
-      const fallbackTitle = derivePageTitle({
-        pageNumber: page.pageNumber,
-        summary: page.summary,
-        markdown: page.markdown,
-        topicName: topic.name,
-        preferredTitle: page.title,
-      });
-      const pageFileName = makeUniqueMarkdownFileName(fallbackTitle, used);
-      const pagePath = path.join(topicDirPath, pageFileName);
-      const pageContent = [
-        "---",
-        `title: "${fallbackTitle.replace(/"/g, '\\"')}"`,
-        `source_file: "${input.fileName.replace(/"/g, '\\"')}"`,
-        `page: ${page.pageNumber}`,
-        `topic: "${topic.name.replace(/"/g, '\\"')}"`,
-        `related_topics: ${serializeYamlStringList(page.relatedTopics)}`,
-        `summary: "${clipText(page.summary, MAX_OBSIDIAN_SUMMARY_LENGTH).replace(/"/g, '\\"')}"`,
-        `keywords: ${serializeYamlStringList(page.keywords)}`,
-        `entities: ${serializeYamlStringList(page.entities)}`,
-        "---",
-        "",
-        page.markdown.trim(),
-        "",
-      ].join("\n");
-      pendingWrites.push({
-        target: pagePath,
-        contents: pageContent,
-      });
-      noteCount += 1;
-      fileCount += 1;
-    }
-  }
-
-  await runWithConcurrency(pendingWrites, 8, async (item) => {
-    await writeVaultFile(item.target, item.contents);
-  });
-
-  const unassignedPages = input.plan.pages
-    .filter((page) => !page.primaryTopic || !pagesByTopic.has(page.primaryTopic))
-    .map((page) => page.pageNumber)
-    .sort((a, b) => a - b);
-  const exportedTopics = input.plan.topics
-    .filter((topic) => (pagesByTopic.get(topic.name) || []).length > 0)
-    .map((topic) => ({
-      name: topic.name,
-      summary: topic.summary,
-      pageNumbers: topic.pageNumbers,
-    }));
-
-  let chownApplied = false;
-  if (ownership) {
-    await runWithConcurrency(createdDirs, 16, async (dirPath) => {
-      try {
-        await chown(dirPath, ownership.uid, ownership.gid);
-        chownApplied = true;
-      } catch {
-        // ignore and fallback below
-      }
-    });
-    await runWithConcurrency(createdFiles, 16, async (filePath) => {
-      try {
-        await chown(filePath, ownership.uid, ownership.gid);
-        chownApplied = true;
-      } catch {
-        // ignore and fallback below
-      }
-    });
-  }
-
-  if (!chownApplied) {
-    await runWithConcurrency(createdDirs, 16, async (dirPath) => {
-      try {
-        await chmod(dirPath, 0o777);
-      } catch {
-        // ignore
-      }
-    });
-    await runWithConcurrency(createdFiles, 16, async (filePath) => {
-      try {
-        await chmod(filePath, 0o666);
-      } catch {
-        // ignore
-      }
-    });
-  }
-
-  return {
-    vaultPath,
-    hostVaultPath,
-    topicCount: exportedTopics.length,
-    noteCount,
-    fileCount,
-    pageAssignmentCount: input.plan.pages.length - unassignedPages.length,
-    unassignedPages,
-    topics: exportedTopics,
-  };
-}
 
 function formatPageScopedText(
   pages: Array<{
@@ -3135,11 +2111,9 @@ interface ProcessOcrJobInput {
   model: string;
   ocrModel: string;
   provider: "ollama" | "mistral" | "openrouter";
-  mode: OcrRunMode;
   settings: ApiProviderSettings;
   settingsPayload: AdvancedSettings;
   postProcessingPayload: PostProcessingSettings;
-  obsidianPayload: ObsidianSettings;
   inputPreviews: string[];
   prompt: string;
   initialPageOutputs?: ProcessedPageOutput[];
@@ -3193,7 +2167,6 @@ function toPageResultPayload(page: ProcessedPageOutput) {
 }
 
 async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<void> {
-  const isObsidianMode = input.mode === "pdf_to_obsidian";
   const startedAtIso = new Date(input.startedAtMs).toISOString();
   const pageOutputs: ProcessedPageOutput[] = input.initialPageOutputs ? [...input.initialPageOutputs] : [];
   const startIndex = Math.max(0, Math.min(input.startIndex ?? 0, input.inputPreviews.length));
@@ -3252,11 +2225,6 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
           model: selectedPostProcessModel,
         }
       : {}),
-  };
-  let obsidianMeta: ObsidianExportMetadata = {
-    enabled: isObsidianMode,
-    requestedRoot: input.obsidianPayload.vaultRoot,
-    containerRoot: OBSIDIAN_EXPORT_BASE_DIR,
   };
 
   let latestMetadata = buildProgressMetadata({
@@ -3468,21 +2436,12 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       throw new ApiRouteError("OCR returned no text", 502);
     }
 
-    const pageIntelligence = buildPageIntelligence(
-      pageOutputs.map((page) => ({
-        pageNumber: page.pageNumber,
-        text: page.text,
-        structured: page.structured,
-      }))
-    );
     const pageScopedText = formatPageScopedText(pageOutputs);
     const extractedMetadata: Record<string, unknown> = {
-      mode: input.mode,
       ocrModel: input.ocrModel,
       inferenceModel: input.model,
       pageCount: input.inputPreviews.length,
       pageResults: partialPageResults,
-      pageIntelligence,
     };
     let finalMarkdown = extractedMarkdown;
     let postProcessedJson: unknown = undefined;
@@ -3525,10 +2484,8 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       const postProcessRequestText = [
         userPrompt,
         "",
-        isObsidianMode
-          ? "OCR page intelligence and page markdown grouped by page:"
-          : "OCR source text grouped by page:",
-        isObsidianMode ? formatPageRoutingContext(pageIntelligence) : pageScopedText,
+        "OCR source text grouped by page:",
+        pageScopedText,
       ].join("\n");
 
       try {
@@ -3606,86 +2563,6 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       };
     }
 
-    if (isObsidianMode) {
-      progressEvents = appendProgressEvent(
-        progressEvents,
-        "exporting",
-        "Generating Obsidian vault structure"
-      );
-      latestMetadata = buildProgressMetadata({
-        stage: "exporting",
-        message: "Preparing Obsidian vault export",
-        progressPct: 96,
-        pageCount: input.inputPreviews.length,
-        processedPages: pageOutputs.length,
-        currentPage: null,
-        etaSeconds: 2,
-        startedAt: startedAtIso,
-        events: progressEvents,
-        checkpoints,
-        postProcessing: postProcessingMeta,
-      });
-      await db.ocrJob.update({
-        where: { id: input.jobId },
-        data: {
-          metadata: toJsonValue(latestMetadata),
-        },
-      });
-
-      const parsedObsidianJson =
-        postProcessedJson !== undefined
-          ? postProcessedJson
-          : postProcessedText
-            ? parseJsonCandidate(postProcessedText)
-            : null;
-      const plan = normalizeObsidianPlan(
-        parsedObsidianJson,
-        finalMarkdown || extractedMarkdown,
-        input.fileName,
-        input.obsidianPayload.vaultNamePrefix,
-        pageIntelligence
-      );
-      if (plan.markdown.trim()) {
-        finalMarkdown = plan.markdown.trim();
-      }
-
-      const exportOutput = await writeObsidianVault({
-        plan,
-        fileName: input.fileName,
-        requestedRoot: input.obsidianPayload.vaultRoot,
-      });
-
-      obsidianMeta = {
-        enabled: true,
-        requestedRoot: input.obsidianPayload.vaultRoot,
-        containerRoot: path.dirname(exportOutput.vaultPath),
-        hostRoot: exportOutput.hostVaultPath
-          ? path.dirname(exportOutput.hostVaultPath)
-          : undefined,
-        vaultName: path.basename(exportOutput.vaultPath),
-        vaultPath: exportOutput.hostVaultPath || exportOutput.vaultPath,
-        topicCount: exportOutput.topicCount,
-        noteCount: exportOutput.noteCount,
-        fileCount: exportOutput.fileCount,
-        planVersion: plan.planVersion,
-        pageAssignmentCount: exportOutput.pageAssignmentCount,
-        unassignedPages: exportOutput.unassignedPages,
-        topics: exportOutput.topics,
-        pages: plan.pages.map((page) => ({
-          pageNumber: page.pageNumber,
-          title: page.title,
-          summary: page.summary,
-          primaryTopic: page.primaryTopic,
-          relatedTopics: page.relatedTopics,
-        })),
-      };
-      extractedMetadata.obsidian = obsidianMeta;
-    } else {
-      extractedMetadata.obsidian = {
-        enabled: false,
-      };
-    }
-
     const result = buildJsonResult(
       input.fileName,
       input.model,
@@ -3709,7 +2586,6 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
                     },
             }
           : {}),
-        obsidian: obsidianMeta,
       },
       extractedMetadata
     );
@@ -3954,25 +2830,8 @@ export async function POST(request: NextRequest) {
         ? [preview]
         : [];
     const settingsPayload = sanitizeSettings(body.settings);
-    const mode = parseRunMode(body.mode);
-    const obsidianPayload = sanitizeObsidianSettings(body.obsidian);
-    let postProcessingPayload = sanitizePostProcessing(body.postProcessing);
+    const postProcessingPayload = sanitizePostProcessing(body.postProcessing);
     const settings = normalizeApiSettings(storedSettings);
-    const effectiveObsidianPayload: ObsidianSettings = {
-      ...obsidianPayload,
-      enabled: mode === "pdf_to_obsidian",
-      vaultRoot:
-        obsidianPayload.vaultRoot.trim() || settings.obsidianBaseDir || OBSIDIAN_EXPORT_BASE_DIR,
-    };
-    if (mode === "pdf_to_obsidian") {
-      const obsidianModel = effectiveObsidianPayload.model || postProcessingPayload.model || model;
-      postProcessingPayload = {
-        enabled: true,
-        instruction: buildObsidianPostProcessingInstruction(effectiveObsidianPayload.instruction),
-        outputFormat: "json",
-        model: obsidianModel,
-      };
-    }
 
     if (!model) {
       throw new ApiRouteError("Model is required", 400);
@@ -4028,10 +2887,7 @@ export async function POST(request: NextRequest) {
 
       const resumeMetadata = buildProgressMetadata({
         stage: "queued",
-        message:
-          mode === "pdf_to_obsidian"
-            ? `Resume requested for PDF→Obsidian from page ${startIndex + 1}/${inputPreviews.length}`
-            : `Resume requested from page ${startIndex + 1}/${inputPreviews.length}`,
+        message: `Resume requested from page ${startIndex + 1}/${inputPreviews.length}`,
         progressPct:
           postProcessingPayload.enabled
             ? (startIndex / inputPreviews.length) * 85
@@ -4087,8 +2943,6 @@ export async function POST(request: NextRequest) {
           settingsSnapshot: toJsonValue({
             settings: settingsPayload,
             postProcessing: postProcessingPayload,
-            mode,
-            obsidian: effectiveObsidianPayload,
           }),
           prompt,
           metadata: toJsonValue(resumeMetadata),
@@ -4104,11 +2958,9 @@ export async function POST(request: NextRequest) {
           model,
           ocrModel,
           provider,
-          mode,
           settings,
           settingsPayload,
           postProcessingPayload,
-          obsidianPayload: effectiveObsidianPayload,
           inputPreviews,
           prompt,
           initialPageOutputs,
@@ -4132,7 +2984,7 @@ export async function POST(request: NextRequest) {
 
     const initialMetadata = buildProgressMetadata({
       stage: "queued",
-      message: mode === "pdf_to_obsidian" ? "Queued for PDF→Obsidian" : "Queued for OCR",
+      message: "Queued for OCR",
       progressPct: 0,
       pageCount: inputPreviews.length,
       processedPages: 0,
@@ -4191,8 +3043,6 @@ export async function POST(request: NextRequest) {
         settingsSnapshot: toJsonValue({
           settings: settingsPayload,
           postProcessing: postProcessingPayload,
-          mode,
-          obsidian: effectiveObsidianPayload,
         }),
         prompt,
         metadata: toJsonValue(initialMetadata),
@@ -4207,11 +3057,9 @@ export async function POST(request: NextRequest) {
         model,
         ocrModel,
         provider,
-        mode,
         settings,
         settingsPayload,
         postProcessingPayload,
-        obsidianPayload: effectiveObsidianPayload,
         inputPreviews,
         prompt,
       })

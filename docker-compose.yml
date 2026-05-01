@@ -9,8 +9,6 @@ services:
     environment:
       APP_NETWORK_MODE: ${APP_NETWORK_MODE:-host}
       AUTH_SECRET: ${AUTH_SECRET:-}
-      OBSIDIAN_EXPORT_BASE_DIR: ${OBSIDIAN_EXPORT_BASE_DIR:-/host-vaults}
-      OBSIDIAN_EXPORT_HOST_ROOT: ${OBSIDIAN_EXPORT_HOST_ROOT:-./obsidian-vaults}
     extra_hosts:
       - "host.docker.internal:host-gateway"
       - "host-gateway:host-gateway"
@@ -18,7 +16,6 @@ services:
       - "3000:3000"
     volumes:
       - sqlite_data:/app/data
-      - ${OBSIDIAN_EXPORT_HOST_ROOT:-./obsidian-vaults}:${OBSIDIAN_EXPORT_BASE_DIR:-/host-vaults}
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "bun -e \"const res = await fetch('http://127.0.0.1:3000/api/health'); process.exit(res.ok ? 0 : 1)\""]

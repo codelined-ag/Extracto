@@ -121,7 +121,6 @@ interface ApiSettings {
   apiEndpoint: string;
   apiKey: string;
   hasApiKey?: boolean;
-  obsidianBaseDir: string;
 }
 
 interface AdvancedSettings {
@@ -139,16 +138,6 @@ interface PostProcessingSettings {
   enabled: boolean;
   instruction: string;
   outputFormat: PostProcessOutputFormat;
-  model: string;
-}
-
-type OcrRunMode = "ocr" | "pdf_to_obsidian";
-
-interface ObsidianSettings {
-  vaultRoot: string;
-  vaultNamePrefix: string;
-  instruction: string;
-  includePageNotes: boolean;
   model: string;
 }
 
@@ -203,9 +192,6 @@ const MODEL_SELECTIONS_STORAGE_KEY = "extracto:model-selections:v1";
 const POST_PROCESS_MODEL_SELECTIONS_STORAGE_KEY =
   "extracto:post-process-model-selections:v1";
 const UI_LANGUAGE_STORAGE_KEY = "extracto:ui-language:v1";
-const OCR_RUN_MODE_STORAGE_KEY = "extracto:ocr-run-mode:v1";
-const OBSIDIAN_SETTINGS_STORAGE_KEY = "extracto:obsidian-settings:v1";
-const DEFAULT_OBSIDIAN_VAULT_ROOT = "/host-vaults";
 
 function normalizeProvider(provider?: string): ProviderKind {
   const v = provider?.trim().toLowerCase().split(":")[0];
@@ -240,7 +226,6 @@ const DEFAULT_API_SETTINGS: ApiSettings = {
   apiEndpoint: DEFAULT_OLLAMA_ENDPOINT,
   apiKey: "",
   hasApiKey: false,
-  obsidianBaseDir: DEFAULT_OBSIDIAN_VAULT_ROOT,
 };
 
 // Fallback list before first model fetch (Ollama only; Mistral is dynamic).
@@ -321,234 +306,6 @@ function writeProviderModelSelections(
   }
 }
 
-function readObsidianSettings(): ObsidianSettings {
-  if (typeof window === "undefined") {
-    return {
-      vaultRoot: DEFAULT_OBSIDIAN_VAULT_ROOT,
-      vaultNamePrefix: "",
-      instruction: "",
-      includePageNotes: true,
-      model: "",
-    };
-  }
-
-  try {
-    const raw = window.localStorage.getItem(OBSIDIAN_SETTINGS_STORAGE_KEY);
-    if (!raw) {
-      return {
-        vaultRoot: DEFAULT_OBSIDIAN_VAULT_ROOT,
-        vaultNamePrefix: "",
-        instruction: "",
-        includePageNotes: true,
-        model: "",
-      };
-    }
-
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {
-        vaultRoot: DEFAULT_OBSIDIAN_VAULT_ROOT,
-        vaultNamePrefix: "",
-        instruction: "",
-        includePageNotes: true,
-        model: "",
-      };
-    }
-
-    const typed = parsed as Record<string, unknown>;
-    return {
-      vaultRoot:
-        typeof typed.vaultRoot === "string" && typed.vaultRoot.trim()
-          ? typed.vaultRoot.trim()
-          : DEFAULT_OBSIDIAN_VAULT_ROOT,
-      vaultNamePrefix: typeof typed.vaultNamePrefix === "string" ? typed.vaultNamePrefix.trim() : "",
-      instruction: typeof typed.instruction === "string" ? typed.instruction : "",
-      includePageNotes:
-        typeof typed.includePageNotes === "boolean" ? typed.includePageNotes : true,
-      model: typeof typed.model === "string" ? typed.model.trim() : "",
-    };
-  } catch {
-    return {
-      vaultRoot: DEFAULT_OBSIDIAN_VAULT_ROOT,
-      vaultNamePrefix: "",
-      instruction: "",
-      includePageNotes: true,
-      model: "",
-    };
-  }
-}
-
-function writeObsidianSettings(settings: ObsidianSettings): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(
-      OBSIDIAN_SETTINGS_STORAGE_KEY,
-      JSON.stringify({
-        vaultRoot: settings.vaultRoot,
-        vaultNamePrefix: settings.vaultNamePrefix,
-        instruction: settings.instruction,
-        includePageNotes: settings.includePageNotes,
-        model: settings.model,
-      })
-    );
-  } catch {
-    // ignore storage errors
-  }
-}
-
-function getObsidianMetadata(payload: unknown): Record<string, unknown> {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return {};
-  }
-
-  const typed = payload as Record<string, unknown>;
-  if (
-    typed.structured &&
-    typeof typed.structured === "object" &&
-    !Array.isArray(typed.structured)
-  ) {
-    const structured = typed.structured as Record<string, unknown>;
-    if (
-      structured.obsidian &&
-      typeof structured.obsidian === "object" &&
-      !Array.isArray(structured.obsidian)
-    ) {
-      return structured.obsidian as Record<string, unknown>;
-    }
-  }
-
-  if (
-    typed.metadata &&
-    typeof typed.metadata === "object" &&
-    !Array.isArray(typed.metadata)
-  ) {
-    const metadata = typed.metadata as Record<string, unknown>;
-    if (
-      metadata.obsidian &&
-      typeof metadata.obsidian === "object" &&
-      !Array.isArray(metadata.obsidian)
-    ) {
-      return metadata.obsidian as Record<string, unknown>;
-    }
-  }
-
-  return {};
-}
-
-function getLastPathSegment(value: string): string {
-  const normalized = value.replace(/\\/g, "/").replace(/\/+$/g, "").trim();
-  if (!normalized) {
-    return "";
-  }
-  const segments = normalized.split("/").filter(Boolean);
-  return segments[segments.length - 1] || "";
-}
-
-function normalizePathCandidate(value: string): string {
-  return value.replace(/\\/g, "/").replace(/\/+$/g, "").trim();
-}
-
-function isAbsoluteFsPath(value: string): boolean {
-  const normalized = normalizePathCandidate(value);
-  return normalized.startsWith("/") || /^[a-zA-Z]:\//.test(normalized) || normalized.startsWith("//");
-}
-
-function joinFsPath(base: string, suffix: string): string {
-  const normalizedBase = normalizePathCandidate(base);
-  const normalizedSuffix = normalizePathCandidate(suffix).replace(/^\/+/g, "");
-  if (!normalizedBase) {
-    return normalizedSuffix;
-  }
-  if (!normalizedSuffix) {
-    return normalizedBase;
-  }
-  return `${normalizedBase}/${normalizedSuffix}`;
-}
-
-function buildObsidianOpenUriCandidates(input: {
-  vaultPath?: string;
-  vaultName?: string;
-  hostRoot?: string;
-  requestedRoot?: string;
-  fallbackRoot?: string;
-}): string[] {
-  const hostLikePathCandidates: string[] = [];
-  const containerLikePathCandidates: string[] = [];
-  const isContainerLikePath = (candidate: string): boolean =>
-    candidate.startsWith("/host-vaults") || candidate.startsWith("/app/");
-
-  const addAbsolutePath = (candidate: string) => {
-    const normalized = normalizePathCandidate(candidate);
-    if (!normalized || !isAbsoluteFsPath(normalized)) {
-      return;
-    }
-    if (isContainerLikePath(normalized)) {
-      containerLikePathCandidates.push(normalized);
-      return;
-    }
-    hostLikePathCandidates.push(normalized);
-  };
-  const addJoinedPath = (rootCandidate: string, pathCandidate: string) => {
-    const rootNormalized = normalizePathCandidate(rootCandidate);
-    if (!rootNormalized || !isAbsoluteFsPath(rootNormalized)) {
-      return;
-    }
-    const pathNormalized = normalizePathCandidate(pathCandidate);
-    if (!pathNormalized) {
-      return;
-    }
-    addAbsolutePath(joinFsPath(rootNormalized, pathNormalized));
-  };
-
-  const normalizedVaultPath = normalizePathCandidate(input.vaultPath || "");
-  const normalizedVaultName = normalizePathCandidate(input.vaultName || "");
-  const normalizedHostRoot = normalizePathCandidate(input.hostRoot || "");
-  const normalizedRequestedRoot = normalizePathCandidate(input.requestedRoot || "");
-  const normalizedFallbackRoot = normalizePathCandidate(input.fallbackRoot || "");
-
-  if (normalizedVaultPath) {
-    addAbsolutePath(normalizedVaultPath);
-  }
-
-  for (const rootCandidate of [normalizedHostRoot, normalizedRequestedRoot, normalizedFallbackRoot]) {
-    if (!rootCandidate) {
-      continue;
-    }
-    if (normalizedVaultPath && !isAbsoluteFsPath(normalizedVaultPath)) {
-      addJoinedPath(rootCandidate, normalizedVaultPath);
-    }
-    if (normalizedVaultName) {
-      addJoinedPath(rootCandidate, normalizedVaultName);
-    }
-  }
-
-  const uriCandidates = hostLikePathCandidates.map(
-    (candidate) => `obsidian://open?path=${encodeURIComponent(candidate)}`
-  );
-  if (normalizedVaultName) {
-    uriCandidates.push(`obsidian://open?vault=${encodeURIComponent(normalizedVaultName)}`);
-  } else {
-    const fallbackName = getLastPathSegment(normalizedVaultPath);
-    if (fallbackName) {
-      uriCandidates.push(`obsidian://open?vault=${encodeURIComponent(fallbackName)}`);
-    }
-  }
-
-  uriCandidates.push(
-    ...containerLikePathCandidates.map(
-      (candidate) => `obsidian://open?path=${encodeURIComponent(candidate)}`
-    )
-  );
-
-  if (normalizedVaultPath && !isAbsoluteFsPath(normalizedVaultPath)) {
-    uriCandidates.push(`obsidian://open?path=${encodeURIComponent(normalizedVaultPath)}`);
-  }
-
-  return Array.from(new Set(uriCandidates));
-}
 
 // Utility functions
 const formatFileSize = (bytes: number): string => {
@@ -930,7 +687,6 @@ export default function ExtractoPage() {
   const [isDragOver, setIsDragOver] = React.useState(false);
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [uiLanguage, setUiLanguage] = React.useState<UiLanguage>("it");
-  const [runMode, setRunMode] = React.useState<OcrRunMode>("ocr");
   const [selectedFileId, setSelectedFileId] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState<"md" | "json" | null>(null);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = React.useState(true);
@@ -968,13 +724,6 @@ export default function ExtractoPage() {
     outputFormat: "markdown",
     model: "",
   });
-  const [obsidianSettings, setObsidianSettings] = React.useState<ObsidianSettings>({
-    vaultRoot: DEFAULT_OBSIDIAN_VAULT_ROOT,
-    vaultNamePrefix: "",
-    instruction: "",
-    includePageNotes: true,
-    model: "",
-  });
 
   const selectedFile = files.find((f) => f.id === selectedFileId);
   const selectedFileMarkdown = selectedFile?.result
@@ -983,38 +732,12 @@ export default function ExtractoPage() {
   const selectedFileStructuredJson = selectedFile?.result
     ? getStructuredJsonPayload(selectedFile.result.json)
     : {};
-  const selectedFileObsidian = selectedFile?.result
-    ? getObsidianMetadata(selectedFile.result.json)
-    : {};
-  const selectedFileObsidianPath =
-    typeof selectedFileObsidian.vaultPath === "string" ? selectedFileObsidian.vaultPath : "";
-  const selectedFileObsidianVaultName =
-    typeof selectedFileObsidian.vaultName === "string" ? selectedFileObsidian.vaultName : "";
-  const selectedFileObsidianHostRoot =
-    typeof selectedFileObsidian.hostRoot === "string" ? selectedFileObsidian.hostRoot : "";
-  const selectedFileObsidianRequestedRoot =
-    typeof selectedFileObsidian.requestedRoot === "string" ? selectedFileObsidian.requestedRoot : "";
   const selectedHistoryMarkdown = selectedHistoryJob
     ? getMarkdownFromJsonPayload(selectedHistoryJob.result, selectedHistoryJob.extractedText || "")
     : "";
   const selectedHistoryStructuredJson = selectedHistoryJob
     ? getStructuredJsonPayload(selectedHistoryJob.result)
     : {};
-  const selectedHistoryObsidian = selectedHistoryJob
-    ? getObsidianMetadata(selectedHistoryJob.result)
-    : {};
-  const selectedHistoryObsidianPath =
-    typeof selectedHistoryObsidian.vaultPath === "string"
-      ? selectedHistoryObsidian.vaultPath
-      : "";
-  const selectedHistoryObsidianVaultName =
-    typeof selectedHistoryObsidian.vaultName === "string" ? selectedHistoryObsidian.vaultName : "";
-  const selectedHistoryObsidianHostRoot =
-    typeof selectedHistoryObsidian.hostRoot === "string" ? selectedHistoryObsidian.hostRoot : "";
-  const selectedHistoryObsidianRequestedRoot =
-    typeof selectedHistoryObsidian.requestedRoot === "string"
-      ? selectedHistoryObsidian.requestedRoot
-      : "";
   const completedCount = files.filter((f) => f.status === "completed").length;
   const canExportZip = Boolean(completedCount > 0 || selectedFile?.status === "completed");
   const errorCount = files.filter((f) => f.status === "error").length;
@@ -1023,15 +746,10 @@ export default function ExtractoPage() {
   const resumableSelectedFile = selectedFile?.status === "paused" ? selectedFile : null;
   const isPostProcessingReady =
     !postProcessing.enabled || postProcessing.instruction.trim().length > 0;
-  const isObsidianReady = runMode !== "pdf_to_obsidian" || obsidianSettings.vaultRoot.trim().length > 0;
-  const isRunReady = runMode === "pdf_to_obsidian" ? isObsidianReady : isPostProcessingReady;
+  const isRunReady = isPostProcessingReady;
   const postProcessModelValue = postProcessing.model || "__same__";
-  const obsidianModelValue = obsidianSettings.model || "__same__";
   const selectedPostProcessModelExists = postProcessing.model
     ? models.some((model) => model.id === postProcessing.model)
-    : true;
-  const selectedObsidianModelExists = obsidianSettings.model
-    ? models.some((model) => model.id === obsidianSettings.model)
     : true;
   const t = React.useCallback(
     (it: string, en: string, fr?: string, es?: string, de?: string) => {
@@ -1069,71 +787,6 @@ export default function ExtractoPage() {
     },
     []
   );
-
-  const openVaultInObsidian = React.useCallback(
-    (metadata: {
-      vaultPath?: string;
-      vaultName?: string;
-      hostRoot?: string;
-      requestedRoot?: string;
-    }) => {
-      const candidates = buildObsidianOpenUriCandidates({
-        vaultPath: metadata.vaultPath,
-        vaultName: metadata.vaultName,
-        hostRoot: metadata.hostRoot,
-        requestedRoot: metadata.requestedRoot,
-        fallbackRoot: apiSettings.obsidianBaseDir,
-      });
-      if (candidates.length === 0) {
-        toast({
-          title: t("Vault non disponibile", "Vault not available", "Vault indisponible", "Vault no disponible", "Vault nicht verfügbar"),
-          description: t(
-            "Percorso vault Obsidian non valido o non assoluto.",
-            "Obsidian vault path is invalid or not absolute."
-          ),
-          variant: "destructive",
-        });
-        return;
-      }
-
-      window.location.href = candidates[0];
-      toast({
-        title: t("Apertura in Obsidian...", "Opening in Obsidian...", "Ouverture dans Obsidian...", "Abriendo en Obsidian...", "Wird in Obsidian geöffnet..."),
-        description: metadata.vaultPath || metadata.vaultName || "",
-      });
-    },
-    [apiSettings.obsidianBaseDir, t, toast]
-  );
-
-  const openSelectedVaultInObsidian = React.useCallback(() => {
-    openVaultInObsidian({
-      vaultPath: selectedFileObsidianPath,
-      vaultName: selectedFileObsidianVaultName,
-      hostRoot: selectedFileObsidianHostRoot,
-      requestedRoot: selectedFileObsidianRequestedRoot,
-    });
-  }, [
-    openVaultInObsidian,
-    selectedFileObsidianHostRoot,
-    selectedFileObsidianPath,
-    selectedFileObsidianRequestedRoot,
-    selectedFileObsidianVaultName,
-  ]);
-
-  const openSelectedHistoryVaultInObsidian = React.useCallback(() => {
-    openVaultInObsidian({
-      vaultPath: selectedHistoryObsidianPath,
-      vaultName: selectedHistoryObsidianVaultName,
-      hostRoot: selectedHistoryObsidianHostRoot,
-      requestedRoot: selectedHistoryObsidianRequestedRoot,
-    });
-  }, [
-    openVaultInObsidian,
-    selectedHistoryObsidianHostRoot,
-    selectedHistoryObsidianPath,
-    selectedHistoryObsidianRequestedRoot,
-    selectedHistoryObsidianVaultName,
-  ]);
 
   const persistProviderSelection = React.useCallback(
     (storageKey: string, provider: ProviderKind, value: string) => {
@@ -1276,24 +929,15 @@ export default function ExtractoPage() {
         apiEndpoint: values.apiEndpoint?.trim() || defaultEndpointForProvider(provider),
         apiKey: "",
         hasApiKey: values.hasApiKey === true,
-        obsidianBaseDir: values.obsidianBaseDir?.trim() || DEFAULT_OBSIDIAN_VAULT_ROOT,
       };
       setApiSettings(normalizedSettings);
       setApiSettingsDraft(normalizedSettings);
       setApiKeyDirty(false);
-      setObsidianSettings((prev) => ({
-        ...prev,
-        vaultRoot: normalizedSettings.obsidianBaseDir,
-      }));
       await fetchAvailableModels(normalizedSettings);
     } catch (error) {
       setApiSettings(DEFAULT_API_SETTINGS);
       setApiSettingsDraft(DEFAULT_API_SETTINGS);
       setApiKeyDirty(false);
-      setObsidianSettings((prev) => ({
-        ...prev,
-        vaultRoot: DEFAULT_API_SETTINGS.obsidianBaseDir,
-      }));
       await fetchAvailableModels(DEFAULT_API_SETTINGS);
       toast({
         title: t("Caricamento impostazioni non riuscito", "Settings load failed", "Échec du chargement des paramètres", "Error al cargar configuración", "Einstellungen laden fehlgeschlagen"),
@@ -1332,16 +976,11 @@ export default function ExtractoPage() {
         apiEndpoint: saved.apiEndpoint?.trim() || defaultEndpointForProvider(provider),
         apiKey: "",
         hasApiKey: saved.hasApiKey === true,
-        obsidianBaseDir: saved.obsidianBaseDir?.trim() || DEFAULT_OBSIDIAN_VAULT_ROOT,
       };
 
       setApiSettings(normalizedSettings);
       setApiSettingsDraft(normalizedSettings);
       setApiKeyDirty(false);
-      setObsidianSettings((prev) => ({
-        ...prev,
-        vaultRoot: normalizedSettings.obsidianBaseDir,
-      }));
       setApiSettingsOpen(false);
       await fetchAvailableModels(normalizedSettings);
       toast({
@@ -1478,16 +1117,10 @@ export default function ExtractoPage() {
       if (isUiLanguage(storedLanguage)) {
         setUiLanguage(storedLanguage);
       }
-
-      const storedRunMode = window.localStorage.getItem(OCR_RUN_MODE_STORAGE_KEY);
-      if (storedRunMode === "ocr" || storedRunMode === "pdf_to_obsidian") {
-        setRunMode(storedRunMode);
-      }
     } catch {
       // ignore storage errors
     }
 
-    setObsidianSettings(readObsidianSettings());
     modelSelectionsRef.current = readProviderModelSelections(MODEL_SELECTIONS_STORAGE_KEY);
     postProcessModelSelectionsRef.current = readProviderModelSelections(
       POST_PROCESS_MODEL_SELECTIONS_STORAGE_KEY
@@ -1502,18 +1135,6 @@ export default function ExtractoPage() {
       // ignore storage errors
     }
   }, [uiLanguage]);
-
-  React.useEffect(() => {
-    try {
-      window.localStorage.setItem(OCR_RUN_MODE_STORAGE_KEY, runMode);
-    } catch {
-      // ignore storage errors
-    }
-  }, [runMode]);
-
-  React.useEffect(() => {
-    writeObsidianSettings(obsidianSettings);
-  }, [obsidianSettings]);
 
   React.useEffect(() => {
     void loadSavedSettings();
@@ -1944,19 +1565,10 @@ export default function ExtractoPage() {
         resume,
         fileName: file.name,
         model: selectedModel,
-        mode: runMode,
         preview: pagePreviews[0],
         pages: pagePreviews,
         settings,
         postProcessing,
-        obsidian: {
-          enabled: runMode === "pdf_to_obsidian",
-          vaultRoot: obsidianSettings.vaultRoot,
-          vaultNamePrefix: obsidianSettings.vaultNamePrefix,
-          instruction: obsidianSettings.instruction,
-          includePageNotes: obsidianSettings.includePageNotes,
-          model: obsidianSettings.model,
-        },
       }),
     });
 
@@ -1988,12 +1600,7 @@ export default function ExtractoPage() {
       stage: resume ? "resuming" : "queued",
       stageMessage: resume
         ? t("Ripresa dal checkpoint...", "Resuming from checkpoint...", "Reprise depuis le checkpoint...", "Reanudando desde checkpoint...", "Wird vom Checkpoint fortgesetzt...")
-        : runMode === "pdf_to_obsidian"
-          ? t(
-              `In coda per PDF→Obsidian (${pagePreviews.length} pagine)`,
-              `Queued for PDF→Obsidian (${pagePreviews.length} pages)`
-            )
-          : t(`In coda per OCR (${pagePreviews.length} pagine)`, `Queued for OCR (${pagePreviews.length} pages)`),
+        : t(`In coda per OCR (${pagePreviews.length} pagine)`, `Queued for OCR (${pagePreviews.length} pages)`),
       pageCount: pagePreviews.length,
       processedPages: entry.processedPages || 0,
       etaSeconds: null,
@@ -2024,14 +1631,6 @@ export default function ExtractoPage() {
       return;
     }
     if (!isRunReady) {
-      if (runMode === "pdf_to_obsidian") {
-        toast({
-          title: t("Percorso vault mancante", "Missing vault root path", "Chemin racine du vault manquant", "Falta la ruta raíz del vault", "Vault-Stammpfad fehlt"),
-          description: t("Imposta il percorso root dove creare i vault Obsidian.", "Set the root path where Obsidian vaults should be created.", "Définissez le chemin racine où créer les vaults Obsidian.", "Define la ruta raíz donde se crearán los vaults de Obsidian.", "Root-Pfad festlegen, an dem Obsidian-Vaults erstellt werden."),
-          variant: "destructive",
-        });
-        return;
-      }
       toast({
         title: t("Istruzione post-processing mancante", "Missing post-processing instruction", "Instruction de post-traitement manquante", "Falta instrucción de post-procesamiento", "Anweisung für Nachverarbeitung fehlt"),
         description: t("Aggiungi un'istruzione o disattiva il post-processing prima di avviare l'OCR.", "Add an instruction or disable post-processing before running OCR.", "Ajoutez une instruction ou désactivez le post-traitement avant de lancer l'OCR.", "Añade una instrucción o desactiva el post-procesamiento antes de iniciar OCR.", "Anweisung hinzufügen oder Nachverarbeitung deaktivieren, bevor OCR gestartet wird."),
@@ -2049,17 +1648,6 @@ export default function ExtractoPage() {
         const result = await processSingleFile(file, false);
         if (result.status === "completed") {
           completedInRun += 1;
-          if (runMode === "pdf_to_obsidian" && result.json) {
-            const obsidian = getObsidianMetadata(result.json);
-            const vaultPath =
-              typeof obsidian.vaultPath === "string" ? obsidian.vaultPath : "";
-            if (vaultPath) {
-              toast({
-                title: t("Vault Obsidian creato", "Obsidian vault created", "Vault Obsidian créé", "Vault Obsidian creado", "Obsidian-Vault erstellt"),
-                description: vaultPath,
-              });
-            }
-          }
         } else if (result.status === "paused") {
           toast({
             title: t("OCR in pausa", "OCR paused", "OCR en pause", "OCR en pausa", "OCR pausiert"),
@@ -2380,28 +1968,6 @@ export default function ExtractoPage() {
                 </p>
               ) : null}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="obsidian-base-dir">
-                {t("Directory base Obsidian", "Obsidian base directory", "Répertoire de base Obsidian", "Directorio base de Obsidian", "Obsidian-Basisverzeichnis")}
-              </Label>
-              <Input
-                id="obsidian-base-dir"
-                value={apiSettingsDraft.obsidianBaseDir}
-                onChange={(event) =>
-                  setApiSettingsDraft((prev) => ({
-                    ...prev,
-                    obsidianBaseDir: event.target.value,
-                  }))
-                }
-                placeholder={DEFAULT_OBSIDIAN_VAULT_ROOT}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                {t(
-                  "Root usata per creare i nuovi vault in modalità PDF → Obsidian.",
-                  "Root used to create new vaults in PDF → Obsidian mode."
-                )}
-              </p>
-            </div>
             <Separator />
             <div className="space-y-2">
               <Label>{t("Account", "Account", "Compte", "Cuenta", "Konto")}</Label>
@@ -2559,11 +2125,6 @@ export default function ExtractoPage() {
                       <p className="text-xs text-muted-foreground">
                         {t("Creato", "Created", "Créé", "Creado", "Erstellt")}: {formatTimestamp(selectedHistoryJob.createdAt)}
                       </p>
-                      {selectedHistoryObsidianPath ? (
-                        <p className="text-xs text-muted-foreground break-all">
-                          {t("Vault Obsidian", "Obsidian vault", "Vault Obsidian", "Vault Obsidian", "Obsidian-Vault")}: {selectedHistoryObsidianPath}
-                        </p>
-                      ) : null}
                     </div>
 
                     <div className="grid xl:grid-cols-[240px_minmax(0,1fr)] flex-1 min-h-0 min-w-0">
@@ -2628,15 +2189,6 @@ export default function ExtractoPage() {
           </div>
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={openSelectedHistoryVaultInObsidian}
-              disabled={!selectedHistoryObsidianPath && !selectedHistoryObsidianVaultName}
-              className="group"
-            >
-              <FolderOpen className="h-4 w-4 mr-1.5 text-violet-400 transition-transform duration-200 group-hover:scale-110" />
-              {t("Apri in Obsidian", "Open in Obsidian", "Ouvrir dans Obsidian", "Abrir en Obsidian", "In Obsidian öffnen")}
-            </Button>
             <Button
               variant="outline"
               onClick={() => downloadHistoryResult("md")}
@@ -2900,19 +2452,12 @@ export default function ExtractoPage() {
                     {isProcessing ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        {runMode === "pdf_to_obsidian"
-                          ? t("Elaborazione PDF→Obsidian...", "Running PDF→Obsidian...", "Traitement PDF→Obsidian...", "Procesando PDF→Obsidian...", "PDF→Obsidian läuft...")
-                          : t("Elaborazione...", "Processing...", "Traitement...", "Procesando...", "Verarbeitung läuft...")}
+                        {t("Elaborazione...", "Processing...", "Traitement...", "Procesando...", "Verarbeitung läuft...")}
                       </>
                     ) : (
                       <>
                         <Zap className="h-4 w-4 mr-2 text-amber-300 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6" />
-                        {runMode === "pdf_to_obsidian"
-                          ? t(
-                              `Avvia PDF→Obsidian (${pendingCount} in attesa)`,
-                              `Run PDF→Obsidian (${pendingCount} pending)`
-                            )
-                          : t(`Avvia OCR (${pendingCount} in attesa)`, `Run OCR (${pendingCount} pending)`)}
+                        {t(`Avvia OCR (${pendingCount} in attesa)`, `Run OCR (${pendingCount} pending)`)}
                       </>
                     )}
                   </Button>
@@ -2961,23 +2506,6 @@ export default function ExtractoPage() {
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <CardContent className="pt-0 px-3 pb-3 space-y-4">
-                    <div className="space-y-2">
-                      <Label className="text-xs">{t("Modalità", "Mode", "Mode", "Modo", "Modus")}</Label>
-                      <Select value={runMode} onValueChange={(value) => setRunMode(value as OcrRunMode)}>
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ocr" className="text-xs">
-                            {t("OCR standard", "Standard OCR", "OCR standard", "OCR estándar", "Standard-OCR")}
-                          </SelectItem>
-                          <SelectItem value="pdf_to_obsidian" className="text-xs">
-                            {t("PDF → Obsidian", "PDF → Obsidian", "PDF → Obsidian", "PDF → Obsidian", "PDF → Obsidian")}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
                     {/* Language Selection */}
                     <div className="space-y-2">
                       <Label className="text-xs flex items-center gap-1.5">
@@ -3058,115 +2586,7 @@ export default function ExtractoPage() {
 
                     <Separator />
 
-                    {runMode === "pdf_to_obsidian" ? (
-                      <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-                        <div className="flex items-start gap-2">
-                          <FolderOpen className="h-4 w-4 mt-0.5 text-violet-400" />
-                          <p className="text-[11px] text-muted-foreground">
-                            {t(
-                              "In questa modalità il post-processing è obbligatorio e genera automaticamente una struttura Obsidian per argomenti.",
-                              "In this mode post-processing is mandatory and automatically generates an Obsidian topic-based structure."
-                            )}
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs">{t("Percorso root vault", "Vault root path", "Chemin racine du vault", "Ruta raíz del vault", "Vault-Stammpfad")}</Label>
-                          <Input
-                            value={obsidianSettings.vaultRoot}
-                            onChange={(event) =>
-                              setObsidianSettings((prev) => ({
-                                ...prev,
-                                vaultRoot: event.target.value,
-                              }))
-                            }
-                            placeholder={DEFAULT_OBSIDIAN_VAULT_ROOT}
-                            className="h-8 text-xs"
-                          />
-                          <p className="text-[10px] text-muted-foreground">
-                            {t(
-                              "Percorso host o percorso montato nel container dove creare nuovi vault.",
-                              "Host path or container-mounted path where new vaults will be created."
-                            )}
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs">{t("Prefisso nome vault (opzionale)", "Vault name prefix (optional)", "Préfixe du nom du vault (facultatif)", "Prefijo del nombre del vault (opcional)", "Vault-Namenspräfix (optional)")}</Label>
-                          <Input
-                            value={obsidianSettings.vaultNamePrefix}
-                            onChange={(event) =>
-                              setObsidianSettings((prev) => ({
-                                ...prev,
-                                vaultNamePrefix: event.target.value,
-                              }))
-                            }
-                            placeholder="project-notes"
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs">{t("Istruzione organizzazione (opzionale)", "Organization instruction (optional)", "Instruction d'organisation (facultative)", "Instrucción de organización (opcional)", "Organisationsanweisung (optional)")}</Label>
-                          <Textarea
-                            placeholder={t(
-                              "Esempio: crea cartelle per cliente, fatture, scadenze e una nota riepilogo con task.",
-                              "Example: create folders for client, invoices, deadlines, and a summary note with tasks."
-                            )}
-                            value={obsidianSettings.instruction}
-                            onChange={(event) =>
-                              setObsidianSettings((prev) => ({
-                                ...prev,
-                                instruction: event.target.value,
-                              }))
-                            }
-                            className="h-20 text-xs resize-none"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs">{t("Modello analisi Obsidian", "Obsidian analysis model", "Modèle d'analyse Obsidian", "Modelo de análisis Obsidian", "Obsidian-Analysemodell")}</Label>
-                          <Select
-                            value={obsidianModelValue}
-                            onValueChange={(value) =>
-                              setObsidianSettings((prev) => ({
-                                ...prev,
-                                model: value === "__same__" ? "" : value,
-                              }))
-                            }
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__same__" className="text-xs">
-                                {t(`Uguale al modello OCR (${selectedModel})`, `Same as OCR model (${selectedModel})`)}
-                              </SelectItem>
-                              {!selectedObsidianModelExists && obsidianSettings.model ? (
-                                <SelectItem value={obsidianSettings.model} className="text-xs">
-                                  {obsidianSettings.model}
-                                </SelectItem>
-                              ) : null}
-                              {models.map((model) => (
-                                <SelectItem key={`obsidian-model-${model.id}`} value={model.id} className="text-xs">
-                                  {model.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs">{t("Includi note per pagina", "Include per-page notes", "Inclure les notes par page", "Incluir notas por página", "Notizen pro Seite einschließen")}</Label>
-                          <Switch
-                            checked={obsidianSettings.includePageNotes}
-                            onCheckedChange={(checked) =>
-                              setObsidianSettings((prev) => ({
-                                ...prev,
-                                includePageNotes: checked,
-                              }))
-                            }
-                            className="data-[state=checked]:bg-primary"
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
+                    <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
                             <Label className="text-xs">{t("Post-processing", "Post-processing", "Post-traitement", "Post-procesamiento", "Nachverarbeitung")}</Label>
@@ -3254,7 +2674,6 @@ export default function ExtractoPage() {
                           </div>
                         ) : null}
                       </div>
-                    )}
                   </CardContent>
                 </CollapsibleContent>
               </Card>
@@ -3283,12 +2702,6 @@ export default function ExtractoPage() {
                               {t("Completato", "Completed", "Terminé", "Completado", "Abgeschlossen")}
                             </Badge>
                           )}
-                          {selectedFile.status === "completed" && selectedFileObsidianPath ? (
-                            <Badge variant="secondary" className="text-[10px] max-w-[280px] truncate">
-                              <FolderOpen className="h-3 w-3 mr-1 text-violet-400" />
-                              {selectedFileObsidianPath}
-                            </Badge>
-                          ) : null}
                           {selectedFile.status === "paused" && (
                             <Badge variant="outline" className="text-xs">
                               <PauseCircle className="h-3 w-3 mr-1 text-amber-500" />
@@ -3345,21 +2758,6 @@ export default function ExtractoPage() {
                           >
                             <Download className="h-3.5 w-3.5 text-emerald-400 transition-transform duration-200 group-hover:-translate-y-0.5" />
                           </Button>
-                          {selectedFile.status === "completed" &&
-                          (selectedFileObsidianPath || selectedFileObsidianVaultName) ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 group gap-1.5"
-                              onClick={openSelectedVaultInObsidian}
-                              title={t("Apri in Obsidian", "Open in Obsidian", "Ouvrir dans Obsidian", "Abrir en Obsidian", "In Obsidian öffnen")}
-                            >
-                              <FolderOpen className="h-3.5 w-3.5 text-violet-400 transition-transform duration-200 group-hover:scale-110" />
-                              <span className="text-[11px]">
-                                {t("Apri in Obsidian", "Open in Obsidian", "Ouvrir dans Obsidian", "Abrir en Obsidian", "In Obsidian öffnen")}
-                              </span>
-                            </Button>
-                          ) : null}
                         </>
                       )}
                     </div>

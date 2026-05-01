@@ -22,7 +22,6 @@ const DEFAULT_OPENROUTER_API_ENDPOINT = normalizeHostEndpoint(
 );
 const SHOULD_PRESERVE_LOCALHOST =
   (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase() === "host";
-const DEFAULT_OBSIDIAN_BASE_DIR = (process.env.OBSIDIAN_EXPORT_BASE_DIR || "/host-vaults").trim();
 const FALLBACK_OLLAMA_HOST = resolveOllamaHostEndpoint(
   DEFAULT_OLLAMA_HOST,
   "http://127.0.0.1:11434"
@@ -139,7 +138,6 @@ export interface ApiProviderSettings {
   provider: string;
   apiEndpoint: string;
   apiKey: string;
-  obsidianBaseDir: string;
 }
 
 interface SaveApiSettingsInput extends Partial<ApiProviderSettings> {
@@ -150,7 +148,6 @@ const DEFAULT_API_SETTINGS: ApiProviderSettings = {
   provider: "ollama",
   apiEndpoint: normalizeApiEndpoint(DEFAULT_OLLAMA_HOST, "ollama"),
   apiKey: "",
-  obsidianBaseDir: DEFAULT_OBSIDIAN_BASE_DIR,
 };
 
 const SETTINGS_DIR = path.join(DATA_ROOT, "api-settings");
@@ -170,7 +167,6 @@ const normalizeSettings = (settings: Partial<ApiProviderSettings>): ApiProviderS
     provider,
     apiEndpoint: safeEndpoint,
     apiKey: settings.apiKey?.trim() || "",
-    obsidianBaseDir: settings.obsidianBaseDir?.trim() || DEFAULT_OBSIDIAN_BASE_DIR,
   };
 };
 
@@ -187,7 +183,6 @@ function cloneSettings(settings: ApiProviderSettings): ApiProviderSettings {
     provider: settings.provider,
     apiEndpoint: settings.apiEndpoint,
     apiKey: settings.apiKey,
-    obsidianBaseDir: settings.obsidianBaseDir,
   };
 }
 
@@ -196,7 +191,6 @@ export function toClientApiSettings(settings: ApiProviderSettings): ApiProviderS
     provider: settings.provider,
     apiEndpoint: settings.apiEndpoint,
     apiKey: "",
-    obsidianBaseDir: settings.obsidianBaseDir,
     hasApiKey: Boolean(settings.apiKey.trim()),
   };
 }

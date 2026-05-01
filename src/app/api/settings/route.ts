@@ -39,7 +39,6 @@ export async function POST(request: NextRequest) {
     apiEndpoint: string;
     apiKey: string;
     replaceApiKey: boolean;
-    obsidianBaseDir: string;
   }>;
 
   try {
@@ -48,7 +47,6 @@ export async function POST(request: NextRequest) {
       apiEndpoint: body.apiEndpoint?.trim(),
       apiKey: body.apiKey,
       replaceApiKey: body.replaceApiKey === true,
-      obsidianBaseDir: body.obsidianBaseDir?.trim(),
     });
 
     return NextResponse.json(toClientApiSettings(updated));

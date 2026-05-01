@@ -2,7 +2,7 @@
 
 Extracto is a self-hosted OCR web app with a proper backend, persistent settings, authentication, OCR history, and Docker-first operations.
 
-It supports three model providers — Ollama on your host machine, the Mistral OCR API, and OpenRouter (any vision-capable model in their catalog) — plus multi-page PDF extraction, optional AI post-processing, and a `PDF → Obsidian` mode that creates vaults automatically.
+It supports three model providers — Ollama on your host machine, the Mistral OCR API, and OpenRouter (any vision-capable model in their catalog) — plus multi-page PDF extraction and optional AI post-processing.
 
 ## Why Extracto
 
@@ -32,11 +32,6 @@ It supports three model providers — Ollama on your host machine, the Mistral O
   - Custom instruction input.
   - Output mode: `Markdown` or structured `JSON`.
   - Runs after OCR extraction.
-- `PDF → Obsidian` mode:
-  - Forces a full-document analysis step after OCR.
-  - Produces topic-organized notes/folders.
-  - Writes a new Obsidian vault to a host-mounted directory.
-  - Stores vault path metadata in job history/results.
 - Past OCR runs modal:
   - Run list with status.
   - Detail view.
@@ -108,8 +103,6 @@ Important variables:
 - `OPENROUTER_REFERER` / `OPENROUTER_TITLE`: sent as `HTTP-Referer` / `X-Title`
   for OpenRouter analytics.
 - `OPENROUTER_MODELS`: optional comma-separated fallback model list.
-- `OBSIDIAN_EXPORT_BASE_DIR`: container path where vault exports are written.
-- `OBSIDIAN_EXPORT_HOST_ROOT`: host path bind-mounted to `OBSIDIAN_EXPORT_BASE_DIR`.
 - `OLLAMA_ALLOWED_HOSTS` / `MISTRAL_ALLOWED_HOSTS` / `OPENROUTER_ALLOWED_HOSTS`:
   optional comma-separated allowlists for provider endpoints. User-submitted
   endpoints are validated against these patterns; defaults cover localhost,

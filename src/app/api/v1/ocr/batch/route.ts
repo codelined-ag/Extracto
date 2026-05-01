@@ -10,10 +10,8 @@ interface BatchFile {
   preview: string;
   pages?: string[];
   model: string;
-  mode?: string;
   priority?: number;
   postProcessing?: unknown;
-  obsidian?: unknown;
   settings?: unknown;
 }
 
@@ -44,16 +42,13 @@ function parseBatchBody(raw: unknown): BatchFile[] | { error: string } {
       typeof f.priority === "number" && Number.isFinite(f.priority)
         ? Math.max(-10, Math.min(10, Math.trunc(f.priority)))
         : 0;
-    const mode = typeof f.mode === "string" ? f.mode : "ocr";
     parsed.push({
       fileName,
       preview,
       pages,
       model,
-      mode,
       priority,
       postProcessing: f.postProcessing,
-      obsidian: f.obsidian,
       settings: f.settings,
     });
   }
@@ -101,11 +96,9 @@ export async function POST(request: NextRequest) {
           preview: file.preview,
           pages: file.pages,
           model: file.model,
-          mode: file.mode,
           priority: file.priority,
           batchId,
           postProcessing: file.postProcessing,
-          obsidian: file.obsidian,
           settings: file.settings,
         }),
       });
