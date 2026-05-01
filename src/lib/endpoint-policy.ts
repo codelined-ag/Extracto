@@ -2,6 +2,14 @@ import { normalizeHostEndpoint } from "@/lib/host-normalization";
 
 export type ProviderKind = "ollama" | "mistral" | "openrouter" | "openai_compat";
 
+export function normalizeProvider(raw?: string): ProviderKind {
+  const v = raw?.trim().toLowerCase().split(":")[0];
+  if (v === "mistral") return "mistral";
+  if (v === "openrouter") return "openrouter";
+  if (v === "openai_compat") return "openai_compat";
+  return "ollama";
+}
+
 const DEFAULT_OLLAMA_HOST_PATTERNS = [
   "localhost",
   "127.0.0.1",

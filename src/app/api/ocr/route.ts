@@ -10,7 +10,7 @@ import {
 } from "@/lib/result-store";
 import { dispatchJobWebhooks } from "@/lib/webhooks";
 import { db } from "@/lib/db";
-import { enforceProviderEndpointPolicy, ProviderKind } from "@/lib/endpoint-policy";
+import { enforceProviderEndpointPolicy, normalizeProvider, ProviderKind } from "@/lib/endpoint-policy";
 import {
   clearOcrJobRunning,
   clearOcrJobStop,
@@ -322,13 +322,6 @@ function getOllamaCandidatesForOcr(endpoint: string): string[] {
   return Array.from(new Set(candidates));
 }
 
-function parseProviderHint(rawProvider: string | undefined): ProviderKind {
-  const value = rawProvider?.trim().toLowerCase().split(":")[0] || "ollama";
-  if (value === "mistral") return "mistral";
-  if (value === "openrouter") return "openrouter";
-  if (value === "openai_compat") return "openai_compat";
-  return "ollama";
-}
 
 function normalizePreviewForHistory(preview: string): string | null {
   const trimmed = preview.trim();
@@ -342,7 +335,7 @@ function normalizePreviewForHistory(preview: string): string | null {
 }
 
 function normalizeApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
-  const provider = parseProviderHint(raw.provider);
+  const provider = normalizeProvider(raw.provider);
   let normalizedEndpoint: string;
   if (provider === "mistral") {
     normalizedEndpoint = normalizeMistralOcrEndpoint(raw.apiEndpoint || DEFAULT_MISTRAL_API_URL);
@@ -1252,7 +1245,7 @@ function resolveProvider(model: string, settings: ApiProviderSettings): Provider
   if (!normalizedModel) {
     throw new ApiRouteError("Model is required", 400);
   }
-  return parseProviderHint(settings.provider);
+  return normalizeProvider(settings.provider);
 }
 
 async function runOllamaOcr(
@@ -3018,7 +3011,7 @@ export async function GET(request: NextRequest) {
 
     const storedSettings = normalizeApiSettings(await getApiSettings(userId));
     const query = new URL(request.url).searchParams;
-    const provider = parseProviderHint(query.get("provider") || undefined);
+    const provider = normalizeProvider(query.get("provider") || undefined);
     const catalog = await getModelCatalog(storedSettings);
 
     if (provider === "ollama") {

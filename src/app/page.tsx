@@ -68,7 +68,7 @@ import {
 } from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
-import { type ProviderKind } from "@/lib/endpoint-policy";
+import { normalizeProvider, type ProviderKind } from "@/lib/endpoint-policy";
 import { type AdvancedSettings } from "@/lib/ocr/settings";
 import ReactMarkdown from "react-markdown";
 
@@ -185,13 +185,7 @@ const POST_PROCESS_MODEL_SELECTIONS_STORAGE_KEY =
   "extracto:post-process-model-selections:v1";
 const UI_LANGUAGE_STORAGE_KEY = "extracto:ui-language:v1";
 
-function normalizeProvider(provider?: string): ProviderKind {
-  const v = provider?.trim().toLowerCase().split(":")[0];
-  if (v === "mistral") return "mistral";
-  if (v === "openrouter") return "openrouter";
-  if (v === "openai_compat") return "openai_compat";
-  return "ollama";
-}
+
 
 function defaultEndpointForProvider(provider: ProviderKind): string {
   if (provider === "mistral") return DEFAULT_MISTRAL_ENDPOINT;
