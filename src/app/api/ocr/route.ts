@@ -451,7 +451,16 @@ function buildMistralOcrEndpointCandidates(rawEndpoint: string): string[] {
   const withProcess = withoutProcess.endsWith("/ocr")
     ? `${withoutProcess}/process`
     : `${withoutProcess}/ocr/process`;
-  return Array.from(new Set([withoutProcess, withProcess]));
+  const candidates = Array.from(new Set([withoutProcess, withProcess]));
+  return candidates
+    .map((candidate) => {
+      try {
+        return enforceProviderEndpointPolicy("mistral", candidate, DEFAULT_MISTRAL_API_URL);
+      } catch {
+        return "";
+      }
+    })
+    .filter(Boolean);
 }
 
 function sanitizeSettings(raw: Partial<AdvancedSettings> | undefined): AdvancedSettings {
@@ -2087,8 +2096,7 @@ async function getOllamaModels(
   const errors: string[] = [];
   const candidates = getOllamaCandidatesForOcr(endpoint);
 
-  for (const rawCandidate of candidates) {
-    const host = normalizeOllamaApiBase(rawCandidate);
+  for (const host of candidates) {
     for (const path of OLLAMA_DISCOVERY_PATHS) {
       try {
         const response = await fetchWithTimeout(`${host}${path}`, {
@@ -2656,8 +2664,10 @@ async function runMistralPostProcessing(
     throw new ApiRouteError("MISTRAL_API_KEY is not configured", 500);
   }
 
-  const endpoint = buildMistralChatEndpoint(
-    apiEndpoint.trim() || DEFAULT_MISTRAL_API_URL
+  const endpoint = enforceProviderEndpointPolicy(
+    "mistral",
+    buildMistralChatEndpoint(apiEndpoint.trim() || DEFAULT_MISTRAL_API_URL),
+    DEFAULT_MISTRAL_API_URL
   );
   const response = await fetchWithTimeout(endpoint, {
     method: "POST",

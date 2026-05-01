@@ -9,7 +9,6 @@ const PUBLIC_PATHS = [
   "/api/health",
   "/manifest.webmanifest",
   "/sw.js",
-  "/favicon.ico",
   "/extracto-favicon.svg",
   "/extracto-icon.svg",
   "/extracto-maskable.svg",

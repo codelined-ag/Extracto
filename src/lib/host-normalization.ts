@@ -101,10 +101,17 @@ function parseCustomHostFallbacks(): string[] {
     return [];
   }
 
-  return configured
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const entry of configured.split(",")) {
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
 }
 
 function shouldUseDockerFallbacks(rawEndpoint: string, fallbackHost: string): boolean {
