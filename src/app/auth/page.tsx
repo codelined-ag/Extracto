@@ -28,8 +28,14 @@ interface SessionResponse {
   authenticated?: boolean;
 }
 
-type UiLanguage = "it" | "en";
+type UiLanguage = "it" | "en" | "fr" | "es" | "de";
 const UI_LANGUAGE_STORAGE_KEY = "extracto:ui-language:v1";
+
+const UI_LANGUAGES: UiLanguage[] = ["it", "en", "fr", "es", "de"];
+
+function isUiLanguage(value: unknown): value is UiLanguage {
+  return typeof value === "string" && (UI_LANGUAGES as string[]).includes(value);
+}
 
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -48,14 +54,27 @@ export default function AuthPage() {
   });
   const [authChecked, setAuthChecked] = React.useState(false);
   const t = React.useCallback(
-    (it: string, en: string) => (uiLanguage === "it" ? it : en),
+    (it: string, en: string, fr?: string, es?: string, de?: string) => {
+      switch (uiLanguage) {
+        case "it":
+          return it;
+        case "fr":
+          return fr ?? en;
+        case "es":
+          return es ?? en;
+        case "de":
+          return de ?? en;
+        default:
+          return en;
+      }
+    },
     [uiLanguage]
   );
 
   React.useEffect(() => {
     try {
       const storedLanguage = window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
-      if (storedLanguage === "it" || storedLanguage === "en") {
+      if (isUiLanguage(storedLanguage)) {
         setUiLanguage(storedLanguage);
       }
     } catch {

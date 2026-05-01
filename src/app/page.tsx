@@ -172,7 +172,29 @@ interface HistoryJobDetail extends HistoryJobSummary {
 
 type ProviderKind = "ollama" | "mistral" | "openrouter";
 type ProviderModelSelections = Partial<Record<ProviderKind, string>>;
-type UiLanguage = "it" | "en";
+type UiLanguage = "it" | "en" | "fr" | "es" | "de";
+
+const UI_LANGUAGES: UiLanguage[] = ["it", "en", "fr", "es", "de"];
+
+const UI_LANGUAGE_FLAGS: Record<UiLanguage, string> = {
+  it: "🇮🇹",
+  en: "🇬🇧",
+  fr: "🇫🇷",
+  es: "🇪🇸",
+  de: "🇩🇪",
+};
+
+const UI_LANGUAGE_LABELS: Record<UiLanguage, string> = {
+  it: "IT",
+  en: "EN",
+  fr: "FR",
+  es: "ES",
+  de: "DE",
+};
+
+function isUiLanguage(value: unknown): value is UiLanguage {
+  return typeof value === "string" && (UI_LANGUAGES as string[]).includes(value);
+}
 
 const DEFAULT_OLLAMA_ENDPOINT = "http://localhost:11434";
 const DEFAULT_MISTRAL_ENDPOINT = "https://api.mistral.ai/v1/ocr";
@@ -232,18 +254,22 @@ function getFallbackModelsForProvider(provider: ProviderKind): Model[] {
   return provider === "ollama" ? OLLAMA_FALLBACK_MODELS : [];
 }
 
-// Languages
-const LANGUAGES = [
-  { code: "auto", nameIt: "Rilevamento automatico", nameEn: "Auto Detect" },
-  { code: "en", nameIt: "Inglese", nameEn: "English" },
-  { code: "es", nameIt: "Spagnolo", nameEn: "Spanish" },
-  { code: "fr", nameIt: "Francese", nameEn: "French" },
-  { code: "de", nameIt: "Tedesco", nameEn: "German" },
-  { code: "zh", nameIt: "Cinese", nameEn: "Chinese" },
-  { code: "ja", nameIt: "Giapponese", nameEn: "Japanese" },
-  { code: "ko", nameIt: "Coreano", nameEn: "Korean" },
-  { code: "pt", nameIt: "Portoghese", nameEn: "Portuguese" },
-  { code: "it", nameIt: "Italiano", nameEn: "Italian" },
+// Languages (OCR-detectable; not the UI language)
+interface OcrLanguageEntry {
+  code: string;
+  names: Record<UiLanguage, string>;
+}
+const LANGUAGES: OcrLanguageEntry[] = [
+  { code: "auto", names: { it: "Rilevamento automatico", en: "Auto Detect", fr: "Détection auto", es: "Detección auto", de: "Automatisch" } },
+  { code: "en", names: { it: "Inglese", en: "English", fr: "Anglais", es: "Inglés", de: "Englisch" } },
+  { code: "es", names: { it: "Spagnolo", en: "Spanish", fr: "Espagnol", es: "Español", de: "Spanisch" } },
+  { code: "fr", names: { it: "Francese", en: "French", fr: "Français", es: "Francés", de: "Französisch" } },
+  { code: "de", names: { it: "Tedesco", en: "German", fr: "Allemand", es: "Alemán", de: "Deutsch" } },
+  { code: "zh", names: { it: "Cinese", en: "Chinese", fr: "Chinois", es: "Chino", de: "Chinesisch" } },
+  { code: "ja", names: { it: "Giapponese", en: "Japanese", fr: "Japonais", es: "Japonés", de: "Japanisch" } },
+  { code: "ko", names: { it: "Coreano", en: "Korean", fr: "Coréen", es: "Coreano", de: "Koreanisch" } },
+  { code: "pt", names: { it: "Portoghese", en: "Portuguese", fr: "Portugais", es: "Portugués", de: "Portugiesisch" } },
+  { code: "it", names: { it: "Italiano", en: "Italian", fr: "Italien", es: "Italiano", de: "Italienisch" } },
 ];
 
 function readProviderModelSelections(storageKey: string): ProviderModelSelections {
@@ -1008,7 +1034,20 @@ export default function ExtractoPage() {
     ? models.some((model) => model.id === obsidianSettings.model)
     : true;
   const t = React.useCallback(
-    (it: string, en: string) => (uiLanguage === "it" ? it : en),
+    (it: string, en: string, fr?: string, es?: string, de?: string) => {
+      switch (uiLanguage) {
+        case "it":
+          return it;
+        case "fr":
+          return fr ?? en;
+        case "es":
+          return es ?? en;
+        case "de":
+          return de ?? en;
+        default:
+          return en;
+      }
+    },
     [uiLanguage]
   );
   const updateFileById = React.useCallback(
@@ -1208,7 +1247,7 @@ export default function ExtractoPage() {
           return nextValue;
         });
         toast({
-          title: t("Recupero modelli non riuscito", "Model fetch failed"),
+          title: t("Recupero modelli non riuscito", "Model fetch failed", "Échec de récupération des modèles", "Error al obtener modelos", "Modelle laden fehlgeschlagen"),
           description: message,
           variant: "destructive",
         });
@@ -1257,7 +1296,7 @@ export default function ExtractoPage() {
       }));
       await fetchAvailableModels(DEFAULT_API_SETTINGS);
       toast({
-        title: t("Caricamento impostazioni non riuscito", "Settings load failed"),
+        title: t("Caricamento impostazioni non riuscito", "Settings load failed", "Échec du chargement des paramètres", "Error al cargar configuración", "Einstellungen laden fehlgeschlagen"),
         description:
           error instanceof Error
             ? error.message
@@ -1306,12 +1345,12 @@ export default function ExtractoPage() {
       setApiSettingsOpen(false);
       await fetchAvailableModels(normalizedSettings);
       toast({
-        title: t("Impostazioni salvate", "Settings saved"),
+        title: t("Impostazioni salvate", "Settings saved", "Paramètres enregistrés", "Configuración guardada", "Einstellungen gespeichert"),
         description: t("Configurazione API aggiornata", "API configuration has been updated"),
       });
     } catch (error) {
       toast({
-        title: t("Salvataggio non riuscito", "Save failed"),
+        title: t("Salvataggio non riuscito", "Save failed", "Échec de l'enregistrement", "Error al guardar", "Speichern fehlgeschlagen"),
         description: error instanceof Error ? error.message : t("Impossibile salvare le impostazioni API", "Unable to save API settings"),
         variant: "destructive",
       });
@@ -1340,7 +1379,7 @@ export default function ExtractoPage() {
       }
     } catch (error) {
       toast({
-        title: t("Caricamento cronologia non riuscito", "History load failed"),
+        title: t("Caricamento cronologia non riuscito", "History load failed", "Échec du chargement de l'historique", "Error al cargar historial", "Verlauf laden fehlgeschlagen"),
         description: error instanceof Error ? error.message : t("Impossibile caricare la cronologia OCR", "Unable to load OCR history"),
         variant: "destructive",
       });
@@ -1398,7 +1437,7 @@ export default function ExtractoPage() {
       });
     } catch (error) {
       toast({
-        title: t("Eliminazione non riuscita", "Delete failed"),
+        title: t("Eliminazione non riuscita", "Delete failed", "Échec de la suppression", "Error al eliminar", "Löschen fehlgeschlagen"),
         description: error instanceof Error ? error.message : t("Impossibile eliminare l'esecuzione OCR", "Unable to delete OCR run"),
         variant: "destructive",
       });
@@ -1436,7 +1475,7 @@ export default function ExtractoPage() {
   React.useEffect(() => {
     try {
       const storedLanguage = window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
-      if (storedLanguage === "it" || storedLanguage === "en") {
+      if (isUiLanguage(storedLanguage)) {
         setUiLanguage(storedLanguage);
       }
 
@@ -1586,7 +1625,7 @@ export default function ExtractoPage() {
     }
 
     toast({
-      title: t("File aggiunti", "Files added"),
+      title: t("File aggiunti", "Files added", "Fichiers ajoutés", "Archivos añadidos", "Dateien hinzugefügt"),
       description: t(`${newFiles.length} file pronti per l'OCR`, `${newFiles.length} file(s) ready for OCR processing`),
     });
   };
@@ -1637,7 +1676,7 @@ export default function ExtractoPage() {
     setTimeout(() => setCopied(null), 2000);
 
     toast({
-      title: t("Copiato negli appunti", "Copied to clipboard!"),
+      title: t("Copiato negli appunti", "Copied to clipboard!", "Copié dans le presse-papiers !", "¡Copiado al portapapeles!", "In Zwischenablage kopiert!"),
       description: t(`Contenuto ${type === "md" ? "Markdown" : "JSON"} copiato`, `${type === "md" ? "Markdown" : "JSON"} content has been copied`),
     });
   };
@@ -1658,7 +1697,7 @@ export default function ExtractoPage() {
     URL.revokeObjectURL(url);
 
     toast({
-      title: t("Download avviato", "Download started"),
+      title: t("Download avviato", "Download started", "Téléchargement démarré", "Descarga iniciada", "Download gestartet"),
       description: t(`${selectedFile.name}.${type === "md" ? "md" : "json"} in download`, `${selectedFile.name}.${type === "md" ? "md" : "json"} is being downloaded`),
     });
   };
@@ -1701,7 +1740,7 @@ export default function ExtractoPage() {
     URL.revokeObjectURL(url);
 
     toast({
-      title: t("Esportazione completata", "Export complete!"),
+      title: t("Esportazione completata", "Export complete!", "Exportation terminée !", "¡Exportación completada!", "Export abgeschlossen!"),
       description: t(`${completedFiles.length} file esportati in ZIP`, `${completedFiles.length} files exported to ZIP archive`),
     });
   };
@@ -1864,7 +1903,7 @@ export default function ExtractoPage() {
               : entry.result,
           error:
             job.status === "FAILED"
-              ? job.errorMessage || t("Elaborazione non riuscita", "Processing failed")
+              ? job.errorMessage || t("Elaborazione non riuscita", "Processing failed", "Échec du traitement", "Procesamiento fallido", "Verarbeitung fehlgeschlagen")
               : entry.error,
         };
       });
@@ -1880,7 +1919,7 @@ export default function ExtractoPage() {
         };
       }
       if (job.status === "FAILED") {
-        throw new Error(job.errorMessage || t("Elaborazione non riuscita", "Processing failed"));
+        throw new Error(job.errorMessage || t("Elaborazione non riuscita", "Processing failed", "Échec du traitement", "Procesamiento fallido", "Verarbeitung fehlgeschlagen"));
       }
       if (job.status === "QUEUED" && progressMeta?.stage === "paused") {
         return { status: "paused" };
@@ -1975,7 +2014,7 @@ export default function ExtractoPage() {
     if (files.length === 0) return;
     if (!selectedModel.trim()) {
       toast({
-        title: t("Modello mancante", "Missing model"),
+        title: t("Modello mancante", "Missing model", "Modèle manquant", "Modelo faltante", "Modell fehlt"),
         description: t(
           "Seleziona prima un modello disponibile per il provider scelto.",
           "Select an available model for the selected provider first."
@@ -2032,7 +2071,7 @@ export default function ExtractoPage() {
         updateFileById(file.id, (entry) => ({
           ...entry,
           status: "error",
-          error: error instanceof Error ? error.message : t("Elaborazione non riuscita", "Processing failed"),
+          error: error instanceof Error ? error.message : t("Elaborazione non riuscita", "Processing failed", "Échec du traitement", "Procesamiento fallido", "Verarbeitung fehlgeschlagen"),
         }));
       }
     }
@@ -2040,7 +2079,7 @@ export default function ExtractoPage() {
     setIsProcessing(false);
     if (completedInRun > 0) {
       toast({
-        title: t("Elaborazione completata", "Processing complete"),
+        title: t("Elaborazione completata", "Processing complete", "Traitement terminé", "Procesamiento completado", "Verarbeitung abgeschlossen"),
         description: t(`${completedInRun} file elaborati con successo`, `${completedInRun} file(s) processed successfully`),
       });
     }
@@ -2069,7 +2108,7 @@ export default function ExtractoPage() {
         stageMessage: t("Stop richiesto. Interruzione inferenza corrente...", "Stop requested. Aborting current inference..."),
       }));
       toast({
-        title: t("Stop richiesto", "Stop requested"),
+        title: t("Stop richiesto", "Stop requested", "Arrêt demandé", "Detención solicitada", "Stopp angefordert"),
         description: t("Interruzione immediata dell'inferenza e scaricamento del modello.", "Aborting current inference now and unloading the model."),
       });
     } catch (error) {
@@ -2162,15 +2201,29 @@ export default function ExtractoPage() {
 
           <div className="flex items-center gap-3">
             <Select value={uiLanguage} onValueChange={(value) => setUiLanguage(value as UiLanguage)}>
-              <SelectTrigger className="w-[90px] h-9" aria-label={t("Lingua", "Language")}>
+              <SelectTrigger
+                className="w-[110px] h-9"
+                aria-label={t("Lingua", "Language", "Langue", "Idioma", "Sprache")}
+              >
                 <div className="flex items-center gap-1.5">
                   <Languages className="h-3.5 w-3.5 text-primary" />
-                  <SelectValue />
+                  <SelectValue>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span aria-hidden>{UI_LANGUAGE_FLAGS[uiLanguage]}</span>
+                      <span>{UI_LANGUAGE_LABELS[uiLanguage]}</span>
+                    </span>
+                  </SelectValue>
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="it">IT</SelectItem>
-                <SelectItem value="en">EN</SelectItem>
+                {UI_LANGUAGES.map((lang) => (
+                  <SelectItem key={lang} value={lang}>
+                    <span className="inline-flex items-center gap-2">
+                      <span aria-hidden>{UI_LANGUAGE_FLAGS[lang]}</span>
+                      <span>{UI_LANGUAGE_LABELS[lang]}</span>
+                    </span>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
 
@@ -2182,7 +2235,7 @@ export default function ExtractoPage() {
             >
               <SelectTrigger className="w-[180px] h-9">
                 <SelectValue
-                  placeholder={isLoadingModels ? t("Caricamento modelli...", "Loading models...") : t("Seleziona modello", "Select model")}
+                  placeholder={isLoadingModels ? t("Caricamento modelli...", "Loading models...", "Chargement des modèles...", "Cargando modelos...", "Modelle werden geladen...") : t("Seleziona modello", "Select model", "Choisir un modèle", "Seleccionar modelo", "Modell wählen")}
                 />
               </SelectTrigger>
               <SelectContent>
@@ -2200,8 +2253,8 @@ export default function ExtractoPage() {
                 size="icon"
                 className="group"
                 onClick={openHistoryModal}
-                aria-label={t("OCR passati", "Past OCR")}
-                title={t("OCR passati", "Past OCR")}
+                aria-label={t("OCR passati", "Past OCR", "OCR précédents", "OCR anteriores", "Frühere OCRs")}
+                title={t("OCR passati", "Past OCR", "OCR précédents", "OCR anteriores", "Frühere OCRs")}
               >
                 <History className="h-4 w-4 text-sky-400 transition-transform duration-200 group-hover:-rotate-6 group-hover:scale-110" />
               </Button>
@@ -2217,8 +2270,8 @@ export default function ExtractoPage() {
                   setApiKeyDirty(false);
                   setApiSettingsOpen(true);
                 }}
-                aria-label={t("Impostazioni", "Settings")}
-                title={t("Impostazioni", "Settings")}
+                aria-label={t("Impostazioni", "Settings", "Paramètres", "Configuración", "Einstellungen")}
+                title={t("Impostazioni", "Settings", "Paramètres", "Configuración", "Einstellungen")}
               >
                 <Settings2 className="h-4 w-4 text-amber-400 transition-transform duration-200 group-hover:rotate-12 group-hover:scale-110" />
               </Button>
@@ -2234,7 +2287,7 @@ export default function ExtractoPage() {
               >
                 <Button variant="outline" size="sm" className="group" onClick={exportAllAsZip}>
                   <FileArchive className="h-4 w-4 mr-1.5 text-violet-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-110" />
-                  {t("Esporta ZIP", "Export ZIP")}
+                  {t("Esporta ZIP", "Export ZIP", "Exporter ZIP", "Exportar ZIP", "ZIP exportieren")}
                 </Button>
               </motion.div>
             )}
@@ -2256,9 +2309,9 @@ export default function ExtractoPage() {
       >
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{t("Impostazioni API", "API Endpoint Settings")}</DialogTitle>
+            <DialogTitle>{t("Impostazioni API", "API Endpoint Settings", "Paramètres API", "Configuración de API", "API-Einstellungen")}</DialogTitle>
             <DialogDescription>
-              {t("Configura provider, endpoint e account.", "Configure provider access and account actions.")}
+              {t("Configura provider, endpoint e account.", "Configure provider access and account actions.", "Configurez fournisseur, point de terminaison et compte.", "Configura proveedor, endpoint y cuenta.", "Provider, Endpoint und Konto konfigurieren.")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -2377,11 +2430,11 @@ export default function ExtractoPage() {
               }}
               disabled={isSavingApiSettings}
             >
-              {t("Annulla", "Cancel")}
+              {t("Annulla", "Cancel", "Annuler", "Cancelar", "Abbrechen")}
             </Button>
             <Button onClick={saveApiSettings} disabled={isSavingApiSettings}>
               {isSavingApiSettings ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : null}
-              {t("Salva", "Save")}
+              {t("Salva", "Save", "Enregistrer", "Guardar", "Speichern")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2609,7 +2662,7 @@ export default function ExtractoPage() {
               className="group"
             >
               {isDeletingHistory ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1.5 transition-transform duration-200 group-hover:scale-110" />}
-              {t("Elimina esecuzione", "Delete Run")}
+              {t("Elimina esecuzione", "Delete Run", "Supprimer l'exécution", "Eliminar ejecución", "Lauf löschen")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2825,7 +2878,7 @@ export default function ExtractoPage() {
                       </div>
                       <p className="text-sm font-medium">{t("Nessun file", "No files yet")}</p>
                       <p className="text-xs text-muted-foreground">
-                        {t("Carica documenti per iniziare", "Upload documents to start")}
+                        {t("Carica documenti per iniziare", "Upload documents to start", "Téléversez des documents pour commencer", "Sube documentos para empezar", "Dokumente hochladen, um zu starten")}
                       </p>
                     </div>
                   </div>
@@ -2941,7 +2994,7 @@ export default function ExtractoPage() {
                         <SelectContent>
                           {LANGUAGES.map((lang) => (
                             <SelectItem key={lang.code} value={lang.code} className="text-xs">
-                              {uiLanguage === "it" ? lang.nameIt : lang.nameEn}
+                              {lang.names[uiLanguage] ?? lang.names.en}
                             </SelectItem>
                           ))}
                         </SelectContent>
