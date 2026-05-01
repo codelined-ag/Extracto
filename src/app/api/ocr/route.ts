@@ -2698,7 +2698,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
     }
 
     const extractedMarkdown = extractedTextSoFar.trim();
-    if (!extractedMarkdown.trim()) {
+    if (!extractedMarkdown) {
       throw new ApiRouteError("OCR returned no text", 502);
     }
 
@@ -3112,7 +3112,7 @@ export async function POST(request: NextRequest) {
         : [];
     const settingsPayload = normalizeAdvancedSettings(body.settings);
     const postProcessingPayload = sanitizePostProcessing(body.postProcessing);
-    const settings = normalizeApiSettings(storedSettings);
+    const settings = storedSettings;
 
     if (!model) {
       throw new ApiRouteError("Model is required", 400);

@@ -134,7 +134,6 @@ export function enforceProviderEndpointPolicy(
     );
   }
 
-  const serialized = parsed.toString().replace(/\/+$/u, "");
-  return serialized || parsed.toString();
+  return parsed.toString().replace(/\/+$/u, "");
 }
 
