@@ -1086,7 +1086,7 @@ export default function ExtractoPage() {
       });
       if (candidates.length === 0) {
         toast({
-          title: t("Vault non disponibile", "Vault not available"),
+          title: t("Vault non disponibile", "Vault not available", "Vault indisponible", "Vault no disponible", "Vault nicht verfügbar"),
           description: t(
             "Percorso vault Obsidian non valido o non assoluto.",
             "Obsidian vault path is invalid or not absolute."
@@ -1098,7 +1098,7 @@ export default function ExtractoPage() {
 
       window.location.href = candidates[0];
       toast({
-        title: t("Apertura in Obsidian...", "Opening in Obsidian..."),
+        title: t("Apertura in Obsidian...", "Opening in Obsidian...", "Ouverture dans Obsidian...", "Abriendo en Obsidian...", "Wird in Obsidian geöffnet..."),
         description: metadata.vaultPath || metadata.vaultName || "",
       });
     },
@@ -1300,7 +1300,7 @@ export default function ExtractoPage() {
         description:
           error instanceof Error
             ? error.message
-            : t("Impossibile caricare le impostazioni API, uso i valori predefiniti", "Unable to load API settings, using defaults"),
+            : t("Impossibile caricare le impostazioni API, uso i valori predefiniti", "Unable to load API settings, using defaults", "Impossible de charger les paramètres API, valeurs par défaut utilisées", "No se pudieron cargar los ajustes API, usando valores por defecto", "API-Einstellungen konnten nicht geladen werden, Standardwerte werden verwendet"),
         variant: "destructive",
       });
     }
@@ -1346,12 +1346,12 @@ export default function ExtractoPage() {
       await fetchAvailableModels(normalizedSettings);
       toast({
         title: t("Impostazioni salvate", "Settings saved", "Paramètres enregistrés", "Configuración guardada", "Einstellungen gespeichert"),
-        description: t("Configurazione API aggiornata", "API configuration has been updated"),
+        description: t("Configurazione API aggiornata", "API configuration has been updated", "Configuration API mise à jour", "Configuración API actualizada", "API-Konfiguration aktualisiert"),
       });
     } catch (error) {
       toast({
         title: t("Salvataggio non riuscito", "Save failed", "Échec de l'enregistrement", "Error al guardar", "Speichern fehlgeschlagen"),
-        description: error instanceof Error ? error.message : t("Impossibile salvare le impostazioni API", "Unable to save API settings"),
+        description: error instanceof Error ? error.message : t("Impossibile salvare le impostazioni API", "Unable to save API settings", "Impossible d'enregistrer les paramètres API", "No se pudieron guardar los ajustes API", "API-Einstellungen konnten nicht gespeichert werden"),
         variant: "destructive",
       });
     } finally {
@@ -1380,7 +1380,7 @@ export default function ExtractoPage() {
     } catch (error) {
       toast({
         title: t("Caricamento cronologia non riuscito", "History load failed", "Échec du chargement de l'historique", "Error al cargar historial", "Verlauf laden fehlgeschlagen"),
-        description: error instanceof Error ? error.message : t("Impossibile caricare la cronologia OCR", "Unable to load OCR history"),
+        description: error instanceof Error ? error.message : t("Impossibile caricare la cronologia OCR", "Unable to load OCR history", "Impossible de charger l'historique OCR", "No se pudo cargar el historial de OCR", "OCR-Verlauf konnte nicht geladen werden"),
         variant: "destructive",
       });
     } finally {
@@ -1404,8 +1404,8 @@ export default function ExtractoPage() {
     } catch (error) {
       setSelectedHistoryJob(null);
       toast({
-        title: t("Caricamento esecuzione non riuscito", "Run load failed"),
-        description: error instanceof Error ? error.message : t("Impossibile caricare l'esecuzione OCR", "Unable to load OCR run"),
+        title: t("Caricamento esecuzione non riuscito", "Run load failed", "Échec du chargement de l'exécution", "Error al cargar la ejecución", "Lauf laden fehlgeschlagen"),
+        description: error instanceof Error ? error.message : t("Impossibile caricare l'esecuzione OCR", "Unable to load OCR run", "Impossible de charger l'exécution OCR", "No se pudo cargar la ejecución OCR", "OCR-Lauf konnte nicht geladen werden"),
         variant: "destructive",
       });
     } finally {
@@ -1432,13 +1432,13 @@ export default function ExtractoPage() {
       await loadHistoryJobs();
 
       toast({
-        title: t("Esecuzione eliminata", "Run deleted"),
-        description: t("Esecuzione OCR rimossa dalla cronologia", "Past OCR run removed from history"),
+        title: t("Esecuzione eliminata", "Run deleted", "Exécution supprimée", "Ejecución eliminada", "Lauf gelöscht"),
+        description: t("Esecuzione OCR rimossa dalla cronologia", "Past OCR run removed from history", "Exécution OCR retirée de l'historique", "Ejecución de OCR eliminada del historial", "OCR-Lauf aus Verlauf entfernt"),
       });
     } catch (error) {
       toast({
         title: t("Eliminazione non riuscita", "Delete failed", "Échec de la suppression", "Error al eliminar", "Löschen fehlgeschlagen"),
-        description: error instanceof Error ? error.message : t("Impossibile eliminare l'esecuzione OCR", "Unable to delete OCR run"),
+        description: error instanceof Error ? error.message : t("Impossibile eliminare l'esecuzione OCR", "Unable to delete OCR run", "Impossible de supprimer l'exécution OCR", "No se pudo eliminar la ejecución OCR", "OCR-Lauf konnte nicht gelöscht werden"),
         variant: "destructive",
       });
     } finally {
@@ -1707,8 +1707,8 @@ export default function ExtractoPage() {
     const completedFiles = files.filter((f) => f.status === "completed" && f.result);
     if (completedFiles.length === 0) {
       toast({
-        title: t("Nessun file da esportare", "No files to export"),
-        description: t("Elabora prima alcuni file, poi esporta", "Process some files first before exporting"),
+        title: t("Nessun file da esportare", "No files to export", "Aucun fichier à exporter", "No hay archivos para exportar", "Keine Dateien zum Exportieren"),
+        description: t("Elabora prima alcuni file, poi esporta", "Process some files first before exporting", "Traitez d'abord des fichiers avant d'exporter", "Procesa archivos primero antes de exportar", "Verarbeite zuerst einige Dateien, dann exportieren"),
         variant: "destructive",
       });
       return;
@@ -1987,7 +1987,7 @@ export default function ExtractoPage() {
       progress: Math.max(entry.progress, 1),
       stage: resume ? "resuming" : "queued",
       stageMessage: resume
-        ? t("Ripresa dal checkpoint...", "Resuming from checkpoint...")
+        ? t("Ripresa dal checkpoint...", "Resuming from checkpoint...", "Reprise depuis le checkpoint...", "Reanudando desde checkpoint...", "Wird vom Checkpoint fortgesetzt...")
         : runMode === "pdf_to_obsidian"
           ? t(
               `In coda per PDF→Obsidian (${pagePreviews.length} pagine)`,
@@ -2026,15 +2026,15 @@ export default function ExtractoPage() {
     if (!isRunReady) {
       if (runMode === "pdf_to_obsidian") {
         toast({
-          title: t("Percorso vault mancante", "Missing vault root path"),
-          description: t("Imposta il percorso root dove creare i vault Obsidian.", "Set the root path where Obsidian vaults should be created."),
+          title: t("Percorso vault mancante", "Missing vault root path", "Chemin racine du vault manquant", "Falta la ruta raíz del vault", "Vault-Stammpfad fehlt"),
+          description: t("Imposta il percorso root dove creare i vault Obsidian.", "Set the root path where Obsidian vaults should be created.", "Définissez le chemin racine où créer les vaults Obsidian.", "Define la ruta raíz donde se crearán los vaults de Obsidian.", "Root-Pfad festlegen, an dem Obsidian-Vaults erstellt werden."),
           variant: "destructive",
         });
         return;
       }
       toast({
-        title: t("Istruzione post-processing mancante", "Missing post-processing instruction"),
-        description: t("Aggiungi un'istruzione o disattiva il post-processing prima di avviare l'OCR.", "Add an instruction or disable post-processing before running OCR."),
+        title: t("Istruzione post-processing mancante", "Missing post-processing instruction", "Instruction de post-traitement manquante", "Falta instrucción de post-procesamiento", "Anweisung für Nachverarbeitung fehlt"),
+        description: t("Aggiungi un'istruzione o disattiva il post-processing prima di avviare l'OCR.", "Add an instruction or disable post-processing before running OCR.", "Ajoutez une instruction ou désactivez le post-traitement avant de lancer l'OCR.", "Añade una instrucción o desactiva el post-procesamiento antes de iniciar OCR.", "Anweisung hinzufügen oder Nachverarbeitung deaktivieren, bevor OCR gestartet wird."),
         variant: "destructive",
       });
       return;
@@ -2055,14 +2055,14 @@ export default function ExtractoPage() {
               typeof obsidian.vaultPath === "string" ? obsidian.vaultPath : "";
             if (vaultPath) {
               toast({
-                title: t("Vault Obsidian creato", "Obsidian vault created"),
+                title: t("Vault Obsidian creato", "Obsidian vault created", "Vault Obsidian créé", "Vault Obsidian creado", "Obsidian-Vault erstellt"),
                 description: vaultPath,
               });
             }
           }
         } else if (result.status === "paused") {
           toast({
-            title: t("OCR in pausa", "OCR paused"),
+            title: t("OCR in pausa", "OCR paused", "OCR en pause", "OCR en pausa", "OCR pausiert"),
             description: t(`${file.name} messo in pausa al checkpoint. Premi Riprendi per continuare.`, `${file.name} paused at checkpoint. Click Resume to continue.`),
           });
           break;
@@ -2105,16 +2105,16 @@ export default function ExtractoPage() {
       }
       updateFileById(file.id, (entry) => ({
         ...entry,
-        stageMessage: t("Stop richiesto. Interruzione inferenza corrente...", "Stop requested. Aborting current inference..."),
+        stageMessage: t("Stop richiesto. Interruzione inferenza corrente...", "Stop requested. Aborting current inference...", "Arrêt demandé. Interruption de l'inférence en cours...", "Detención solicitada. Abortando la inferencia actual...", "Stopp angefordert. Aktuelle Inferenz wird abgebrochen..."),
       }));
       toast({
         title: t("Stop richiesto", "Stop requested", "Arrêt demandé", "Detención solicitada", "Stopp angefordert"),
-        description: t("Interruzione immediata dell'inferenza e scaricamento del modello.", "Aborting current inference now and unloading the model."),
+        description: t("Interruzione immediata dell'inferenza e scaricamento del modello.", "Aborting current inference now and unloading the model.", "Interruption immédiate de l'inférence et déchargement du modèle.", "Aborto inmediato de la inferencia y descarga del modelo.", "Aktuelle Inferenz wird sofort abgebrochen und Modell entladen."),
       });
     } catch (error) {
       toast({
-        title: t("Stop non riuscito", "Stop failed"),
-        description: error instanceof Error ? error.message : t("Impossibile fermare l'OCR", "Unable to stop OCR"),
+        title: t("Stop non riuscito", "Stop failed", "Échec de l'arrêt", "Detención fallida", "Stopp fehlgeschlagen"),
+        description: error instanceof Error ? error.message : t("Impossibile fermare l'OCR", "Unable to stop OCR", "Impossible d'arrêter l'OCR", "No se pudo detener el OCR", "OCR konnte nicht gestoppt werden"),
         variant: "destructive",
       });
     }
@@ -2129,7 +2129,7 @@ export default function ExtractoPage() {
       const result = await processSingleFile(file, true);
       if (result.status === "completed") {
         toast({
-          title: t("Ripresa completata", "Resume complete"),
+          title: t("Ripresa completata", "Resume complete", "Reprise terminée", "Reanudación completa", "Fortsetzen abgeschlossen"),
           description: t(`${file.name} ripreso e completato con successo.`, `${file.name} resumed and finished successfully.`),
         });
       }
@@ -2137,11 +2137,11 @@ export default function ExtractoPage() {
       updateFileById(file.id, (entry) => ({
         ...entry,
         status: "error",
-        error: error instanceof Error ? error.message : t("Ripresa non riuscita", "Resume failed"),
+        error: error instanceof Error ? error.message : t("Ripresa non riuscita", "Resume failed", "Échec de la reprise", "Reanudación fallida", "Fortsetzen fehlgeschlagen"),
       }));
       toast({
-        title: t("Ripresa non riuscita", "Resume failed"),
-        description: error instanceof Error ? error.message : t("Impossibile riprendere l'OCR", "Unable to resume OCR"),
+        title: t("Ripresa non riuscita", "Resume failed", "Échec de la reprise", "Reanudación fallida", "Fortsetzen fehlgeschlagen"),
+        description: error instanceof Error ? error.message : t("Impossibile riprendere l'OCR", "Unable to resume OCR", "Impossible de reprendre l'OCR", "No se pudo reanudar el OCR", "OCR konnte nicht fortgesetzt werden"),
         variant: "destructive",
       });
     } finally {
@@ -2160,8 +2160,8 @@ export default function ExtractoPage() {
       router.replace("/auth");
     } catch (error) {
       toast({
-        title: t("Disconnessione non riuscita", "Sign out failed"),
-        description: error instanceof Error ? error.message : t("Riprova", "Please try again"),
+        title: t("Disconnessione non riuscita", "Sign out failed", "Échec de la déconnexion", "Error al cerrar sesión", "Abmelden fehlgeschlagen"),
+        description: error instanceof Error ? error.message : t("Riprova", "Please try again", "Veuillez réessayer", "Por favor, inténtalo de nuevo", "Bitte erneut versuchen"),
         variant: "destructive",
       });
     } finally {
@@ -2316,7 +2316,7 @@ export default function ExtractoPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="provider">{t("Provider", "Provider")}</Label>
+              <Label htmlFor="provider">{t("Provider", "Provider", "Fournisseur", "Proveedor", "Anbieter")}</Label>
               <Select
                 value={apiSettingsDraft.provider}
                 onValueChange={(value) =>
@@ -2331,7 +2331,7 @@ export default function ExtractoPage() {
                 }
               >
                 <SelectTrigger id="provider" className="w-full">
-                  <SelectValue placeholder={t("Seleziona provider", "Select provider")} />
+                  <SelectValue placeholder={t("Seleziona provider", "Select provider", "Choisir un fournisseur", "Seleccionar proveedor", "Anbieter wählen")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ollama">Ollama</SelectItem>
@@ -2341,7 +2341,7 @@ export default function ExtractoPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="api-endpoint">{t("Endpoint API", "API endpoint")}</Label>
+              <Label htmlFor="api-endpoint">{t("Endpoint API", "API endpoint", "Endpoint API", "Endpoint API", "API-Endpoint")}</Label>
               <Input
                 id="api-endpoint"
                 value={apiSettingsDraft.apiEndpoint}
@@ -2354,7 +2354,7 @@ export default function ExtractoPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="api-key">{t("API key (opzionale)", "API key (optional)")}</Label>
+              <Label htmlFor="api-key">{t("API key (opzionale)", "API key (optional)", "Clé API (facultative)", "Clave API (opcional)", "API-Schlüssel (optional)")}</Label>
               <Input
                 id="api-key"
                 type="password"
@@ -2367,7 +2367,7 @@ export default function ExtractoPage() {
                 }
                 placeholder={
                   !apiKeyDirty && apiSettingsDraft.hasApiKey
-                    ? t("Chiave API salvata (non mostrata)", "API key is saved (hidden)")
+                    ? t("Chiave API salvata (non mostrata)", "API key is saved (hidden)", "Clé API enregistrée (masquée)", "Clave API guardada (oculta)", "API-Schlüssel gespeichert (verborgen)")
                     : "sk-..."
                 }
               />
@@ -2382,7 +2382,7 @@ export default function ExtractoPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="obsidian-base-dir">
-                {t("Directory base Obsidian", "Obsidian base directory")}
+                {t("Directory base Obsidian", "Obsidian base directory", "Répertoire de base Obsidian", "Directorio base de Obsidian", "Obsidian-Basisverzeichnis")}
               </Label>
               <Input
                 id="obsidian-base-dir"
@@ -2404,7 +2404,7 @@ export default function ExtractoPage() {
             </div>
             <Separator />
             <div className="space-y-2">
-              <Label>{t("Account", "Account")}</Label>
+              <Label>{t("Account", "Account", "Compte", "Cuenta", "Konto")}</Label>
               <Button
                 variant="outline"
                 className="w-full justify-start group"
@@ -2416,7 +2416,7 @@ export default function ExtractoPage() {
                 ) : (
                   <LogOut className="h-4 w-4 mr-1.5 text-rose-400 transition-transform duration-200 group-hover:translate-x-0.5" />
                 )}
-                {t("Esci", "Sign out")}
+                {t("Esci", "Sign out", "Se déconnecter", "Cerrar sesión", "Abmelden")}
               </Button>
             </div>
           </div>
@@ -2452,16 +2452,16 @@ export default function ExtractoPage() {
       >
         <DialogContent className="w-[96vw] !max-w-[96vw] h-[92vh] flex flex-col overflow-hidden p-4 sm:w-[94vw] sm:!max-w-[94vw] sm:h-[90vh] sm:p-5">
           <DialogHeader>
-            <DialogTitle>{t("Esecuzioni OCR passate", "Past OCR Runs")}</DialogTitle>
+            <DialogTitle>{t("Esecuzioni OCR passate", "Past OCR Runs", "Exécutions OCR précédentes", "Ejecuciones OCR anteriores", "Frühere OCR-Läufe")}</DialogTitle>
             <DialogDescription>
-              {t("Sfoglia le esecuzioni precedenti, visualizza output, scarica o elimina.", "Browse previous OCR runs, inspect output, download, or delete saved runs.")}
+              {t("Sfoglia le esecuzioni precedenti, visualizza output, scarica o elimina.", "Browse previous OCR runs, inspect output, download, or delete saved runs.", "Parcourez les exécutions précédentes, inspectez la sortie, téléchargez ou supprimez.", "Explora ejecuciones anteriores, inspecciona la salida, descarga o elimina.", "Frühere OCR-Läufe durchsuchen, Ausgaben prüfen, herunterladen oder löschen.")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid lg:grid-cols-[320px_minmax(0,1fr)] gap-4 flex-1 min-h-0 min-w-0 overflow-y-auto lg:overflow-hidden">
             <Card className="min-h-0 min-w-0 flex flex-col">
               <CardHeader className="py-3 px-4 border-b">
-                <CardTitle className="text-sm">{t("Cronologia", "History")}</CardTitle>
+                <CardTitle className="text-sm">{t("Cronologia", "History", "Historique", "Historial", "Verlauf")}</CardTitle>
               </CardHeader>
               <CardContent className="p-0 flex-1 min-h-0">
                 {isLoadingHistory ? (
@@ -2470,7 +2470,7 @@ export default function ExtractoPage() {
                   </div>
                 ) : historyJobs.length === 0 ? (
                   <div className="h-full flex items-center justify-center p-4 text-center">
-                    <p className="text-sm text-muted-foreground">{t("Nessuna esecuzione OCR salvata.", "No OCR runs saved yet.")}</p>
+                    <p className="text-sm text-muted-foreground">{t("Nessuna esecuzione OCR salvata.", "No OCR runs saved yet.", "Aucune exécution OCR enregistrée.", "Aún no hay ejecuciones OCR guardadas.", "Noch keine OCR-Läufe gespeichert.")}</p>
                   </div>
                 ) : (
                   <ScrollArea className="h-full">
@@ -2503,10 +2503,10 @@ export default function ExtractoPage() {
                               className="text-[10px]"
                             >
                               {job.status === "FAILED"
-                                ? t("fallito", "failed")
+                                ? t("fallito", "failed", "échoué", "fallido", "fehlgeschlagen")
                                 : job.status === "COMPLETED"
-                                  ? t("completato", "completed")
-                                  : t("in corso", "running")}
+                                  ? t("completato", "completed", "terminé", "completado", "abgeschlossen")
+                                  : t("in corso", "running", "en cours", "en curso", "läuft")}
                             </Badge>
                           </div>
                           <p className="text-[11px] text-muted-foreground truncate">{job.model}</p>
@@ -2523,7 +2523,7 @@ export default function ExtractoPage() {
 
             <Card className="min-h-0 min-w-0 flex flex-col">
               <CardHeader className="py-3 px-4 border-b">
-                <CardTitle className="text-sm">{t("Dettagli esecuzione", "Run Details")}</CardTitle>
+                <CardTitle className="text-sm">{t("Dettagli esecuzione", "Run Details", "Détails de l'exécution", "Detalles de la ejecución", "Lauf-Details")}</CardTitle>
               </CardHeader>
               <CardContent className="p-0 flex-1 min-h-0">
                 {isLoadingHistoryDetail ? (
@@ -2532,7 +2532,7 @@ export default function ExtractoPage() {
                   </div>
                 ) : !selectedHistoryJob ? (
                   <div className="h-full flex items-center justify-center p-4 text-center">
-                    <p className="text-sm text-muted-foreground">{t("Seleziona un'esecuzione per vedere i dettagli.", "Select a run to view details.")}</p>
+                    <p className="text-sm text-muted-foreground">{t("Seleziona un'esecuzione per vedere i dettagli.", "Select a run to view details.", "Sélectionnez une exécution pour voir les détails.", "Selecciona una ejecución para ver los detalles.", "Lauf auswählen, um Details zu sehen.")}</p>
                   </div>
                 ) : (
                   <div className="h-full flex flex-col min-h-0 min-w-0">
@@ -2549,19 +2549,19 @@ export default function ExtractoPage() {
                           }
                         >
                           {selectedHistoryJob.status === "FAILED"
-                            ? t("fallito", "failed")
+                            ? t("fallito", "failed", "échoué", "fallido", "fehlgeschlagen")
                             : selectedHistoryJob.status === "COMPLETED"
-                              ? t("completato", "completed")
-                              : t("in corso", "running")}
+                              ? t("completato", "completed", "terminé", "completado", "abgeschlossen")
+                              : t("in corso", "running", "en cours", "en curso", "läuft")}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">{t("Modello", "Model")}: {selectedHistoryJob.model}</p>
+                      <p className="text-xs text-muted-foreground">{t("Modello", "Model", "Modèle", "Modelo", "Modell")}: {selectedHistoryJob.model}</p>
                       <p className="text-xs text-muted-foreground">
-                        {t("Creato", "Created")}: {formatTimestamp(selectedHistoryJob.createdAt)}
+                        {t("Creato", "Created", "Créé", "Creado", "Erstellt")}: {formatTimestamp(selectedHistoryJob.createdAt)}
                       </p>
                       {selectedHistoryObsidianPath ? (
                         <p className="text-xs text-muted-foreground break-all">
-                          {t("Vault Obsidian", "Obsidian vault")}: {selectedHistoryObsidianPath}
+                          {t("Vault Obsidian", "Obsidian vault", "Vault Obsidian", "Vault Obsidian", "Obsidian-Vault")}: {selectedHistoryObsidianPath}
                         </p>
                       ) : null}
                     </div>
@@ -2577,7 +2577,7 @@ export default function ExtractoPage() {
                         ) : (
                           <div className="text-center text-muted-foreground">
                             <ImageOff className="h-8 w-8 mx-auto mb-2" />
-                            <p className="text-xs">{t("Anteprima non disponibile", "No preview saved")}</p>
+                            <p className="text-xs">{t("Anteprima non disponibile", "No preview saved", "Aucun aperçu enregistré", "Vista previa no guardada", "Keine Vorschau gespeichert")}</p>
                           </div>
                         )}
                       </div>
@@ -2590,7 +2590,7 @@ export default function ExtractoPage() {
                             </TabsTrigger>
                             <TabsTrigger value="markdown-raw" className="text-xs h-6 shrink-0 gap-1.5 group">
                               <FileText className="h-3 w-3 text-lime-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
-                              {t("Markdown grezzo", "Markdown raw")}
+                              {t("Markdown grezzo", "Markdown raw", "Markdown brut", "Markdown sin procesar", "Roh-Markdown")}
                             </TabsTrigger>
                             <TabsTrigger value="json" className="text-xs h-6 shrink-0 gap-1.5 group">
                               <Code className="h-3 w-3 text-cyan-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
@@ -2635,7 +2635,7 @@ export default function ExtractoPage() {
               className="group"
             >
               <FolderOpen className="h-4 w-4 mr-1.5 text-violet-400 transition-transform duration-200 group-hover:scale-110" />
-              {t("Apri in Obsidian", "Open in Obsidian")}
+              {t("Apri in Obsidian", "Open in Obsidian", "Ouvrir dans Obsidian", "Abrir en Obsidian", "In Obsidian öffnen")}
             </Button>
             <Button
               variant="outline"
@@ -2644,7 +2644,7 @@ export default function ExtractoPage() {
               className="group"
             >
               <Download className="h-4 w-4 mr-1.5 text-emerald-400 transition-transform duration-200 group-hover:-translate-y-0.5" />
-              {t("Scarica MD", "Download MD")}
+              {t("Scarica MD", "Download MD", "Télécharger MD", "Descargar MD", "MD herunterladen")}
             </Button>
             <Button
               variant="outline"
@@ -2653,7 +2653,7 @@ export default function ExtractoPage() {
               className="group"
             >
               <Download className="h-4 w-4 mr-1.5 text-cyan-400 transition-transform duration-200 group-hover:-translate-y-0.5" />
-              {t("Scarica JSON", "Download JSON")}
+              {t("Scarica JSON", "Download JSON", "Télécharger JSON", "Descargar JSON", "JSON herunterladen")}
             </Button>
             <Button
               variant="destructive"
@@ -2708,10 +2708,10 @@ export default function ExtractoPage() {
                   </div>
                 </motion.div>
                 <p className="text-sm font-medium mb-1">
-                  {isDragOver ? t("Rilascia qui i file", "Drop files here") : t("Trascina i documenti o clicca per caricare", "Drop documents or click to upload")}
+                  {isDragOver ? t("Rilascia qui i file", "Drop files here", "Déposez les fichiers ici", "Suelta los archivos aquí", "Dateien hier ablegen") : t("Trascina i documenti o clicca per caricare", "Drop documents or click to upload", "Glissez-déposez des documents ou cliquez pour téléverser", "Arrastra documentos o haz clic para subir", "Dokumente hier ablegen oder klicken, um hochzuladen")}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {t("Supporta immagini, PDF e documenti", "Supports images, PDFs, and documents")}
+                  {t("Supporta immagini, PDF e documenti", "Supports images, PDFs, and documents", "Prend en charge images, PDF et documents", "Admite imágenes, PDF y documentos", "Unterstützt Bilder, PDFs und Dokumente")}
                 </p>
               </CardContent>
             </Card>
@@ -2756,7 +2756,7 @@ export default function ExtractoPage() {
                         onClick={clearAllFiles}
                       >
                         <Trash2 className="h-3 w-3 mr-1 transition-transform duration-200 group-hover:scale-110" />
-                        {t("Pulisci", "Clear")}
+                        {t("Pulisci", "Clear", "Effacer", "Limpiar", "Leeren")}
                       </Button>
                   )}
                 </div>
@@ -2815,7 +2815,7 @@ export default function ExtractoPage() {
                                 {file.status === "paused" ? (
                                   <div className="flex items-center gap-1">
                                     <PauseCircle className="h-3 w-3 text-amber-500" />
-                                    <span className="text-xs text-amber-600">{t("in pausa", "paused")}</span>
+                                    <span className="text-xs text-amber-600">{t("in pausa", "paused", "en pause", "en pausa", "pausiert")}</span>
                                   </div>
                                 ) : null}
                               </div>
@@ -2824,10 +2824,10 @@ export default function ExtractoPage() {
                                   <Progress value={file.progress} className="h-1 mt-1" />
                                   <div className="flex items-center justify-between mt-1">
                                     <span className="text-[11px] text-muted-foreground truncate max-w-[150px]">
-                                      {file.stageMessage || (file.status === "paused" ? t("In pausa", "Paused") : t("In lavorazione", "Working"))}
+                                      {file.stageMessage || (file.status === "paused" ? t("In pausa", "Paused", "En pause", "En pausa", "Pausiert") : t("In lavorazione", "Working", "En cours", "Trabajando", "In Arbeit"))}
                                     </span>
                                     <span className="text-[11px] text-muted-foreground">
-                                      {t("ETA", "ETA")} {formatEta(file.etaSeconds)}
+                                      {t("ETA", "ETA", "ETA", "ETA", "ETA")} {formatEta(file.etaSeconds)}
                                     </span>
                                   </div>
                                 </>
@@ -2876,7 +2876,7 @@ export default function ExtractoPage() {
                       <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
                         <FileText className="h-6 w-6 text-muted-foreground" />
                       </div>
-                      <p className="text-sm font-medium">{t("Nessun file", "No files yet")}</p>
+                      <p className="text-sm font-medium">{t("Nessun file", "No files yet", "Aucun fichier", "Sin archivos aún", "Noch keine Dateien")}</p>
                       <p className="text-xs text-muted-foreground">
                         {t("Carica documenti per iniziare", "Upload documents to start", "Téléversez des documents pour commencer", "Sube documentos para empezar", "Dokumente hochladen, um zu starten")}
                       </p>
@@ -2901,8 +2901,8 @@ export default function ExtractoPage() {
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         {runMode === "pdf_to_obsidian"
-                          ? t("Elaborazione PDF→Obsidian...", "Running PDF→Obsidian...")
-                          : t("Elaborazione...", "Processing...")}
+                          ? t("Elaborazione PDF→Obsidian...", "Running PDF→Obsidian...", "Traitement PDF→Obsidian...", "Procesando PDF→Obsidian...", "PDF→Obsidian läuft...")
+                          : t("Elaborazione...", "Processing...", "Traitement...", "Procesando...", "Verarbeitung läuft...")}
                       </>
                     ) : (
                       <>
@@ -2923,7 +2923,7 @@ export default function ExtractoPage() {
                       onClick={() => stopProcessingFile(activeProcessingFile)}
                     >
                       <PauseCircle className="h-4 w-4 mr-2 text-amber-500 transition-transform duration-200 group-hover:scale-110" />
-                      {t("Ferma OCR corrente", "Stop Current OCR")}
+                      {t("Ferma OCR corrente", "Stop Current OCR", "Arrêter l'OCR en cours", "Detener OCR actual", "Aktuelle OCR stoppen")}
                     </Button>
                   ) : null}
                   {resumableSelectedFile ? (
@@ -2933,7 +2933,7 @@ export default function ExtractoPage() {
                       onClick={() => resumeProcessingFile(resumableSelectedFile)}
                     >
                       <PlayCircle className="h-4 w-4 mr-2 text-emerald-400 transition-transform duration-200 group-hover:scale-110" />
-                      {t("Riprendi dal checkpoint", "Resume From Checkpoint")}
+                      {t("Riprendi dal checkpoint", "Resume From Checkpoint", "Reprendre depuis le checkpoint", "Reanudar desde checkpoint", "Vom Checkpoint fortsetzen")}
                     </Button>
                   ) : null}
                 </div>
@@ -2948,7 +2948,7 @@ export default function ExtractoPage() {
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-sm font-medium flex items-center gap-2">
                         <Settings2 className="h-4 w-4 text-amber-400" />
-                        {t("Impostazioni avanzate", "Advanced Settings")}
+                        {t("Impostazioni avanzate", "Advanced Settings", "Paramètres avancés", "Configuración avanzada", "Erweiterte Einstellungen")}
                       </CardTitle>
                       <motion.div
                         animate={{ rotate: advancedSettingsOpen ? 180 : 0 }}
@@ -2962,17 +2962,17 @@ export default function ExtractoPage() {
                 <CollapsibleContent>
                   <CardContent className="pt-0 px-3 pb-3 space-y-4">
                     <div className="space-y-2">
-                      <Label className="text-xs">{t("Modalità", "Mode")}</Label>
+                      <Label className="text-xs">{t("Modalità", "Mode", "Mode", "Modo", "Modus")}</Label>
                       <Select value={runMode} onValueChange={(value) => setRunMode(value as OcrRunMode)}>
                         <SelectTrigger className="h-8 text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="ocr" className="text-xs">
-                            {t("OCR standard", "Standard OCR")}
+                            {t("OCR standard", "Standard OCR", "OCR standard", "OCR estándar", "Standard-OCR")}
                           </SelectItem>
                           <SelectItem value="pdf_to_obsidian" className="text-xs">
-                            {t("PDF → Obsidian", "PDF → Obsidian")}
+                            {t("PDF → Obsidian", "PDF → Obsidian", "PDF → Obsidian", "PDF → Obsidian", "PDF → Obsidian")}
                           </SelectItem>
                         </SelectContent>
                       </Select>
@@ -2982,7 +2982,7 @@ export default function ExtractoPage() {
                     <div className="space-y-2">
                       <Label className="text-xs flex items-center gap-1.5">
                         <Languages className="h-3 w-3" />
-                        {t("Lingua documento", "Document Language")}
+                        {t("Lingua documento", "Document Language", "Langue du document", "Idioma del documento", "Dokumentsprache")}
                       </Label>
                       <Select
                         value={settings.language}
@@ -3004,7 +3004,7 @@ export default function ExtractoPage() {
                     {/* Toggle Settings */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs">{t("Rilevamento tabelle", "Table Detection")}</Label>
+                        <Label className="text-xs">{t("Rilevamento tabelle", "Table Detection", "Détection des tableaux", "Detección de tablas", "Tabellenerkennung")}</Label>
                         <Switch
                           checked={settings.tableDetection}
                           onCheckedChange={(v) => setSettings((s) => ({ ...s, tableDetection: v }))}
@@ -3012,7 +3012,7 @@ export default function ExtractoPage() {
                         />
                       </div>
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs">{t("Riconoscimento scrittura a mano", "Handwriting Recognition")}</Label>
+                        <Label className="text-xs">{t("Riconoscimento scrittura a mano", "Handwriting Recognition", "Reconnaissance d'écriture", "Reconocimiento de escritura", "Handschrifterkennung")}</Label>
                         <Switch
                           checked={settings.handwritingRecognition}
                           onCheckedChange={(v) => setSettings((s) => ({ ...s, handwritingRecognition: v }))}
@@ -3020,7 +3020,7 @@ export default function ExtractoPage() {
                         />
                       </div>
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs">{t("Mantieni formattazione", "Preserve Formatting")}</Label>
+                        <Label className="text-xs">{t("Mantieni formattazione", "Preserve Formatting", "Conserver la mise en forme", "Conservar formato", "Formatierung beibehalten")}</Label>
                         <Switch
                           checked={settings.preserveFormatting}
                           onCheckedChange={(v) => setSettings((s) => ({ ...s, preserveFormatting: v }))}
@@ -3032,7 +3032,7 @@ export default function ExtractoPage() {
                     {/* Quality Slider */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs">{t("Qualità output", "Output Quality")}</Label>
+                        <Label className="text-xs">{t("Qualità output", "Output Quality", "Qualité de sortie", "Calidad de salida", "Ausgabequalität")}</Label>
                         <span className="text-xs text-muted-foreground">{settings.quality}%</span>
                       </div>
                       <Slider
@@ -3047,9 +3047,9 @@ export default function ExtractoPage() {
 
                     {/* Custom Prompt */}
                     <div className="space-y-2">
-                      <Label className="text-xs">{t("Istruzioni personalizzate", "Custom Instructions")}</Label>
+                      <Label className="text-xs">{t("Istruzioni personalizzate", "Custom Instructions", "Instructions personnalisées", "Instrucciones personalizadas", "Eigene Anweisungen")}</Label>
                       <Textarea
-                        placeholder={t("Aggiungi istruzioni OCR personalizzate...", "Add custom OCR instructions...")}
+                        placeholder={t("Aggiungi istruzioni OCR personalizzate...", "Add custom OCR instructions...", "Ajoutez des instructions OCR personnalisées...", "Añade instrucciones OCR personalizadas...", "Eigene OCR-Anweisungen hinzufügen...")}
                         value={settings.customPrompt}
                         onChange={(e) => setSettings((s) => ({ ...s, customPrompt: e.target.value }))}
                         className="h-16 text-xs resize-none"
@@ -3070,7 +3070,7 @@ export default function ExtractoPage() {
                           </p>
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-xs">{t("Percorso root vault", "Vault root path")}</Label>
+                          <Label className="text-xs">{t("Percorso root vault", "Vault root path", "Chemin racine du vault", "Ruta raíz del vault", "Vault-Stammpfad")}</Label>
                           <Input
                             value={obsidianSettings.vaultRoot}
                             onChange={(event) =>
@@ -3090,7 +3090,7 @@ export default function ExtractoPage() {
                           </p>
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-xs">{t("Prefisso nome vault (opzionale)", "Vault name prefix (optional)")}</Label>
+                          <Label className="text-xs">{t("Prefisso nome vault (opzionale)", "Vault name prefix (optional)", "Préfixe du nom du vault (facultatif)", "Prefijo del nombre del vault (opcional)", "Vault-Namenspräfix (optional)")}</Label>
                           <Input
                             value={obsidianSettings.vaultNamePrefix}
                             onChange={(event) =>
@@ -3104,7 +3104,7 @@ export default function ExtractoPage() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-xs">{t("Istruzione organizzazione (opzionale)", "Organization instruction (optional)")}</Label>
+                          <Label className="text-xs">{t("Istruzione organizzazione (opzionale)", "Organization instruction (optional)", "Instruction d'organisation (facultative)", "Instrucción de organización (opcional)", "Organisationsanweisung (optional)")}</Label>
                           <Textarea
                             placeholder={t(
                               "Esempio: crea cartelle per cliente, fatture, scadenze e una nota riepilogo con task.",
@@ -3121,7 +3121,7 @@ export default function ExtractoPage() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-xs">{t("Modello analisi Obsidian", "Obsidian analysis model")}</Label>
+                          <Label className="text-xs">{t("Modello analisi Obsidian", "Obsidian analysis model", "Modèle d'analyse Obsidian", "Modelo de análisis Obsidian", "Obsidian-Analysemodell")}</Label>
                           <Select
                             value={obsidianModelValue}
                             onValueChange={(value) =>
@@ -3152,7 +3152,7 @@ export default function ExtractoPage() {
                           </Select>
                         </div>
                         <div className="flex items-center justify-between">
-                          <Label className="text-xs">{t("Includi note per pagina", "Include per-page notes")}</Label>
+                          <Label className="text-xs">{t("Includi note per pagina", "Include per-page notes", "Inclure les notes par page", "Incluir notas por página", "Notizen pro Seite einschließen")}</Label>
                           <Switch
                             checked={obsidianSettings.includePageNotes}
                             onCheckedChange={(checked) =>
@@ -3169,9 +3169,9 @@ export default function ExtractoPage() {
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <div className="space-y-1">
-                            <Label className="text-xs">{t("Post-processing", "Post-processing")}</Label>
+                            <Label className="text-xs">{t("Post-processing", "Post-processing", "Post-traitement", "Post-procesamiento", "Nachverarbeitung")}</Label>
                             <p className="text-[11px] text-muted-foreground">
-                              {t("Applica un passaggio modello aggiuntivo dopo l'estrazione OCR.", "Apply an extra model step after OCR extraction.")}
+                              {t("Applica un passaggio modello aggiuntivo dopo l'estrazione OCR.", "Apply an extra model step after OCR extraction.", "Appliquer une étape modèle supplémentaire après l'extraction OCR.", "Aplica un paso de modelo adicional tras la extracción OCR.", "Zusätzlichen Modell-Schritt nach der OCR-Extraktion anwenden.")}
                             </p>
                           </div>
                           <Switch
@@ -3186,9 +3186,9 @@ export default function ExtractoPage() {
                         {postProcessing.enabled ? (
                           <div className="space-y-3 rounded-md border bg-muted/20 p-3">
                             <div className="space-y-2">
-                              <Label className="text-xs">{t("Istruzione", "Instruction")}</Label>
+                              <Label className="text-xs">{t("Istruzione", "Instruction", "Instruction", "Instrucción", "Anweisung")}</Label>
                               <Textarea
-                                placeholder={t("Esempio: estrai numero fattura, scadenza e totali da ogni pagina e restituisci una tabella normalizzata.", "Example: Extract invoice number, due date, and totals from each page, then return one normalized table.")}
+                                placeholder={t("Esempio: estrai numero fattura, scadenza e totali da ogni pagina e restituisci una tabella normalizzata.", "Example: Extract invoice number, due date, and totals from each page, then return one normalized table.", "Exemple : extraire le numéro de facture, l'échéance et les totaux de chaque page, puis renvoyer un tableau normalisé.", "Ejemplo: extrae número de factura, fecha de vencimiento y totales de cada página, luego devuelve una tabla normalizada.", "Beispiel: Rechnungsnummer, Fälligkeit und Summen pro Seite extrahieren und als normalisierte Tabelle zurückgeben.")}
                                 value={postProcessing.instruction}
                                 onChange={(event) =>
                                   setPostProcessing((prev) => ({
@@ -3200,7 +3200,7 @@ export default function ExtractoPage() {
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-xs">{t("Modello post-processing", "Post-processing model")}</Label>
+                              <Label className="text-xs">{t("Modello post-processing", "Post-processing model", "Modèle de post-traitement", "Modelo de post-procesamiento", "Nachverarbeitungs-Modell")}</Label>
                               <Select
                                 value={postProcessModelValue}
                                 onValueChange={(value) =>
@@ -3231,7 +3231,7 @@ export default function ExtractoPage() {
                               </Select>
                             </div>
                             <div className="space-y-2">
-                              <Label className="text-xs">{t("Formato output", "Output format")}</Label>
+                              <Label className="text-xs">{t("Formato output", "Output format", "Format de sortie", "Formato de salida", "Ausgabeformat")}</Label>
                               <Select
                                 value={postProcessing.outputFormat}
                                 onValueChange={(value: PostProcessOutputFormat) =>
@@ -3246,7 +3246,7 @@ export default function ExtractoPage() {
                                     Markdown
                                   </SelectItem>
                                   <SelectItem value="json" className="text-xs">
-                                    {t("JSON strutturato", "Structured JSON")}
+                                    {t("JSON strutturato", "Structured JSON", "JSON structuré", "JSON estructurado", "Strukturiertes JSON")}
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
@@ -3280,7 +3280,7 @@ export default function ExtractoPage() {
                       {selectedFile.status === "completed" && (
                             <Badge variant="outline" className="text-xs">
                               <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-500" />
-                              {t("Completato", "Completed")}
+                              {t("Completato", "Completed", "Terminé", "Completado", "Abgeschlossen")}
                             </Badge>
                           )}
                           {selectedFile.status === "completed" && selectedFileObsidianPath ? (
@@ -3292,7 +3292,7 @@ export default function ExtractoPage() {
                           {selectedFile.status === "paused" && (
                             <Badge variant="outline" className="text-xs">
                               <PauseCircle className="h-3 w-3 mr-1 text-amber-500" />
-                              {t("In pausa", "Paused")}
+                              {t("In pausa", "Paused", "En pause", "En pausa", "Pausiert")}
                             </Badge>
                           )}
                     </div>
@@ -3352,11 +3352,11 @@ export default function ExtractoPage() {
                               size="sm"
                               className="h-7 px-2 group gap-1.5"
                               onClick={openSelectedVaultInObsidian}
-                              title={t("Apri in Obsidian", "Open in Obsidian")}
+                              title={t("Apri in Obsidian", "Open in Obsidian", "Ouvrir dans Obsidian", "Abrir en Obsidian", "In Obsidian öffnen")}
                             >
                               <FolderOpen className="h-3.5 w-3.5 text-violet-400 transition-transform duration-200 group-hover:scale-110" />
                               <span className="text-[11px]">
-                                {t("Apri in Obsidian", "Open in Obsidian")}
+                                {t("Apri in Obsidian", "Open in Obsidian", "Ouvrir dans Obsidian", "Abrir en Obsidian", "In Obsidian öffnen")}
                               </span>
                             </Button>
                           ) : null}
@@ -3377,7 +3377,7 @@ export default function ExtractoPage() {
                           )}
                         >
                           <div className="px-3 py-2 border-b bg-muted/30">
-                            <span className="text-xs font-medium text-muted-foreground">{t("Anteprima documento", "Document Preview")}</span>
+                            <span className="text-xs font-medium text-muted-foreground">{t("Anteprima documento", "Document Preview", "Aperçu du document", "Vista previa del documento", "Dokumentvorschau")}</span>
                           </div>
                           <ScrollArea className="flex-1">
                             <div className="p-4 flex items-center justify-center min-h-full">
@@ -3392,8 +3392,8 @@ export default function ExtractoPage() {
                               ) : (
                                 <div className="flex flex-col items-center text-muted-foreground">
                                   <ImageOff className="h-12 w-12 mb-2" />
-                                  <p className="text-sm">{t("Anteprima non disponibile", "No preview available")}</p>
-                                  <p className="text-xs">{t("Impossibile generare l'anteprima", "Preview could not be generated")}</p>
+                                  <p className="text-sm">{t("Anteprima non disponibile", "No preview available", "Aucun aperçu disponible", "Vista previa no disponible", "Keine Vorschau verfügbar")}</p>
+                                  <p className="text-xs">{t("Impossibile generare l'anteprima", "Preview could not be generated", "Impossible de générer l'aperçu", "No se pudo generar la vista previa", "Vorschau konnte nicht erstellt werden")}</p>
                                 </div>
                               )}
                             </div>
@@ -3418,7 +3418,7 @@ export default function ExtractoPage() {
                                 </TabsTrigger>
                                 <TabsTrigger value="markdown-raw" className="text-xs gap-1.5 h-6 shrink-0 group">
                                   <FileText className="h-3 w-3 text-lime-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
-                                  {t("Markdown grezzo", "Markdown raw")}
+                                  {t("Markdown grezzo", "Markdown raw", "Markdown brut", "Markdown sin procesar", "Roh-Markdown")}
                                 </TabsTrigger>
                                 <TabsTrigger value="json" className="text-xs gap-1.5 h-6 shrink-0 group">
                                   <Code className="h-3 w-3 text-cyan-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110" />
@@ -3460,14 +3460,14 @@ export default function ExtractoPage() {
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-medium">
-                              {selectedFile.status === "paused" ? t("OCR in pausa", "OCR Paused") : t("OCR in elaborazione", "Processing OCR")}
+                              {selectedFile.status === "paused" ? t("OCR in pausa", "OCR Paused", "OCR en Pause", "OCR en Pausa", "OCR Pausiert") : t("OCR in elaborazione", "Processing OCR", "OCR en cours de traitement", "Procesando OCR", "OCR wird verarbeitet")}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {selectedFile.stageMessage || t("Esecuzione pipeline di estrazione", "Running extraction pipeline")}
+                              {selectedFile.stageMessage || t("Esecuzione pipeline di estrazione", "Running extraction pipeline", "Pipeline d'extraction en cours", "Ejecutando pipeline de extracción", "Extraktions-Pipeline läuft")}
                             </p>
                           </div>
                           <Badge variant={selectedFile.status === "paused" ? "outline" : "secondary"}>
-                            {selectedFile.status === "paused" ? t("in pausa", "paused") : t("in esecuzione", "running")}
+                            {selectedFile.status === "paused" ? t("in pausa", "paused", "en pause", "en pausa", "pausiert") : t("in esecuzione", "running", "en cours d'exécution", "en ejecución", "wird ausgeführt")}
                           </Badge>
                         </div>
                         <Progress value={selectedFile.progress} className="w-full" />
@@ -3475,12 +3475,12 @@ export default function ExtractoPage() {
                           <div className="flex items-center gap-1.5">
                             <ListChecks className="h-3.5 w-3.5" />
                             <span>
-                              {selectedFile.processedPages || 0}/{selectedFile.pageCount || 0} {t("pagine", "pages")}
+                              {selectedFile.processedPages || 0}/{selectedFile.pageCount || 0} {t("pagine", "pages", "pages", "páginas", "Seiten")}
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <Clock3 className="h-3.5 w-3.5" />
-                            <span>{t("ETA", "ETA")} {formatEta(selectedFile.etaSeconds)}</span>
+                            <span>{t("ETA", "ETA", "ETA", "ETA", "ETA")} {formatEta(selectedFile.etaSeconds)}</span>
                           </div>
                           <div className="truncate">
                             {models.find((m) => m.id === selectedModel)?.name || selectedModel}
@@ -3508,17 +3508,17 @@ export default function ExtractoPage() {
                                 >
                                   <img
                                     src={preview}
-                                    alt={`${selectedFile.name} ${t("pagina", "page")} ${pageNumber}`}
+                                    alt={`${selectedFile.name} ${t("pagina", "page", "page", "página", "Seite")} ${pageNumber}`}
                                     className="w-full h-24 object-cover rounded"
                                   />
                                   <div className="flex items-center justify-between">
-                                    <p className="text-[11px] font-medium">{t("Pagina", "Page")} {pageNumber}</p>
+                                    <p className="text-[11px] font-medium">{t("Pagina", "Page", "Page", "Página", "Seite")} {pageNumber}</p>
                                     <Badge variant={processed ? "secondary" : "outline"} className="text-[10px]">
-                                      {processed ? t("fatto", "done") : t("in coda", "queued")}
+                                      {processed ? t("fatto", "done", "fait", "hecho", "fertig") : t("in coda", "queued", "en file d'attente", "en cola", "in der Warteschlange")}
                                     </Badge>
                                   </div>
                                   <p className="text-[10px] text-muted-foreground line-clamp-3">
-                                    {checkpoint?.previewText || t("In attesa di estrazione...", "Waiting for extraction...")}
+                                    {checkpoint?.previewText || t("In attesa di estrazione...", "Waiting for extraction...", "En attente de l'extraction...", "Esperando extracción...", "Warte auf Extraktion...")}
                                   </p>
                                 </div>
                               );
@@ -3528,7 +3528,7 @@ export default function ExtractoPage() {
                         <div className="h-full min-h-0 overflow-y-auto scrollbar-hide">
                           <div className="p-4 space-y-2">
                             <p className="text-xs font-medium text-muted-foreground">
-                              {t("Attività modello in tempo reale", "Live model activity")}
+                              {t("Attività modello in tempo reale", "Live model activity", "Activité du modèle en direct", "Actividad del modelo en vivo", "Live-Modellaktivität")}
                             </p>
                             {(selectedFile.events || []).length > 0 ? (
                               [...(selectedFile.events || [])]
@@ -3552,7 +3552,7 @@ export default function ExtractoPage() {
                                 ))
                             ) : (
                               <p className="text-xs text-muted-foreground">
-                                {t("In attesa di eventi di avanzamento...", "Waiting for progress events...")}
+                                {t("In attesa di eventi di avanzamento...", "Waiting for progress events...", "En attente d'événements de progression...", "Esperando eventos de progreso...", "Warte auf Fortschrittsereignisse...")}
                               </p>
                             )}
                           </div>
@@ -3569,9 +3569,9 @@ export default function ExtractoPage() {
                         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-destructive/10 flex items-center justify-center">
                           <AlertCircle className="h-8 w-8 text-destructive" />
                         </div>
-                        <p className="text-sm font-medium mb-1">{t("Elaborazione non riuscita", "Processing Failed")}</p>
+                        <p className="text-sm font-medium mb-1">{t("Elaborazione non riuscita", "Processing Failed", "Échec du traitement", "Procesamiento fallido", "Verarbeitung fehlgeschlagen")}</p>
                         <p className="text-xs text-muted-foreground max-w-xs">
-                          {selectedFile.error || t("Si è verificato un errore durante l'elaborazione OCR", "An error occurred during OCR processing")}
+                          {selectedFile.error || t("Si è verificato un errore durante l'elaborazione OCR", "An error occurred during OCR processing", "Une erreur est survenue pendant le traitement OCR", "Ocurrió un error durante el procesamiento OCR", "Beim OCR-Vorgang ist ein Fehler aufgetreten")}
                         </p>
                       </motion.div>
                     </div>
@@ -3587,7 +3587,7 @@ export default function ExtractoPage() {
                             alt={selectedFile.name}
                             className="max-w-full max-h-[400px] object-contain rounded-md shadow-sm mb-4"
                           />
-                          <p className="text-sm font-medium mb-1">{t("Pronto per OCR", "Ready for OCR")}</p>
+                          <p className="text-sm font-medium mb-1">{t("Pronto per OCR", "Ready for OCR", "Prêt pour l'OCR", "Listo para OCR", "Bereit für OCR")}</p>
                           <p className="text-xs text-muted-foreground">
                             {t('Clicca "Avvia OCR" per estrarre il testo da questo documento', 'Click "Run OCR" to extract text from this document')}
                           </p>
@@ -3601,7 +3601,7 @@ export default function ExtractoPage() {
                           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
                             <ScanLine className="h-8 w-8 text-muted-foreground" />
                           </div>
-                          <p className="text-sm font-medium mb-1">{t("Pronto per OCR", "Ready for OCR")}</p>
+                          <p className="text-sm font-medium mb-1">{t("Pronto per OCR", "Ready for OCR", "Prêt pour l'OCR", "Listo para OCR", "Bereit für OCR")}</p>
                           <p className="text-xs text-muted-foreground">
                             {t('Clicca "Avvia OCR" per estrarre il testo', 'Click "Run OCR" to extract text')}
                           </p>
@@ -3622,9 +3622,9 @@ export default function ExtractoPage() {
                     <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
                       <Sparkles className="h-10 w-10 text-primary" />
                     </div>
-                    <h3 className="text-lg font-semibold mb-2">{t("Seleziona un documento", "Select a document")}</h3>
+                    <h3 className="text-lg font-semibold mb-2">{t("Seleziona un documento", "Select a document", "Choisir un document", "Selecciona un documento", "Dokument wählen")}</h3>
                     <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                      {t("Carica file e selezionane uno per vedere il risultato OCR", "Upload files and select one to view the OCR extraction results")}
+                      {t("Carica file e selezionane uno per vedere il risultato OCR", "Upload files and select one to view the OCR extraction results", "Téléversez des fichiers et sélectionnez-en un pour voir le résultat OCR", "Sube archivos y selecciona uno para ver el resultado del OCR", "Dateien hochladen und eine auswählen, um das OCR-Ergebnis zu sehen")}
                     </p>
                   </motion.div>
                 </CardContent>

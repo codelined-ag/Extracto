@@ -120,8 +120,8 @@ export default function AuthPage() {
 
     if (!isValidEmail(form.email) || form.password.length < 8) {
       toast({
-        title: t("Input non valido", "Invalid input"),
-        description: t("Inserisci una email valida e una password di almeno 8 caratteri.", "Enter a valid email and a password with at least 8 characters."),
+        title: t("Input non valido", "Invalid input", "Entrée invalide", "Entrada no válida", "Ungültige Eingabe"),
+        description: t("Inserisci una email valida e una password di almeno 8 caratteri.", "Enter a valid email and a password with at least 8 characters.", "Saisissez un email valide et un mot de passe d'au moins 8 caractères.", "Introduce un correo válido y una contraseña de al menos 8 caracteres.", "Gib eine gültige E-Mail und ein Passwort mit mindestens 8 Zeichen ein."),
         variant: "destructive",
       });
       return;
@@ -147,14 +147,14 @@ export default function AuthPage() {
       };
 
       if (!response.ok) {
-        throw new Error(payload.error || t("Autenticazione non riuscita", "Authentication failed"));
+        throw new Error(payload.error || t("Autenticazione non riuscita", "Authentication failed", "Échec de l'authentification", "Error de autenticación", "Authentifizierung fehlgeschlagen"));
       }
 
       router.push("/");
     } catch (error) {
       toast({
-        title: t("Autenticazione non riuscita", "Authentication failed"),
-        description: error instanceof Error ? error.message : t("Riprova", "Please try again"),
+        title: t("Autenticazione non riuscita", "Authentication failed", "Échec de l'authentification", "Error de autenticación", "Authentifizierung fehlgeschlagen"),
+        description: error instanceof Error ? error.message : t("Riprova", "Please try again", "Veuillez réessayer", "Por favor, inténtalo de nuevo", "Bitte erneut versuchen"),
         variant: "destructive",
       });
     } finally {
@@ -171,9 +171,9 @@ export default function AuthPage() {
       <Card className="w-full max-w-md border-2">
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
-            <CardTitle>{t("Accesso Extracto", "Extracto Access")}</CardTitle>
+            <CardTitle>{t("Accesso Extracto", "Extracto Access", "Accès Extracto", "Acceso a Extracto", "Extracto-Zugang")}</CardTitle>
             <Select value={uiLanguage} onValueChange={(value) => setUiLanguage(value as UiLanguage)}>
-              <SelectTrigger className="w-[90px] h-8" aria-label={t("Lingua", "Language")}>
+              <SelectTrigger className="w-[90px] h-8" aria-label={t("Lingua", "Language", "Langue", "Idioma", "Sprache")}>
                 <div className="flex items-center gap-1.5">
                   <Languages className="h-3.5 w-3.5 text-primary" />
                   <SelectValue />
@@ -186,14 +186,14 @@ export default function AuthPage() {
             </Select>
           </div>
           <CardDescription>
-            {t("Accedi o crea un account gratuito per usare l'OCR.", "Sign in or create a free account to access OCR.")}
+            {t("Accedi o crea un account gratuito per usare l'OCR.", "Sign in or create a free account to access OCR.", "Connectez-vous ou créez un compte gratuit pour utiliser l'OCR.", "Inicia sesión o crea una cuenta gratis para usar OCR.", "Anmelden oder kostenloses Konto erstellen, um OCR zu nutzen.")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs value={mode} onValueChange={(next) => setMode(next as "signin" | "signup")}>
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">{t("Accedi", "Sign In")}</TabsTrigger>
-              <TabsTrigger value="signup">{t("Registrati", "Sign Up")}</TabsTrigger>
+              <TabsTrigger value="signin">{t("Accedi", "Sign In", "Se connecter", "Iniciar sesión", "Anmelden")}</TabsTrigger>
+              <TabsTrigger value="signup">{t("Registrati", "Sign Up", "S'inscrire", "Registrarse", "Registrieren")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="signin" className="mt-4 space-y-4">
@@ -210,7 +210,7 @@ export default function AuthPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">{t("Password", "Password")}</Label>
+                  <Label htmlFor="password">{t("Password", "Password", "Mot de passe", "Contraseña", "Passwort")}</Label>
                   <Input
                     id="password"
                     type="password"
@@ -221,7 +221,7 @@ export default function AuthPage() {
                   />
                 </div>
                 <Button type="submit" disabled={loading} className="w-full">
-                  {loading ? t("Accesso in corso...", "Signing in...") : t("Accedi", "Sign In")}
+                  {loading ? t("Accesso in corso...", "Signing in...", "Connexion en cours...", "Iniciando sesión...", "Anmeldung läuft...") : t("Accedi", "Sign In", "Se connecter", "Iniciar sesión", "Anmelden")}
                 </Button>
               </form>
             </TabsContent>
@@ -229,7 +229,7 @@ export default function AuthPage() {
             <TabsContent value="signup" className="mt-4 space-y-4">
               <form className="space-y-4" onSubmit={submit}>
                 <div className="space-y-2">
-                  <Label htmlFor="name">{t("Nome", "Name")}</Label>
+                  <Label htmlFor="name">{t("Nome", "Name", "Nom", "Nombre", "Name")}</Label>
                   <Input
                     id="name"
                     value={form.name}
@@ -239,7 +239,7 @@ export default function AuthPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-email">{t("Email", "Email")}</Label>
+                  <Label htmlFor="signup-email">{t("Email", "Email", "Email", "Correo", "E-Mail")}</Label>
                   <Input
                     id="signup-email"
                     type="email"
@@ -250,7 +250,7 @@ export default function AuthPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-password">{t("Password", "Password")}</Label>
+                  <Label htmlFor="signup-password">{t("Password", "Password", "Mot de passe", "Contraseña", "Passwort")}</Label>
                   <Input
                     id="signup-password"
                     type="password"
@@ -261,7 +261,7 @@ export default function AuthPage() {
                   />
                 </div>
                 <Button type="submit" disabled={loading} className="w-full">
-                  {loading ? t("Creazione account...", "Creating account...") : t("Crea account gratuito", "Create Free Account")}
+                  {loading ? t("Creazione account...", "Creating account...", "Création du compte...", "Creando cuenta...", "Konto wird erstellt...") : t("Crea account gratuito", "Create Free Account", "Créer un compte gratuit", "Crear cuenta gratis", "Kostenloses Konto erstellen")}
                 </Button>
               </form>
             </TabsContent>
