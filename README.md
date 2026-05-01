@@ -172,11 +172,18 @@ the UI and accepts API-key Bearer auth for non-browser clients.
 
 API keys are scoped to a single user, stored only as an HMAC-SHA256 hash
 (keyed by `AUTH_SECRET`), and shown in plaintext exactly once at creation.
+Each key carries a **scope list** and an optional **per-key rate limit**.
 
 **Headless (CLI, no UI required):**
 
 ```bash
+# Default: scope "*" (all), default rate limit (global per-user)
 extracto api-key create user@example.com "ci-runner"
+
+# Restricted: only OCR submit + read, 30 req/min
+extracto api-key create user@example.com "batch-runner" \
+  --scopes=ocr:submit,ocr:read --rate-limit=30
+
 extracto api-key list   user@example.com
 extracto api-key revoke <key-id>
 ```
@@ -188,13 +195,17 @@ or insert an `AuthUser` row directly).
 **From an authenticated browser session:**
 
 ```bash
-# Create
+# Create with scopes + per-key limit
 curl -X POST http://localhost:3000/api/v1/keys \
   -H "Content-Type: application/json" \
   -b cookies.txt \
-  -d '{"name":"ci-runner"}'
+  -d '{
+    "name": "ci-runner",
+    "scopes": ["ocr:submit", "ocr:read"],
+    "rateLimitPerMinute": 30
+  }'
 
-# List
+# List (also returns availableScopes catalog)
 curl http://localhost:3000/api/v1/keys -b cookies.txt
 
 # Revoke
@@ -203,6 +214,19 @@ curl -X DELETE http://localhost:3000/api/v1/keys/<id> -b cookies.txt
 
 API keys cannot create or revoke other API keys — that path is session-only
 to keep the blast radius of a leaked key bounded to OCR work.
+
+**Available scopes:**
+
+| Scope | Grants |
+|---|---|
+| `*` | Everything below |
+| `ocr:submit` | `POST /api/ocr`, batch, OpenAI adapter |
+| `ocr:read` | List jobs, read job detail, model catalog, SSE stream |
+| `ocr:control` | Delete jobs, stop running jobs |
+| `settings:read` / `settings:write` | Per-user provider settings + global OCR tuning |
+| `webhooks:read` / `webhooks:write` | Webhook CRUD |
+| `presets:read` / `presets:write` | Output preset CRUD |
+| `search:read` | Job-history search |
 
 ### Submit an OCR job and poll
 
@@ -229,23 +253,223 @@ curl -s "http://localhost:3000/api/jobs/$JOB_ID" \
 # → { "job": { "status": "COMPLETED", "extractedText": "...", "result": {...} } }
 ```
 
-Per-user OCR rate limit: 6 jobs per 60s window.
+Per-user OCR rate limit: 6 jobs per 60s window by default. API keys with a
+configured `rateLimitPerMinute` use that limit instead, keyed by the API key
+itself (not by user+IP).
+
+### Stream progress with SSE
+
+Instead of polling, open a persistent stream. Each progress update is an SSE
+event; the stream closes automatically when the job hits a terminal state.
+
+```bash
+curl -N -H "Authorization: Bearer $EXTRACTO_API_KEY" \
+  http://localhost:3000/api/jobs/$JOB_ID/stream
+
+# event: hello
+# data: {"jobId":"..."}
+#
+# event: progress
+# data: {"id":"...","status":"PROCESSING","metadata":{...},"updatedAt":"..."}
+#
+# event: done
+# data: {"id":"...","status":"COMPLETED"}
+```
+
+### Bulk import
+
+Submit up to 50 files in a single request, sharing one `batchId`:
+
+```bash
+curl -X POST http://localhost:3000/api/v1/ocr/batch \
+  -H "Authorization: Bearer $EXTRACTO_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "files": [
+      {"fileName": "invoice-1.pdf", "preview": "data:...", "model": "minicpm-v"},
+      {"fileName": "invoice-2.pdf", "preview": "data:...", "model": "minicpm-v", "priority": 5}
+    ]
+  }'
+# → { "batchId": "batch_...", "submissions": [{"fileName":..., "jobId":...}, ...] }
+```
+
+`priority` (-10..10, default 0) controls queue order when concurrent
+submissions exceed `OCR_WORKER_CONCURRENCY`.
+
+### OpenAI-compatible adapter
+
+Point existing OpenAI-SDK code at Extracto for OCR by setting the base URL
+to `/api/v1/openai`:
+
+```bash
+curl -X POST http://localhost:3000/api/v1/openai/chat/completions \
+  -H "Authorization: Bearer $EXTRACTO_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "anthropic/claude-3.5-sonnet",
+    "messages": [{
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Extract all invoice line items as a markdown table."},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+      ]
+    }]
+  }'
+```
+
+The adapter blocks until the OCR job completes (up to 5 minutes), then
+returns the OpenAI Chat Completions response shape with the extracted text
+in `choices[0].message.content`.
+
+### Webhooks
+
+Subscribe to `job.completed` and `job.failed` events. Each delivery is signed
+with HMAC-SHA256 in the `X-Extracto-Signature: t=<unix-ts>,v1=<hex>` header
+(Stripe-style); the signed payload is `${ts}.${body}`.
+
+```bash
+# Create
+curl -X POST http://localhost:3000/api/v1/webhooks \
+  -H "Authorization: Bearer $EXTRACTO_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://your-app.example/extracto-hook", "events": ["job.completed"]}'
+# → { "webhook": { "id":..., "secret":"whsec_..." }, "warning": "..." }
+# (the secret is shown once — store it now)
+
+# List / disable / delete
+curl http://localhost:3000/api/v1/webhooks -H "Authorization: Bearer $EXTRACTO_API_KEY"
+curl -X PATCH http://localhost:3000/api/v1/webhooks/<id> -H "..." -d '{"active": false}'
+curl -X DELETE http://localhost:3000/api/v1/webhooks/<id> -H "..."
+```
+
+### History search
+
+```bash
+curl "http://localhost:3000/api/v1/search?q=invoice&limit=10" \
+  -H "Authorization: Bearer $EXTRACTO_API_KEY"
+# → { "q":"invoice", "count":..., "results":[{ "id":..., "snippet":"…invoice #123…" }] }
+```
+
+LIKE-based for v1; FTS5 is a future improvement.
+
+### Output presets
+
+Save and reuse post-processing recipes (custom instruction + output format):
+
+```bash
+# Create
+curl -X POST http://localhost:3000/api/v1/presets \
+  -H "Authorization: Bearer $EXTRACTO_API_KEY" \
+  -d '{"name":"Invoice → JSON line items","instruction":"Extract line items as JSON array of {description, qty, price}","outputFormat":"json"}'
+
+# List / update / delete
+curl http://localhost:3000/api/v1/presets -H "Authorization: ..."
+curl -X PATCH http://localhost:3000/api/v1/presets/<id> -H "..." -d '{"name":"..."}'
+curl -X DELETE http://localhost:3000/api/v1/presets/<id> -H "..."
+```
 
 ### Endpoint reference
 
-| Endpoint | Methods | Auth | Notes |
+| Endpoint | Methods | Auth | Required scope (api-key) |
 |---|---|---|---|
-| `/api/health` | GET | public | Healthcheck |
-| `/api/auth/*` | POST/GET | session only | Sign up / log in / sign out |
-| `/api/v1/keys` | GET, POST | session only | List / create API keys |
-| `/api/v1/keys/:id` | DELETE | session only | Revoke an API key |
-| `/api/ocr` | GET, POST | session or Bearer | GET = model catalog; POST = submit job |
-| `/api/models` | GET | session or Bearer | Discover models |
-| `/api/jobs` | GET, DELETE | session or Bearer | List / bulk-delete jobs |
-| `/api/jobs/:id` | GET, DELETE | session or Bearer | Job detail / delete |
-| `/api/jobs/:id/control` | POST | session or Bearer | Stop a running job |
-| `/api/settings` | GET, POST | session or Bearer | Per-user provider settings |
-| `/api/ocr/settings` | GET, PUT | session or Bearer | Global OCR tuning prefs |
+| `/api/health` | GET | public | — |
+| `/api/auth/*` | POST/GET | session only | — |
+| `/api/v1/keys` | GET, POST | session only | — |
+| `/api/v1/keys/:id` | DELETE | session only | — |
+| `/api/v1/webhooks` | GET, POST | session or Bearer | `webhooks:read` / `webhooks:write` |
+| `/api/v1/webhooks/:id` | PATCH, DELETE | session or Bearer | `webhooks:write` |
+| `/api/v1/presets` | GET, POST | session or Bearer | `presets:read` / `presets:write` |
+| `/api/v1/presets/:id` | PATCH, DELETE | session or Bearer | `presets:write` |
+| `/api/v1/ocr/batch` | POST | session or Bearer | `ocr:submit` |
+| `/api/v1/openai/chat/completions` | POST | session or Bearer | `ocr:submit` |
+| `/api/v1/search` | GET | session or Bearer | `search:read` |
+| `/api/v1/metrics` | GET | `METRICS_TOKEN` | — |
+| `/api/ocr` | GET, POST | session or Bearer | `ocr:read` (GET) / `ocr:submit` (POST) |
+| `/api/models` | GET | session or Bearer | `ocr:read` |
+| `/api/jobs` | GET, DELETE | session or Bearer | `ocr:read` / `ocr:control` |
+| `/api/jobs/:id` | GET, DELETE | session or Bearer | `ocr:read` / `ocr:control` |
+| `/api/jobs/:id/stream` | GET (SSE) | session or Bearer | `ocr:read` |
+| `/api/jobs/:id/control` | POST | session or Bearer | `ocr:control` |
+| `/api/settings` | GET, POST | session or Bearer | `settings:read` / `settings:write` |
+| `/api/ocr/settings` | GET, PUT | session or Bearer | `settings:read` / `settings:write` |
+
+## Service-mode operations
+
+Knobs that mostly matter when Extracto runs as an unattended API service.
+
+### Result storage (S3 / MinIO)
+
+By default, OCR results are stored inline in SQLite (`extractedText` column +
+`result` JSON). For large workloads, offload to S3-compatible object storage:
+
+```bash
+# docker.env
+RESULT_STORAGE=s3
+S3_BUCKET=extracto-results
+S3_REGION=us-east-1
+S3_ENDPOINT=https://s3.amazonaws.com         # or e.g. http://minio:9000 for MinIO
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY=...
+S3_PREFIX=extracto                            # key prefix
+S3_FORCE_PATH_STYLE=false                     # set true for MinIO
+```
+
+When `RESULT_STORAGE=s3`, completed jobs upload `extractedText` and the
+result JSON to S3 and store an `s3://...` reference in the DB. Reads are
+transparent — `GET /api/jobs/:id` resolves the S3 reference and returns
+inline JSON.
+
+### Priority queue
+
+Concurrent OCR submissions are admitted by a priority semaphore.
+
+- `OCR_WORKER_CONCURRENCY` (default `2`): max simultaneous jobs.
+- Per-job `priority` body field, range `-10..10` (default `0`). Higher wins
+  when the queue is contended. Lower priorities are useful for the watched
+  folder and bulk imports so they don't crowd interactive UI users.
+
+Stop requests are durable: `POST /api/jobs/:id/control { "action": "stop" }`
+flips `OcrJob.stopRequestedAt`, the running pipeline polls for it once per
+page and pauses with a resumable checkpoint.
+
+### Job retention
+
+```bash
+RETAIN_JOBS_DAYS=30   # delete jobs older than 30 days; sweeps every 24h
+```
+
+`0` (default) disables retention. The sweep removes both DB rows and any
+S3 artifacts they referenced.
+
+### Watched-folder ingestion
+
+Drop PDFs/images into a host-mounted directory and have them auto-OCR'd:
+
+```bash
+# docker.env
+WATCH_FOLDER=/host-watch
+WATCH_FOLDER_USER_EMAIL=ops@example.com
+WATCH_FOLDER_API_KEY=extr_...                 # a real key minted for that user
+WATCH_FOLDER_MODEL=minicpm-v                  # or any provider model
+WATCH_FOLDER_PROVIDER=ollama                  # optional override
+WATCH_FOLDER_INTERVAL_MS=30000                # poll interval (min 5000)
+```
+
+Supported extensions: `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`. A
+`.extracto.done` sidecar marks each completed file so it isn't reprocessed.
+Watched-folder jobs run at priority `-2` so interactive submissions still cut
+ahead.
+
+### Prometheus metrics
+
+```bash
+METRICS_TOKEN=$(openssl rand -hex 32)
+curl -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:3000/api/v1/metrics
+```
+
+Returns Prometheus exposition with job counts by status, queue depth, and
+in-process counters (provider errors, OpenRouter cache hit/miss, webhook
+delivery counts). Returns `503` if `METRICS_TOKEN` is unset.
 
 ## Local Development
 
@@ -309,13 +533,20 @@ docker compose --env-file docker.env config
 - Do not commit real API keys.
 - Rotate `AUTH_SECRET` for production. Rotating invalidates all existing API
   keys (their stored hashes are HMAC-keyed by `AUTH_SECRET`) — re-issue keys
-  after rotation.
+  after rotation. Webhook signing secrets are NOT keyed by `AUTH_SECRET` and
+  survive rotation.
 - Use HTTPS and set `COOKIE_SECURE=true` in production.
 - Provider endpoints are validated against `OLLAMA_ALLOWED_HOSTS` /
-  `MISTRAL_ALLOWED_HOSTS` allowlists. User-supplied endpoints outside the
-  allowlist are rejected.
-- The in-memory job-control registry assumes a single-process deploy. Stop
-  requests and abort signals will not propagate across replicas.
+  `MISTRAL_ALLOWED_HOSTS` / `OPENROUTER_ALLOWED_HOSTS` allowlists.
+  User-supplied endpoints outside the allowlist are rejected.
+- API key listing/creation/revocation is session-only — even a key with the
+  `*` scope cannot mint or revoke other keys.
+- Webhook bodies are HMAC-SHA256 signed with a per-webhook secret. Verify
+  with the `X-Extracto-Signature` header (`t=<unix-ts>,v1=<hex>` over
+  `${ts}.${body}`).
+- AbortController-based cancellation is in-process; the durable
+  `stopRequestedAt` flag works across replicas, but the abort signal itself
+  reaches only the process that owns the running job.
 
 ## License
 
