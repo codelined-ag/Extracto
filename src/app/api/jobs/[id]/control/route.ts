@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
-import { authenticateMutation } from "@/lib/auth/request";
+import { authenticateMutation, requireScope } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { abortOcrJobRequests, isOcrJobRunning, requestOcrJobStop } from "@/lib/ocr/job-control";
 
@@ -13,6 +13,8 @@ export async function POST(
   if (!authResult.ok) {
     return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
+  const scopeError = requireScope(authResult.auth, "ocr:control");
+  if (scopeError) return scopeError;
   const userId = authResult.auth.userId;
 
   const { id } = await context.params;

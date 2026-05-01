@@ -50,7 +50,7 @@ export function normalizeRequestedScopes(input: unknown): string[] {
     }
   }
   if (normalized.size === 0) {
-    return [WILDCARD_SCOPE];
+    return [...ALL_SCOPES];
   }
   return Array.from(normalized);
 }
