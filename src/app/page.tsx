@@ -69,6 +69,7 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { type ProviderKind } from "@/lib/endpoint-policy";
+import { type AdvancedSettings } from "@/lib/ocr/settings";
 import ReactMarkdown from "react-markdown";
 
 // Types
@@ -121,15 +122,6 @@ interface ApiSettings {
   apiEndpoint: string;
   apiKey: string;
   hasApiKey?: boolean;
-}
-
-interface AdvancedSettings {
-  language: string;
-  tableDetection: boolean;
-  handwritingRecognition: boolean;
-  preserveFormatting: boolean;
-  customPrompt: string;
-  quality: number;
 }
 
 type PostProcessOutputFormat = "markdown" | "json";

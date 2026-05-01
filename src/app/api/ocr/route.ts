@@ -27,15 +27,7 @@ import {
 } from "@/lib/host-normalization";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
-
-interface AdvancedSettings {
-  language: string;
-  tableDetection: boolean;
-  handwritingRecognition: boolean;
-  preserveFormatting: boolean;
-  customPrompt: string;
-  quality: number;
-}
+import { AdvancedSettings, normalizeAdvancedSettings } from "@/lib/ocr/settings";
 
 type PostProcessOutputFormat = "markdown" | "json";
 
@@ -513,23 +505,6 @@ function buildMistralOcrEndpointCandidates(rawEndpoint: string): string[] {
       }
     })
     .filter(Boolean);
-}
-
-function sanitizeSettings(raw: Partial<AdvancedSettings> | undefined): AdvancedSettings {
-  const safeQuality =
-    typeof raw?.quality === "number" && Number.isFinite(raw.quality)
-      ? Math.max(50, Math.min(100, Math.round(raw.quality / 10) * 10))
-      : 80;
-
-  return {
-    language: typeof raw?.language === "string" && raw.language.trim() ? raw.language.trim() : "auto",
-    tableDetection: typeof raw?.tableDetection === "boolean" ? raw.tableDetection : true,
-    handwritingRecognition:
-      typeof raw?.handwritingRecognition === "boolean" ? raw.handwritingRecognition : false,
-    preserveFormatting: typeof raw?.preserveFormatting === "boolean" ? raw.preserveFormatting : true,
-    customPrompt: typeof raw?.customPrompt === "string" ? raw.customPrompt.trim() : "",
-    quality: safeQuality,
-  };
 }
 
 function sanitizePostProcessing(
@@ -3186,7 +3161,7 @@ export async function POST(request: NextRequest) {
       : preview
         ? [preview]
         : [];
-    const settingsPayload = sanitizeSettings(body.settings);
+    const settingsPayload = normalizeAdvancedSettings(body.settings);
     const postProcessingPayload = sanitizePostProcessing(body.postProcessing);
     const settings = normalizeApiSettings(storedSettings);
 
