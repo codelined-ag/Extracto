@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getAuthenticatedUserId } from "@/lib/auth/request";
+import { authenticateRequest, requireScope } from "@/lib/auth/request";
 import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
 import { getApiSettings } from "@/lib/settings-store";
 import {
@@ -74,10 +74,13 @@ function getModelPaths(providerHint?: "ollama" | "mistral" | ""): readonly strin
 }
 
 export async function GET(request: NextRequest) {
-  const userId = await getAuthenticatedUserId(request);
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await authenticateRequest(request);
+  if (!authResult.ok) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
+  const scopeError = requireScope(authResult.auth, "ocr:read");
+  if (scopeError) return scopeError;
+  const userId = authResult.auth.userId;
 
   const settings = await getApiSettings(userId);
   const query = new URL(request.url).searchParams;

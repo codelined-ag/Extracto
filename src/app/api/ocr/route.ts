@@ -3,7 +3,7 @@ import { OcrJobStatus, Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
 
 import { ApiProviderSettings, getApiSettings } from "@/lib/settings-store";
-import { authenticateMutation, authHasScope, getAuthenticatedUserId } from "@/lib/auth/request";
+import { authenticateMutation, authenticateRequest, authHasScope, requireScope } from "@/lib/auth/request";
 import {
   maybeUploadResultJson,
   maybeUploadResultText,
@@ -3008,10 +3008,13 @@ function parseCheckpointPages(
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId(request);
-    if (!userId) {
-      throw new ApiRouteError("Unauthorized", 401);
+    const authResult = await authenticateRequest(request);
+    if (!authResult.ok) {
+      throw new ApiRouteError(authResult.error, authResult.status);
     }
+    const scopeError = requireScope(authResult.auth, "ocr:read");
+    if (scopeError) return scopeError;
+    const userId = authResult.auth.userId;
 
     const storedSettings = normalizeApiSettings(await getApiSettings(userId));
     const query = new URL(request.url).searchParams;
