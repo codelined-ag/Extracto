@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual as cryptoTimingSafeEqual } from "node:crypto";
 import { NextRequest } from "next/server";
 
 import { db } from "@/lib/db";
@@ -6,13 +7,13 @@ import { getOcrQueueDepth } from "@/lib/ocr/job-control";
 
 const METRICS_TOKEN = process.env.METRICS_TOKEN?.trim() || "";
 
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return mismatch === 0;
+function timingSafeEqual(presented: string, expected: string): boolean {
+  // Hash both sides to a fixed 32-byte digest so the constant-time compare
+  // never short-circuits on length mismatch (which would leak the expected
+  // token's length).
+  const a = createHash("sha256").update(presented, "utf8").digest();
+  const b = createHash("sha256").update(expected, "utf8").digest();
+  return cryptoTimingSafeEqual(a, b);
 }
 
 export async function GET(request: NextRequest) {

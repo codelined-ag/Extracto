@@ -28,6 +28,12 @@ interface ApiKeyVerifyResult {
   rateLimitPerMinute: number | null;
 }
 
+function startOfNextMonth(now: Date): Date {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  return new Date(Date.UTC(year, month + 1, 1, 0, 0, 0, 0));
+}
+
 async function verifyApiKeyToken(token: string): Promise<ApiKeyVerifyResult | null> {
   if (!isLikelyApiKey(token)) {
     return null;
@@ -49,6 +55,7 @@ async function verifyApiKeyToken(token: string): Promise<ApiKeyVerifyResult | nu
       revokedAt: true,
       scopes: true,
       rateLimitPerMinute: true,
+      monthlyResetAt: true,
     },
   });
 
@@ -60,14 +67,26 @@ async function verifyApiKeyToken(token: string): Promise<ApiKeyVerifyResult | nu
     return null;
   }
 
+  const now = new Date();
+  const shouldReset =
+    !record.monthlyResetAt || record.monthlyResetAt.getTime() <= now.getTime();
+  const nextReset = startOfNextMonth(now);
+
   void db.apiKey
     .update({
       where: { id: record.id },
-      data: {
-        lastUsedAt: new Date(),
-        totalRequests: { increment: 1 },
-        requestsThisMonth: { increment: 1 },
-      },
+      data: shouldReset
+        ? {
+            lastUsedAt: now,
+            totalRequests: { increment: 1 },
+            requestsThisMonth: 1,
+            monthlyResetAt: nextReset,
+          }
+        : {
+            lastUsedAt: now,
+            totalRequests: { increment: 1 },
+            requestsThisMonth: { increment: 1 },
+          },
     })
     .catch(() => undefined);
 

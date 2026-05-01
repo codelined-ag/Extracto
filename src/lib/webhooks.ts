@@ -7,6 +7,7 @@ export type WebhookEvent = (typeof SUPPORTED_EVENTS)[number];
 
 const WEBHOOK_TIMEOUT_MS = 5_000;
 const WEBHOOK_USER_AGENT = "Extracto-Webhook/1.0";
+export const WEBHOOK_SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
 
 export function isSupportedWebhookEvent(value: string): value is WebhookEvent {
   return (SUPPORTED_EVENTS as readonly string[]).includes(value);
@@ -41,7 +42,8 @@ function signPayload(secret: string, body: string, timestamp: number): string {
 export function verifyWebhookSignature(
   secret: string,
   body: string,
-  signatureHeader: string | null | undefined
+  signatureHeader: string | null | undefined,
+  options?: { toleranceSeconds?: number; nowSeconds?: number }
 ): boolean {
   if (!signatureHeader) return false;
   const parts = signatureHeader.split(",");
@@ -52,7 +54,13 @@ export function verifyWebhookSignature(
     if (key === "t") timestamp = Number(value);
     if (key === "v1") signature = value || null;
   }
-  if (!timestamp || !signature) return false;
+  if (!timestamp || !Number.isFinite(timestamp) || !signature) return false;
+
+  const tolerance =
+    options?.toleranceSeconds ?? WEBHOOK_SIGNATURE_TOLERANCE_SECONDS;
+  const now = options?.nowSeconds ?? Math.floor(Date.now() / 1000);
+  if (Math.abs(now - timestamp) > tolerance) return false;
+
   const expected = signPayload(secret, body, timestamp);
   const a = Buffer.from(expected, "hex");
   const b = Buffer.from(signature, "hex");
