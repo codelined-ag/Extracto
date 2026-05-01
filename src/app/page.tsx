@@ -30,7 +30,6 @@ import {
   PlayCircle,
   Clock3,
   ListChecks,
-  FolderOpen,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 

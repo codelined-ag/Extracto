@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus, Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
-import { chmod, chown, mkdir, stat, writeFile } from "node:fs/promises";
-import path from "node:path";
 
 import { ApiProviderSettings, getApiSettings } from "@/lib/settings-store";
 import { authenticateMutation, authHasScope, getAuthenticatedUserId } from "@/lib/auth/request";
