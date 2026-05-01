@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus } from "@prisma/client";
 
-import { getAuthenticatedUserId } from "@/lib/auth/request";
+import { authenticateMutation, getAuthenticatedUserId } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-import { isTrustedMutationRequest } from "@/lib/request-security";
 
 const MAX_PAGE_SIZE = 100;
 
@@ -71,25 +70,23 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const userId = await getAuthenticatedUserId(request);
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await authenticateMutation(request);
+  if (!authResult.ok) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
-  if (!isTrustedMutationRequest(request)) {
-    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
-  }
+  const userId = authResult.auth.userId;
 
   const { searchParams } = new URL(request.url);
   const jobId = searchParams.get("id");
 
   if (jobId) {
-    const result = await db.ocrJob.deleteMany({
+    const single = await db.ocrJob.deleteMany({
       where: { id: jobId, userId },
     });
-    if (result.count === 0) {
+    if (single.count === 0) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
-    return NextResponse.json({ deleted: result.count });
+    return NextResponse.json({ deleted: single.count });
   }
 
   const rawStatus = searchParams.get("status");
@@ -105,12 +102,12 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
-  const result = await db.ocrJob.deleteMany({
+  const bulk = await db.ocrJob.deleteMany({
     where: {
       userId,
       ...(statusFilter ? { status: statusFilter } : {}),
     },
   });
 
-  return NextResponse.json({ deleted: result.count });
+  return NextResponse.json({ deleted: bulk.count });
 }

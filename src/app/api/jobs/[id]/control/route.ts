@@ -1,22 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
-import { getAuthenticatedUserId } from "@/lib/auth/request";
+import { authenticateMutation } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { abortOcrJobRequests, isOcrJobRunning, requestOcrJobStop } from "@/lib/ocr/job-control";
-import { isTrustedMutationRequest } from "@/lib/request-security";
 
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const userId = await getAuthenticatedUserId(request);
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await authenticateMutation(request);
+  if (!authResult.ok) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
-  if (!isTrustedMutationRequest(request)) {
-    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
-  }
+  const userId = authResult.auth.userId;
 
   const { id } = await context.params;
   if (!id) {

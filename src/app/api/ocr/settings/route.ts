@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OcrSetting } from "@prisma/client";
 import { db } from "@/lib/db";
-import { isTrustedMutationRequest } from "@/lib/request-security";
+import { authenticateMutation, getAuthenticatedUserId } from "@/lib/auth/request";
 import {
   DEFAULT_SETTINGS,
   OCR_SETTINGS_KEY,
@@ -34,14 +34,20 @@ async function getDefaultSettingsRow() {
   return settings;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const userId = await getAuthenticatedUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const settings = await getDefaultSettingsRow();
   return NextResponse.json(mapSettingsResponse(settings));
 }
 
 export async function PUT(request: NextRequest) {
-  if (!isTrustedMutationRequest(request)) {
-    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+  const result = await authenticateMutation(request);
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
   }
 
   const body = await request.json().catch(() => ({}));

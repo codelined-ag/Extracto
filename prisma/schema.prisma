@@ -26,8 +26,24 @@ model AuthUser {
   passwordHash String
   name         String?
   jobs         OcrJob[]
+  apiKeys      ApiKey[]
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  userId      String
+  user        AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  prefix      String
+  keyHash     String    @unique
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([keyHash])
 }
 
 model OcrSetting {

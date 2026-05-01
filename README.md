@@ -101,6 +101,10 @@ Important variables:
 - `OLLAMA_HOST_FALLBACKS`: optional comma-separated fallback hosts.
 - `OBSIDIAN_EXPORT_BASE_DIR`: container path where vault exports are written.
 - `OBSIDIAN_EXPORT_HOST_ROOT`: host path bind-mounted to `OBSIDIAN_EXPORT_BASE_DIR`.
+- `OLLAMA_ALLOWED_HOSTS` / `MISTRAL_ALLOWED_HOSTS`: optional comma-separated
+  allowlists for provider endpoints. User-supplied endpoints outside these
+  patterns are rejected; defaults cover localhost, docker gateway hosts, and
+  `*.mistral.ai`.
 
 ## Ollama Host Connectivity
 
@@ -116,24 +120,106 @@ If using bridge mode, host Ollama must be reachable from container network. Typi
 
 ## Authentication
 
-The application is gated by `/auth` with free signup enabled.
+The application is gated by `/auth` with free signup enabled. Two
+authentication methods are supported:
 
-API endpoints:
+1. **Session cookie** — used by the browser UI. Sign in at `/auth`.
+2. **API key (Bearer token)** — for headless / server-to-server use. Send as
+   `Authorization: Bearer extr_...` on any `/api/*` request.
+
+Session-based mutations are CSRF-protected via origin/referer checks. API-key
+requests skip that check (no implicit credentials in non-browser clients).
+
+Auth endpoints:
 
 - `POST /api/auth/signup`
 - `POST /api/auth/login`
 - `POST /api/auth/signout`
 - `GET /api/auth/session`
 
-## OCR and Jobs API (High Level)
+## Headless API
 
-- `POST /api/ocr`: process a file/pages.
-  - Supports `mode: "ocr" | "pdf_to_obsidian"` plus `obsidian` export settings.
-- `GET /api/models`: discover models from configured host.
-- `GET /api/jobs`: list user OCR jobs.
-- `GET /api/jobs/:id`: get OCR job detail.
-- `DELETE /api/jobs/:id`: delete OCR job.
-- `GET /api/settings` and `POST /api/settings`: persistent API settings.
+Extracto can be deployed as a headless OCR service: the same HTTP API powers
+the UI and accepts API-key Bearer auth for non-browser clients.
+
+### Provisioning an API key
+
+API keys are scoped to a single user, stored only as an HMAC-SHA256 hash
+(keyed by `AUTH_SECRET`), and shown in plaintext exactly once at creation.
+
+**Headless (CLI, no UI required):**
+
+```bash
+extracto api-key create user@example.com "ci-runner"
+extracto api-key list   user@example.com
+extracto api-key revoke <key-id>
+```
+
+The CLI runs inside the running container via `docker compose exec`, so the
+container must be up. The user must already exist (sign up via the UI once,
+or insert an `AuthUser` row directly).
+
+**From an authenticated browser session:**
+
+```bash
+# Create
+curl -X POST http://localhost:3000/api/v1/keys \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{"name":"ci-runner"}'
+
+# List
+curl http://localhost:3000/api/v1/keys -b cookies.txt
+
+# Revoke
+curl -X DELETE http://localhost:3000/api/v1/keys/<id> -b cookies.txt
+```
+
+API keys cannot create or revoke other API keys — that path is session-only
+to keep the blast radius of a leaked key bounded to OCR work.
+
+### Submit an OCR job and poll
+
+```bash
+# 1. Discover available models
+curl -s http://localhost:3000/api/models \
+  -H "Authorization: Bearer $EXTRACTO_API_KEY"
+
+# 2. Submit an OCR job (PDF as base64-encoded data URL or image preview)
+curl -s -X POST http://localhost:3000/api/ocr \
+  -H "Authorization: Bearer $EXTRACTO_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fileName": "invoice.pdf",
+    "model": "minicpm-v",
+    "preview": "data:application/pdf;base64,JVBERi0xLjQK...",
+    "mode": "ocr"
+  }'
+# → { "jobId": "...", "status": "QUEUED", ... }
+
+# 3. Poll for completion
+curl -s "http://localhost:3000/api/jobs/$JOB_ID" \
+  -H "Authorization: Bearer $EXTRACTO_API_KEY"
+# → { "job": { "status": "COMPLETED", "extractedText": "...", "result": {...} } }
+```
+
+Per-user OCR rate limit: 6 jobs per 60s window.
+
+### Endpoint reference
+
+| Endpoint | Methods | Auth | Notes |
+|---|---|---|---|
+| `/api/health` | GET | public | Healthcheck |
+| `/api/auth/*` | POST/GET | session only | Sign up / log in / sign out |
+| `/api/v1/keys` | GET, POST | session only | List / create API keys |
+| `/api/v1/keys/:id` | DELETE | session only | Revoke an API key |
+| `/api/ocr` | GET, POST | session or Bearer | GET = model catalog; POST = submit job |
+| `/api/models` | GET | session or Bearer | Discover models |
+| `/api/jobs` | GET, DELETE | session or Bearer | List / bulk-delete jobs |
+| `/api/jobs/:id` | GET, DELETE | session or Bearer | Job detail / delete |
+| `/api/jobs/:id/control` | POST | session or Bearer | Stop a running job |
+| `/api/settings` | GET, POST | session or Bearer | Per-user provider settings |
+| `/api/ocr/settings` | GET, PUT | session or Bearer | Global OCR tuning prefs |
 
 ## Local Development
 
@@ -195,8 +281,15 @@ docker compose --env-file docker.env config
 ## Security Notes
 
 - Do not commit real API keys.
-- Rotate `AUTH_SECRET` for production.
+- Rotate `AUTH_SECRET` for production. Rotating invalidates all existing API
+  keys (their stored hashes are HMAC-keyed by `AUTH_SECRET`) — re-issue keys
+  after rotation.
 - Use HTTPS and set `COOKIE_SECURE=true` in production.
+- Provider endpoints are validated against `OLLAMA_ALLOWED_HOSTS` /
+  `MISTRAL_ALLOWED_HOSTS` allowlists. User-supplied endpoints outside the
+  allowlist are rejected.
+- The in-memory job-control registry assumes a single-process deploy. Stop
+  requests and abort signals will not propagate across replicas.
 
 ## License
 

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getAuthenticatedUserId } from "@/lib/auth/request";
+import { authenticateMutation, getAuthenticatedUserId } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-import { isTrustedMutationRequest } from "@/lib/request-security";
 
 export async function GET(
   request: NextRequest,
@@ -11,9 +10,6 @@ export async function GET(
   const userId = await getAuthenticatedUserId(request);
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (!isTrustedMutationRequest(request)) {
-    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
   }
 
   const { id } = await context.params;
@@ -50,23 +46,24 @@ export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const userId = await getAuthenticatedUserId(request);
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authResult = await authenticateMutation(request);
+  if (!authResult.ok) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
+  const userId = authResult.auth.userId;
 
   const { id } = await context.params;
   if (!id) {
     return NextResponse.json({ error: "Job id is required" }, { status: 400 });
   }
 
-  const result = await db.ocrJob.deleteMany({
+  const deleteResult = await db.ocrJob.deleteMany({
     where: { id, userId },
   });
 
-  if (result.count === 0) {
+  if (deleteResult.count === 0) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ deleted: result.count });
+  return NextResponse.json({ deleted: deleteResult.count });
 }

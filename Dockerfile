@@ -30,6 +30,7 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/db ./db
 
 COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY --from=builder /app/scripts ./scripts
 RUN chmod +x ./docker-entrypoint.sh
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=10 \

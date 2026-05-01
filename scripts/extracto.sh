@@ -213,6 +213,14 @@ cmd_off() {
   ok "Extracto is shut down"
 }
 
+cmd_api_key() {
+  ensure_project
+  local sub="${1:-}"
+  [ -n "$sub" ] || die "usage: extracto api-key <create|list|revoke> [args...]"
+  shift
+  compose exec -T app bun run scripts/api-key-cli.ts "$sub" "$@"
+}
+
 cmd_uninstall() {
   ensure_project
   run_step "Removing Extracto containers and volumes..." compose down -v --remove-orphans
@@ -235,9 +243,12 @@ print_help() {
 Usage: extracto <command>
 
 Commands:
-  on         Start Extracto (quiet mode with animated status)
-  off        Stop Extracto (quiet mode with animated status)
-  uninstall  Remove Extracto command and app resources (keeps Ollama)
+  on                            Start Extracto (quiet mode with animated status)
+  off                           Stop Extracto (quiet mode with animated status)
+  api-key create <email> <name> Create an API key for a user (headless)
+  api-key list <email>          List API keys for a user
+  api-key revoke <key-id>       Revoke an API key by id
+  uninstall                     Remove Extracto command and app resources (keeps Ollama)
 
 Logs:
   Internal command logs are saved to: ${LOG_DIR}
@@ -252,6 +263,10 @@ main() {
       ;;
     off)
       cmd_off
+      ;;
+    api-key)
+      shift
+      cmd_api_key "$@"
       ;;
     uninstall)
       cmd_uninstall

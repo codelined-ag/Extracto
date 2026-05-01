@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus, Prisma } from "@prisma/client";
+import { createHash } from "node:crypto";
 import { chmod, chown, mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { ApiProviderSettings, getApiSettings } from "@/lib/settings-store";
-import { getAuthenticatedUserId } from "@/lib/auth/request";
+import { authenticateMutation, getAuthenticatedUserId } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
 import {
@@ -21,7 +22,7 @@ import {
   resolveOllamaHostEndpoint,
 } from "@/lib/host-normalization";
 import { consumeRateLimit } from "@/lib/rate-limit";
-import { getClientIpAddress, isTrustedMutationRequest } from "@/lib/request-security";
+import { getClientIpAddress } from "@/lib/request-security";
 
 interface AdvancedSettings {
   language: string;
@@ -3473,13 +3474,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const startedAtMs = Date.now();
   try {
-    const userId = await getAuthenticatedUserId(request);
-    if (!userId) {
-      throw new ApiRouteError("Unauthorized", 401);
+    const authResult = await authenticateMutation(request);
+    if (!authResult.ok) {
+      throw new ApiRouteError(authResult.error, authResult.status);
     }
-    if (!isTrustedMutationRequest(request)) {
-      throw new ApiRouteError("Invalid request origin", 403);
-    }
+    const userId = authResult.auth.userId;
 
     const clientIp = getClientIpAddress(request);
     const rateLimit = consumeRateLimit({

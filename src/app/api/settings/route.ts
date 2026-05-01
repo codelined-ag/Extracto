@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getAuthenticatedUserId } from "@/lib/auth/request";
-import { isTrustedMutationRequest } from "@/lib/request-security";
+import { authenticateMutation, getAuthenticatedUserId } from "@/lib/auth/request";
 import { getApiSettings, saveApiSettings, toClientApiSettings } from "@/lib/settings-store";
 
 export async function GET(request: NextRequest) {
@@ -24,14 +23,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const userId = await getAuthenticatedUserId(request);
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const result = await authenticateMutation(request);
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
   }
-
-  if (!isTrustedMutationRequest(request)) {
-    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
-  }
+  const userId = result.auth.userId;
 
   const body = (await request.json().catch(() => ({}))) as Partial<{
     provider: string;
