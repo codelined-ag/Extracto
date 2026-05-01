@@ -205,13 +205,6 @@ function getSettingsPath(userId: string): string {
   return path.join(SETTINGS_DIR, `${sanitizeUserId(userId)}.json`);
 }
 
-function cloneSettings(settings: ApiProviderSettings): ApiProviderSettings {
-  return {
-    provider: settings.provider,
-    apiEndpoint: settings.apiEndpoint,
-    apiKey: settings.apiKey,
-  };
-}
 
 export function toClientApiSettings(settings: ApiProviderSettings): ApiProviderSettings & { hasApiKey: boolean } {
   return {
@@ -226,7 +219,7 @@ export async function getApiSettings(userId: string): Promise<ApiProviderSetting
   const safeUserId = sanitizeUserId(userId);
   const cached = settingsCache.get(safeUserId);
   if (cached) {
-    return cloneSettings(cached);
+    return { ...cached };
   }
 
   const settingsPath = getSettingsPath(safeUserId);
@@ -235,12 +228,12 @@ export async function getApiSettings(userId: string): Promise<ApiProviderSetting
     const parsed = JSON.parse(stored);
     const normalized = normalizeSettings(parsed);
     settingsCache.set(safeUserId, normalized);
-    return cloneSettings(normalized);
+    return { ...normalized };
   } catch {
     await ensureSettingsDirectory();
     const normalized = normalizeSettings(DEFAULT_API_SETTINGS);
     settingsCache.set(safeUserId, normalized);
-    return cloneSettings(normalized);
+    return { ...normalized };
   }
 }
 
@@ -273,7 +266,7 @@ export async function saveApiSettings(
   await ensureSettingsDirectory();
   await writeFile(settingsPath, JSON.stringify(normalized, null, 2), "utf8");
   settingsCache.set(safeUserId, normalized);
-  return cloneSettings(normalized);
+  return { ...normalized };
 }
 
 async function ensureSettingsDirectory() {

@@ -18,10 +18,6 @@ interface RateLimitResult {
 
 const buckets = new Map<string, RateLimitBucket>();
 
-function getNowMs(): number {
-  return Date.now();
-}
-
 function cleanupExpiredBuckets(nowMs: number) {
   if (buckets.size < 10_000) {
     return;
@@ -35,7 +31,7 @@ function cleanupExpiredBuckets(nowMs: number) {
 }
 
 export function consumeRateLimit(input: RateLimitInput): RateLimitResult {
-  const nowMs = getNowMs();
+  const nowMs = Date.now();
   cleanupExpiredBuckets(nowMs);
 
   const key = input.key.trim();
