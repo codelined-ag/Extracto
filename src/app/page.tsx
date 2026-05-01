@@ -170,12 +170,13 @@ interface HistoryJobDetail extends HistoryJobSummary {
   result?: unknown;
 }
 
-type ProviderKind = "ollama" | "mistral";
+type ProviderKind = "ollama" | "mistral" | "openrouter";
 type ProviderModelSelections = Partial<Record<ProviderKind, string>>;
 type UiLanguage = "it" | "en";
 
 const DEFAULT_OLLAMA_ENDPOINT = "http://localhost:11434";
 const DEFAULT_MISTRAL_ENDPOINT = "https://api.mistral.ai/v1/ocr";
+const DEFAULT_OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1";
 const MODEL_SELECTIONS_STORAGE_KEY = "extracto:model-selections:v1";
 const POST_PROCESS_MODEL_SELECTIONS_STORAGE_KEY =
   "extracto:post-process-model-selections:v1";
@@ -184,12 +185,17 @@ const OCR_RUN_MODE_STORAGE_KEY = "extracto:ocr-run-mode:v1";
 const OBSIDIAN_SETTINGS_STORAGE_KEY = "extracto:obsidian-settings:v1";
 const DEFAULT_OBSIDIAN_VAULT_ROOT = "/host-vaults";
 
-function normalizeProvider(provider?: string): "ollama" | "mistral" {
-  return provider?.trim().toLowerCase().split(":")[0] === "mistral" ? "mistral" : "ollama";
+function normalizeProvider(provider?: string): ProviderKind {
+  const v = provider?.trim().toLowerCase().split(":")[0];
+  if (v === "mistral") return "mistral";
+  if (v === "openrouter") return "openrouter";
+  return "ollama";
 }
 
-function defaultEndpointForProvider(provider: "ollama" | "mistral"): string {
-  return provider === "mistral" ? DEFAULT_MISTRAL_ENDPOINT : DEFAULT_OLLAMA_ENDPOINT;
+function defaultEndpointForProvider(provider: ProviderKind): string {
+  if (provider === "mistral") return DEFAULT_MISTRAL_ENDPOINT;
+  if (provider === "openrouter") return DEFAULT_OPENROUTER_ENDPOINT;
+  return DEFAULT_OLLAMA_ENDPOINT;
 }
 
 function isMistralOcrModelId(modelId: string): boolean {
@@ -197,7 +203,7 @@ function isMistralOcrModelId(modelId: string): boolean {
 }
 
 function pickPreferredProviderModelId(
-  provider: "ollama" | "mistral",
+  provider: ProviderKind,
   modelIds: string[]
 ): string {
   if (provider === "mistral") {
@@ -222,7 +228,7 @@ const OLLAMA_FALLBACK_MODELS: Model[] = [
   { id: "minicpm-v:latest", name: "MiniCPM-V", provider: "ollama" },
 ];
 
-function getFallbackModelsForProvider(provider: "ollama" | "mistral"): Model[] {
+function getFallbackModelsForProvider(provider: ProviderKind): Model[] {
   return provider === "ollama" ? OLLAMA_FALLBACK_MODELS : [];
 }
 
@@ -260,6 +266,7 @@ function readProviderModelSelections(storageKey: string): ProviderModelSelection
     return {
       ollama: typeof typed.ollama === "string" ? typed.ollama.trim() : "",
       mistral: typeof typed.mistral === "string" ? typed.mistral.trim() : "",
+      openrouter: typeof typed.openrouter === "string" ? typed.openrouter.trim() : "",
     };
   } catch {
     return {};
@@ -280,6 +287,7 @@ function writeProviderModelSelections(
       JSON.stringify({
         ollama: selections.ollama || "",
         mistral: selections.mistral || "",
+        openrouter: selections.openrouter || "",
       })
     );
   } catch {
@@ -2275,6 +2283,7 @@ export default function ExtractoPage() {
                 <SelectContent>
                   <SelectItem value="ollama">Ollama</SelectItem>
                   <SelectItem value="mistral">Mistral OCR API</SelectItem>
+                  <SelectItem value="openrouter">OpenRouter</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -2286,11 +2295,9 @@ export default function ExtractoPage() {
                 onChange={(event) =>
                   setApiSettingsDraft((prev) => ({ ...prev, apiEndpoint: event.target.value }))
                 }
-                placeholder={
-                  normalizeProvider(apiSettingsDraft.provider) === "mistral"
-                    ? DEFAULT_MISTRAL_ENDPOINT
-                    : DEFAULT_OLLAMA_ENDPOINT
-                }
+                placeholder={defaultEndpointForProvider(
+                  normalizeProvider(apiSettingsDraft.provider)
+                )}
               />
             </div>
             <div className="space-y-2">

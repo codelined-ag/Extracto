@@ -2,7 +2,7 @@
 
 Extracto is a self-hosted OCR web app with a proper backend, persistent settings, authentication, OCR history, and Docker-first operations.
 
-It supports Ollama on your host machine, Mistral OCR API, multi-page PDF extraction, optional AI post-processing, and a `PDF → Obsidian` mode that creates vaults automatically.
+It supports three model providers — Ollama on your host machine, the Mistral OCR API, and OpenRouter (any vision-capable model in their catalog) — plus multi-page PDF extraction, optional AI post-processing, and a `PDF → Obsidian` mode that creates vaults automatically.
 
 ## Why Extracto
 
@@ -18,7 +18,11 @@ It supports Ollama on your host machine, Mistral OCR API, multi-page PDF extract
 - OCR providers:
   - Ollama (`/api/chat` and `/v1/chat/completions` compatible paths).
   - Mistral OCR API.
-- Dynamic model discovery from configured host endpoint.
+  - OpenRouter (OpenAI-compatible chat completions with vision; any model in
+    the OpenRouter catalog that accepts image inputs).
+- Dynamic model discovery from each configured provider — including live
+  OpenRouter `/models` lookup using the user's saved API key.
+- Per-user persisted provider settings: provider, endpoint, API key.
 - PDF pipeline:
   - Every page is rendered to image first.
   - Each image page is processed via OCR.
@@ -99,12 +103,17 @@ Important variables:
 - `APP_NETWORK_MODE`: `host` (default here) or `bridge`.
 - `OLLAMA_HOST`: Ollama base URL used by backend discovery and OCR calls.
 - `OLLAMA_HOST_FALLBACKS`: optional comma-separated fallback hosts.
+- `OPENROUTER_API_URL`: override base URL (default `https://openrouter.ai/api/v1`).
+- `OPENROUTER_API_KEY`: optional fallback key when a user has not saved one.
+- `OPENROUTER_REFERER` / `OPENROUTER_TITLE`: sent as `HTTP-Referer` / `X-Title`
+  for OpenRouter analytics.
+- `OPENROUTER_MODELS`: optional comma-separated fallback model list.
 - `OBSIDIAN_EXPORT_BASE_DIR`: container path where vault exports are written.
 - `OBSIDIAN_EXPORT_HOST_ROOT`: host path bind-mounted to `OBSIDIAN_EXPORT_BASE_DIR`.
-- `OLLAMA_ALLOWED_HOSTS` / `MISTRAL_ALLOWED_HOSTS`: optional comma-separated
-  allowlists for provider endpoints. User-supplied endpoints outside these
-  patterns are rejected; defaults cover localhost, docker gateway hosts, and
-  `*.mistral.ai`.
+- `OLLAMA_ALLOWED_HOSTS` / `MISTRAL_ALLOWED_HOSTS` / `OPENROUTER_ALLOWED_HOSTS`:
+  optional comma-separated allowlists for provider endpoints. User-submitted
+  endpoints are validated against these patterns; defaults cover localhost,
+  docker gateway hosts, `*.mistral.ai`, and `*.openrouter.ai`.
 
 ## Ollama Host Connectivity
 
@@ -136,6 +145,23 @@ Auth endpoints:
 - `POST /api/auth/login`
 - `POST /api/auth/signout`
 - `GET /api/auth/session`
+
+## Providers
+
+Three providers are supported. Each is configured per user from the UI
+(Settings → API), and the same configuration is used by both the browser UI
+and the headless API.
+
+| Provider | Endpoint | API key required | Model discovery |
+|---|---|---|---|
+| Ollama | local or remote `http://host:11434` | no | `GET /api/tags` (or `/v1/models`) |
+| Mistral OCR API | `https://api.mistral.ai/v1/ocr` | yes | static catalog (configurable via `MISTRAL_MODELS`) |
+| OpenRouter | `https://openrouter.ai/api/v1` | yes | live `GET /models` using the saved key |
+
+For OpenRouter, any vision-capable model in the catalog can be used (e.g.
+`anthropic/claude-3.5-sonnet`, `openai/gpt-4o`, `google/gemini-2.0-flash-001`,
+`qwen/qwen-2-vl-72b-instruct`). The dynamic catalog refreshes every five
+minutes; if discovery fails, a configurable fallback list is shown.
 
 ## Headless API
 

@@ -85,12 +85,13 @@ interface OcrPage {
 interface ModelCatalog {
   ollama: string[];
   mistral: string[];
+  openrouter: string[];
 }
 
 interface OcrJsonResult {
   fileName: string;
   extractedAt: string;
-  provider: "ollama" | "mistral";
+  provider: "ollama" | "mistral" | "openrouter";
   model: string;
   settings: AdvancedSettings;
   text: string;
@@ -100,7 +101,7 @@ interface OcrJsonResult {
     characterCount: number;
     wordCount: number;
     lineCount: number;
-    provider: "ollama" | "mistral";
+    provider: "ollama" | "mistral" | "openrouter";
     [key: string]: unknown;
   };
   rawExtractionText?: string;
@@ -150,7 +151,7 @@ interface OcrProgressMetadata {
     outputFormat?: PostProcessOutputFormat;
     instruction?: string;
     model?: string;
-    provider?: "ollama" | "mistral";
+    provider?: "ollama" | "mistral" | "openrouter";
     error?: string;
   };
 }
@@ -262,6 +263,27 @@ const DEFAULT_MISTRAL_MODELS = (() => {
 })();
 const DEFAULT_MISTRAL_MODEL_SET = new Set(DEFAULT_MISTRAL_MODELS.map((id) => id.toLowerCase()));
 
+const DEFAULT_OPENROUTER_API_URL =
+  process.env.OPENROUTER_API_URL?.trim() || "https://openrouter.ai/api/v1";
+const DEFAULT_OPENROUTER_FALLBACK_MODELS = (() => {
+  const configured = (process.env.OPENROUTER_MODELS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return configured.length > 0
+    ? configured
+    : [
+        "anthropic/claude-3.5-sonnet",
+        "openai/gpt-4o",
+        "openai/gpt-4o-mini",
+        "google/gemini-2.0-flash-001",
+        "qwen/qwen-2-vl-72b-instruct",
+      ];
+})();
+const OPENROUTER_REFERER = (process.env.OPENROUTER_REFERER || "").trim();
+const OPENROUTER_TITLE = (process.env.OPENROUTER_TITLE || "Extracto").trim();
+const OPENROUTER_MODEL_CACHE_TTL_MS = 5 * 60_000;
+
 const REQUEST_TIMEOUT_MS = 60_000;
 const OLLAMA_MODEL_CACHE_TTL_MS = 60_000;
 const MAX_STORED_PREVIEW_LENGTH = 1_500_000;
@@ -292,6 +314,12 @@ let ollamaModelCache: {
   expiresAt: 0,
   host: "",
 };
+
+const OPENROUTER_MODEL_CACHE_MAX_ENTRIES = 256;
+const openRouterModelCache = new Map<
+  string,
+  { values: string[]; expiresAt: number }
+>();
 
 interface OllamaModelCatalogResult {
   models: string[];
@@ -350,11 +378,16 @@ function getOllamaCandidatesForOcr(endpoint: string): string[] {
   if (!candidates.includes(normalizedFallback)) {
     candidates.push(normalizedFallback);
   }
-  return candidates;
+  return Array.from(new Set(candidates));
 }
 
-function parseProviderHint(rawProvider: string | undefined): string {
-  return rawProvider?.trim().toLowerCase().split(":")[0] || "ollama";
+type ProviderHint = "ollama" | "mistral" | "openrouter";
+
+function parseProviderHint(rawProvider: string | undefined): ProviderHint {
+  const value = rawProvider?.trim().toLowerCase().split(":")[0] || "ollama";
+  if (value === "mistral") return "mistral";
+  if (value === "openrouter") return "openrouter";
+  return "ollama";
 }
 
 function normalizePreviewForHistory(preview: string): string | null {
@@ -370,22 +403,61 @@ function normalizePreviewForHistory(preview: string): string | null {
 
 function normalizeApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
   const provider = parseProviderHint(raw.provider);
-  const normalizedEndpoint = provider === "mistral"
-    ? normalizeMistralOcrEndpoint(raw.apiEndpoint || DEFAULT_MISTRAL_API_URL)
-    : resolveOllamaHostEndpoint(
-        raw.apiEndpoint || OLLAMA_DISCOVERY_FALLBACK_HOST,
-        OLLAMA_DISCOVERY_FALLBACK_HOST,
-      );
+  let normalizedEndpoint: string;
+  if (provider === "mistral") {
+    normalizedEndpoint = normalizeMistralOcrEndpoint(raw.apiEndpoint || DEFAULT_MISTRAL_API_URL);
+  } else if (provider === "openrouter") {
+    normalizedEndpoint = normalizeOpenRouterApiBase(raw.apiEndpoint || DEFAULT_OPENROUTER_API_URL);
+  } else {
+    normalizedEndpoint = resolveOllamaHostEndpoint(
+      raw.apiEndpoint || OLLAMA_DISCOVERY_FALLBACK_HOST,
+      OLLAMA_DISCOVERY_FALLBACK_HOST,
+    );
+  }
+
+  let safeEndpoint: string;
+  if (provider === "mistral") {
+    safeEndpoint = enforceProviderEndpointPolicy("mistral", normalizedEndpoint, DEFAULT_MISTRAL_API_URL);
+  } else if (provider === "openrouter") {
+    safeEndpoint = enforceProviderEndpointPolicy(
+      "openrouter",
+      normalizedEndpoint,
+      DEFAULT_OPENROUTER_API_URL
+    );
+  } else {
+    safeEndpoint = enforceProviderEndpointPolicy("ollama", normalizedEndpoint, OLLAMA_DISCOVERY_FALLBACK_HOST);
+  }
 
   return {
     provider,
-    apiEndpoint:
-      provider === "mistral"
-        ? enforceProviderEndpointPolicy("mistral", normalizedEndpoint, DEFAULT_MISTRAL_API_URL)
-        : enforceProviderEndpointPolicy("ollama", normalizedEndpoint, OLLAMA_DISCOVERY_FALLBACK_HOST),
+    apiEndpoint: safeEndpoint,
     apiKey: raw.apiKey?.trim() || "",
     obsidianBaseDir: raw.obsidianBaseDir?.trim() || OBSIDIAN_EXPORT_BASE_DIR,
   };
+}
+
+function normalizeOpenRouterApiBase(rawEndpoint: string): string {
+  const trimmed = rawEndpoint.trim();
+  if (!trimmed) {
+    return DEFAULT_OPENROUTER_API_URL;
+  }
+
+  try {
+    const url = new URL(/^https?:\/\//iu.test(trimmed) ? trimmed : `https://${trimmed}`);
+    url.search = "";
+    url.hash = "";
+    let pathname = url.pathname.replace(/\/+$/u, "");
+    if (!pathname || pathname === "/") {
+      pathname = "/api/v1";
+    } else if (pathname.endsWith("/api")) {
+      pathname = `${pathname}/v1`;
+    }
+    pathname = pathname.replace(/\/(chat\/completions|models)$/u, "");
+    url.pathname = pathname;
+    return url.toString().replace(/\/+$/u, "");
+  } catch {
+    return DEFAULT_OPENROUTER_API_URL;
+  }
 }
 
 function normalizeOllamaEndpoint(rawEndpoint: string): string {
@@ -1941,7 +2013,7 @@ function buildProgressMetadata(input: {
 function buildJsonResult(
   fileName: string,
   model: string,
-  provider: "ollama" | "mistral",
+  provider: "ollama" | "mistral" | "openrouter",
   settings: AdvancedSettings,
   markdown: string,
   structured: Record<string, unknown>,
@@ -2162,7 +2234,7 @@ async function resolveOllamaEndpoint(endpoint: string): Promise<string> {
 async function resolveProvider(
   model: string,
   settings: ApiProviderSettings
-): Promise<"ollama" | "mistral"> {
+): Promise<"ollama" | "mistral" | "openrouter"> {
   const normalizedModel = model.trim();
   const providerHint = parseProviderHint(settings.provider);
   if (!normalizedModel) {
@@ -2171,6 +2243,10 @@ async function resolveProvider(
 
   if (providerHint === "mistral") {
     return "mistral";
+  }
+
+  if (providerHint === "openrouter") {
+    return "openrouter";
   }
 
   if (providerHint === "ollama") {
@@ -2183,6 +2259,10 @@ async function resolveProvider(
 
   if (isLikelyMistralModel(normalizedModel)) {
     return "mistral";
+  }
+
+  if (isLikelyOpenRouterModel(normalizedModel)) {
+    return "openrouter";
   }
 
   try {
@@ -2733,9 +2813,275 @@ function normalizeMistralModels(): string[] {
   return [...new Set(DEFAULT_MISTRAL_MODELS)];
 }
 
+function buildOpenRouterEndpoint(rawEndpoint: string, suffix: "/chat/completions" | "/models"): string {
+  const base = normalizeOpenRouterApiBase(rawEndpoint || DEFAULT_OPENROUTER_API_URL);
+  return enforceProviderEndpointPolicy(
+    "openrouter",
+    `${base}${suffix}`,
+    `${DEFAULT_OPENROUTER_API_URL}${suffix}`
+  );
+}
+
+function buildOpenRouterCacheKey(endpoint: string, apiKey: string): string {
+  if (!apiKey) {
+    return `${endpoint}|anonymous`;
+  }
+  const digest = createHash("sha256")
+    .update(endpoint, "utf8")
+    .update("|", "utf8")
+    .update(apiKey, "utf8")
+    .digest("hex");
+  return `${endpoint}|${digest}`;
+}
+
+function pruneOpenRouterModelCache() {
+  const now = Date.now();
+  for (const [key, entry] of openRouterModelCache) {
+    if (entry.expiresAt <= now) {
+      openRouterModelCache.delete(key);
+    }
+  }
+  while (openRouterModelCache.size > OPENROUTER_MODEL_CACHE_MAX_ENTRIES) {
+    const oldestKey = openRouterModelCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    openRouterModelCache.delete(oldestKey);
+  }
+}
+
+function getCachedOpenRouterModels(endpoint: string, apiKey: string): string[] | null {
+  const cacheKey = buildOpenRouterCacheKey(endpoint, apiKey);
+  const entry = openRouterModelCache.get(cacheKey);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    openRouterModelCache.delete(cacheKey);
+    return null;
+  }
+  openRouterModelCache.delete(cacheKey);
+  openRouterModelCache.set(cacheKey, entry);
+  return entry.values.length > 0 ? entry.values : null;
+}
+
+function setOpenRouterModelCache(endpoint: string, apiKey: string, values: string[]) {
+  openRouterModelCache.set(buildOpenRouterCacheKey(endpoint, apiKey), {
+    values,
+    expiresAt: Date.now() + OPENROUTER_MODEL_CACHE_TTL_MS,
+  });
+  pruneOpenRouterModelCache();
+}
+
+function isLikelyOpenRouterModel(model: string): boolean {
+  const lowered = model.trim().toLowerCase();
+  if (!lowered) return false;
+  return (
+    lowered.includes("/") &&
+    /^[a-z0-9_.+-]+\/[a-z0-9_.+:-]+$/i.test(lowered) &&
+    !lowered.startsWith("ollama/") &&
+    !lowered.startsWith("mistral/")
+  );
+}
+
+function buildOpenRouterHeaders(apiKey: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+    "X-Title": OPENROUTER_TITLE,
+  };
+  if (OPENROUTER_REFERER) {
+    headers["HTTP-Referer"] = OPENROUTER_REFERER;
+  }
+  return headers;
+}
+
+async function discoverOpenRouterModels(
+  apiEndpoint: string,
+  apiKey: string
+): Promise<string[]> {
+  const endpoint = buildOpenRouterEndpoint(apiEndpoint, "/models");
+  const cached = getCachedOpenRouterModels(endpoint, apiKey);
+  if (cached) {
+    return cached;
+  }
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "X-Title": OPENROUTER_TITLE,
+  };
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
+  if (OPENROUTER_REFERER) {
+    headers["HTTP-Referer"] = OPENROUTER_REFERER;
+  }
+
+  const response = await fetchWithTimeout(endpoint, { headers });
+  const payload = await parseResponseText(response);
+  if (!response.ok) {
+    throw new ApiRouteError(
+      `OpenRouter model discovery failed (${response.status}): ${parseServiceError(response, payload)}`,
+      response.status
+    );
+  }
+
+  if (!payload || typeof payload !== "object") {
+    throw new ApiRouteError("Invalid OpenRouter model response", 502);
+  }
+
+  const data = (payload as { data?: unknown }).data;
+  if (!Array.isArray(data)) {
+    return [];
+  }
+
+  const models = data
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return "";
+      const id = (entry as { id?: unknown }).id;
+      return typeof id === "string" ? id.trim() : "";
+    })
+    .filter(Boolean);
+
+  const unique = Array.from(new Set(models));
+  setOpenRouterModelCache(endpoint, apiKey, unique);
+  return unique;
+}
+
+async function runOpenRouterOcr(
+  apiEndpoint: string,
+  model: string,
+  apiKey: string,
+  prompt: string,
+  preview: string,
+  signal?: AbortSignal
+): Promise<{ text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> }> {
+  if (!apiKey) {
+    throw new ApiRouteError("OpenRouter API key is not configured", 500);
+  }
+
+  const imageData = parsePreviewImageData(preview);
+  if (!imageData.dataUrl) {
+    throw new ApiRouteError("Invalid image data for OpenRouter OCR", 400);
+  }
+
+  const endpoint = buildOpenRouterEndpoint(apiEndpoint, "/chat/completions");
+  const response = await fetchWithTimeout(
+    endpoint,
+    {
+      method: "POST",
+      headers: buildOpenRouterHeaders(apiKey),
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: imageData.dataUrl } },
+            ],
+          },
+        ],
+        temperature: 0,
+        stream: false,
+      }),
+    },
+    REQUEST_TIMEOUT_MS,
+    signal
+  );
+
+  const payload = await parseResponseText(response);
+  if (!response.ok) {
+    throw new ApiRouteError(
+      `OpenRouter OCR failed (${response.status}): ${parseServiceError(response, payload)}`,
+      response.status
+    );
+  }
+
+  if (!payload || typeof payload !== "object") {
+    throw new ApiRouteError("Invalid OCR response from OpenRouter", 502);
+  }
+
+  const choices = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices;
+  const message = Array.isArray(choices) ? choices[0]?.message : undefined;
+  const text = extractChatContentText(message?.content);
+  if (!text) {
+    throw new ApiRouteError("OpenRouter OCR response had no text", 502);
+  }
+
+  const parsed = parseJsonCandidate(text);
+  const normalized = normalizeStructuredMarkdownPayload(parsed, text);
+  if (!normalized.markdown) {
+    throw new ApiRouteError("OpenRouter OCR response markdown was empty", 502);
+  }
+
+  const usage = (payload as { usage?: Record<string, unknown> }).usage;
+  return {
+    text: normalized.markdown,
+    structured: normalized.structured,
+    metadata: {
+      endpoint,
+      outputFormat: normalized.parseMode,
+      usage,
+    },
+  };
+}
+
+async function runOpenRouterPostProcessing(
+  apiEndpoint: string,
+  model: string,
+  apiKey: string,
+  systemPrompt: string,
+  userPrompt: string,
+  outputFormat: PostProcessOutputFormat
+): Promise<{ text: string; metadata: Record<string, unknown> }> {
+  if (!apiKey) {
+    throw new ApiRouteError("OpenRouter API key is not configured", 500);
+  }
+
+  const endpoint = buildOpenRouterEndpoint(apiEndpoint, "/chat/completions");
+  const response = await fetchWithTimeout(endpoint, {
+    method: "POST",
+    headers: buildOpenRouterHeaders(apiKey),
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      ...(outputFormat === "json"
+        ? { response_format: { type: "json_object" } }
+        : {}),
+      temperature: 0,
+      stream: false,
+    }),
+  });
+
+  const payload = await parseResponseText(response);
+  if (!response.ok) {
+    throw new ApiRouteError(
+      `OpenRouter post-processing failed (${response.status}): ${parseServiceError(response, payload)}`,
+      response.status
+    );
+  }
+
+  if (!payload || typeof payload !== "object") {
+    throw new ApiRouteError("Invalid post-processing response from OpenRouter", 502);
+  }
+
+  const choices = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices;
+  const message = Array.isArray(choices) ? choices[0]?.message : undefined;
+  const text = extractChatContentText(message?.content);
+  if (!text) {
+    throw new ApiRouteError("OpenRouter post-processing returned empty output", 502);
+  }
+
+  return {
+    text,
+    metadata: { endpoint },
+  };
+}
+
 async function getModelCatalog(settings: ApiProviderSettings): Promise<ModelCatalog> {
   const mistralModels = normalizeMistralModels();
   let ollamaModels: string[] = [];
+  let openRouterModels: string[] = [];
 
   try {
     const discovered = await getOllamaModels(settings.apiEndpoint);
@@ -2744,9 +3090,28 @@ async function getModelCatalog(settings: ApiProviderSettings): Promise<ModelCata
     console.error("Failed to fetch Ollama model catalog:", error);
   }
 
+  try {
+    const endpointForDiscovery =
+      settings.provider === "openrouter" ? settings.apiEndpoint : DEFAULT_OPENROUTER_API_URL;
+    const apiKeyForDiscovery =
+      settings.provider === "openrouter"
+        ? settings.apiKey || process.env.OPENROUTER_API_KEY || ""
+        : process.env.OPENROUTER_API_KEY || "";
+    if (apiKeyForDiscovery) {
+      openRouterModels = await discoverOpenRouterModels(endpointForDiscovery, apiKeyForDiscovery);
+    }
+  } catch (error) {
+    console.error("Failed to fetch OpenRouter model catalog:", error);
+  }
+
+  if (openRouterModels.length === 0 && settings.provider === "openrouter") {
+    openRouterModels = [...DEFAULT_OPENROUTER_FALLBACK_MODELS];
+  }
+
   return {
     ollama: ollamaModels,
     mistral: mistralModels,
+    openrouter: openRouterModels,
   };
 }
 
@@ -2756,7 +3121,7 @@ interface ProcessOcrJobInput {
   fileName: string;
   model: string;
   ocrModel: string;
-  provider: "ollama" | "mistral";
+  provider: "ollama" | "mistral" | "openrouter";
   mode: OcrRunMode;
   settings: ApiProviderSettings;
   settingsPayload: AdvancedSettings;
@@ -2975,6 +3340,19 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
             pagePreview,
             pageAbortController.signal
           ));
+        } else if (input.provider === "openrouter") {
+          const openRouterEndpoint =
+            input.settings.provider === "openrouter"
+              ? input.settings.apiEndpoint
+              : DEFAULT_OPENROUTER_API_URL;
+          ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runOpenRouterOcr(
+            openRouterEndpoint,
+            input.ocrModel,
+            input.settings.apiKey || process.env.OPENROUTER_API_KEY || "",
+            input.prompt,
+            pagePreview,
+            pageAbortController.signal
+          ));
         } else {
           const mistralEndpoint =
             input.settings.provider === "mistral"
@@ -3141,23 +3519,37 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       ].join("\n");
 
       try {
-        const postProcessResult = postProcessingProvider === "ollama"
-          ? await runOllamaPostProcessing(
-              input.settings.apiEndpoint,
-              postProcessingModel,
-              systemPrompt,
-              postProcessRequestText
-            )
-          : await runMistralPostProcessing(
-              postProcessingModel,
-              input.settings.apiKey || process.env.MISTRAL_API_KEY || "",
-              input.settings.provider === "mistral"
-                ? input.settings.apiEndpoint
-                : DEFAULT_MISTRAL_API_URL,
-              systemPrompt,
-              postProcessRequestText,
-              input.postProcessingPayload.outputFormat
-            );
+        let postProcessResult: { text: string; metadata: Record<string, unknown> };
+        if (postProcessingProvider === "ollama") {
+          postProcessResult = await runOllamaPostProcessing(
+            input.settings.apiEndpoint,
+            postProcessingModel,
+            systemPrompt,
+            postProcessRequestText
+          );
+        } else if (postProcessingProvider === "openrouter") {
+          postProcessResult = await runOpenRouterPostProcessing(
+            input.settings.provider === "openrouter"
+              ? input.settings.apiEndpoint
+              : DEFAULT_OPENROUTER_API_URL,
+            postProcessingModel,
+            input.settings.apiKey || process.env.OPENROUTER_API_KEY || "",
+            systemPrompt,
+            postProcessRequestText,
+            input.postProcessingPayload.outputFormat
+          );
+        } else {
+          postProcessResult = await runMistralPostProcessing(
+            postProcessingModel,
+            input.settings.apiKey || process.env.MISTRAL_API_KEY || "",
+            input.settings.provider === "mistral"
+              ? input.settings.apiEndpoint
+              : DEFAULT_MISTRAL_API_URL,
+            systemPrompt,
+            postProcessRequestText,
+            input.postProcessingPayload.outputFormat
+          );
+        }
 
         const normalizedPostProcessed = normalizePostProcessedText(
           postProcessResult.text,
@@ -3457,6 +3849,10 @@ export async function GET(request: NextRequest) {
 
     if (provider === "mistral") {
       return NextResponse.json({ success: true, models: catalog.mistral });
+    }
+
+    if (provider === "openrouter") {
+      return NextResponse.json({ success: true, models: catalog.openrouter });
     }
 
     return NextResponse.json({ success: true, models: catalog });

@@ -1,6 +1,6 @@
 import { normalizeHostEndpoint } from "@/lib/host-normalization";
 
-type ProviderKind = "ollama" | "mistral";
+export type ProviderKind = "ollama" | "mistral" | "openrouter";
 
 const DEFAULT_OLLAMA_HOST_PATTERNS = [
   "localhost",
@@ -16,6 +16,11 @@ const DEFAULT_OLLAMA_HOST_PATTERNS = [
 const DEFAULT_MISTRAL_HOST_PATTERNS = [
   "api.mistral.ai",
   ".mistral.ai",
+];
+
+const DEFAULT_OPENROUTER_HOST_PATTERNS = [
+  "openrouter.ai",
+  ".openrouter.ai",
 ];
 
 function parsePatternList(raw: string): string[] {
@@ -59,6 +64,11 @@ function getConfiguredPatterns(provider: ProviderKind): string[] {
   if (provider === "mistral") {
     const configured = parsePatternList(process.env.MISTRAL_ALLOWED_HOSTS || "");
     return configured.length > 0 ? configured : DEFAULT_MISTRAL_HOST_PATTERNS;
+  }
+
+  if (provider === "openrouter") {
+    const configured = parsePatternList(process.env.OPENROUTER_ALLOWED_HOSTS || "");
+    return configured.length > 0 ? configured : DEFAULT_OPENROUTER_HOST_PATTERNS;
   }
 
   const configured = parsePatternList(process.env.OLLAMA_ALLOWED_HOSTS || "");

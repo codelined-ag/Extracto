@@ -16,6 +16,10 @@ const DEFAULT_MISTRAL_OCR_ENDPOINT = normalizeHostEndpoint(
   process.env.MISTRAL_OCR_API_URL || "",
   "https://api.mistral.ai/v1/ocr"
 );
+const DEFAULT_OPENROUTER_API_ENDPOINT = normalizeHostEndpoint(
+  process.env.OPENROUTER_API_URL || "",
+  "https://openrouter.ai/api/v1"
+);
 const SHOULD_PRESERVE_LOCALHOST =
   (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase() === "host";
 const DEFAULT_OBSIDIAN_BASE_DIR = (process.env.OBSIDIAN_EXPORT_BASE_DIR || "/host-vaults").trim();
@@ -33,9 +37,13 @@ const DATA_ROOT = (() => {
   return path.dirname(databaseFile);
 })();
 
-function normalizeProvider(rawProvider?: string): "ollama" | "mistral" {
+export type ProviderId = "ollama" | "mistral" | "openrouter";
+
+function normalizeProvider(rawProvider?: string): ProviderId {
   const provider = (rawProvider || "").trim().toLowerCase().split(":")[0];
-  return provider === "mistral" ? "mistral" : "ollama";
+  if (provider === "mistral") return "mistral";
+  if (provider === "openrouter") return "openrouter";
+  return "ollama";
 }
 
 function normalizeMistralEndpoint(rawEndpoint?: string): string {
@@ -92,9 +100,36 @@ function normalizeOllamaEndpoint(rawEndpoint?: string): string {
   return normalized;
 }
 
-function normalizeApiEndpoint(rawEndpoint: string | undefined, provider: "ollama" | "mistral"): string {
+function normalizeOpenRouterEndpoint(rawEndpoint?: string): string {
+  const normalized = normalizeHostEndpoint(rawEndpoint || "", DEFAULT_OPENROUTER_API_ENDPOINT);
+
+  try {
+    const url = new URL(normalized);
+    url.search = "";
+    url.hash = "";
+    const pathname = url.pathname.replace(/\/+$/u, "");
+    if (!pathname || pathname === "/") {
+      url.pathname = "/api/v1";
+    } else if (pathname.endsWith("/api")) {
+      url.pathname = `${pathname}/v1`;
+    } else if (pathname.endsWith("/api/v1")) {
+      url.pathname = pathname;
+    } else {
+      url.pathname = pathname;
+    }
+    return url.toString().replace(/\/+$/u, "");
+  } catch {
+    return DEFAULT_OPENROUTER_API_ENDPOINT;
+  }
+}
+
+function normalizeApiEndpoint(rawEndpoint: string | undefined, provider: ProviderId): string {
   if (provider === "mistral") {
     return normalizeMistralEndpoint(rawEndpoint);
+  }
+
+  if (provider === "openrouter") {
+    return normalizeOpenRouterEndpoint(rawEndpoint);
   }
 
   return normalizeOllamaEndpoint(rawEndpoint);
@@ -124,9 +159,12 @@ const settingsCache = new Map<string, ApiProviderSettings>();
 const normalizeSettings = (settings: Partial<ApiProviderSettings>): ApiProviderSettings => {
   const provider = normalizeProvider(settings.provider);
   const normalizedEndpoint = normalizeApiEndpoint(settings.apiEndpoint, provider);
-  const safeEndpoint = provider === "mistral"
-    ? enforceProviderEndpointPolicy("mistral", normalizedEndpoint, DEFAULT_MISTRAL_OCR_ENDPOINT)
-    : enforceProviderEndpointPolicy("ollama", normalizedEndpoint, FALLBACK_OLLAMA_HOST);
+  const safeEndpoint =
+    provider === "mistral"
+      ? enforceProviderEndpointPolicy("mistral", normalizedEndpoint, DEFAULT_MISTRAL_OCR_ENDPOINT)
+      : provider === "openrouter"
+        ? enforceProviderEndpointPolicy("openrouter", normalizedEndpoint, DEFAULT_OPENROUTER_API_ENDPOINT)
+        : enforceProviderEndpointPolicy("ollama", normalizedEndpoint, FALLBACK_OLLAMA_HOST);
 
   return {
     provider,
@@ -198,7 +236,9 @@ export async function saveApiSettings(
       ? current.apiEndpoint
       : provider === "mistral"
         ? DEFAULT_MISTRAL_OCR_ENDPOINT
-        : FALLBACK_OLLAMA_HOST;
+        : provider === "openrouter"
+          ? DEFAULT_OPENROUTER_API_ENDPOINT
+          : FALLBACK_OLLAMA_HOST;
   const normalized = normalizeSettings({
     ...current,
     ...settings,
