@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { createHmac, randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import { ALL_SCOPES, WILDCARD_SCOPE } from "@/lib/auth/scopes";
 
 const KEY_PREFIX = "extr_";
 const RAW_KEY_BYTES = 32;
@@ -53,19 +54,7 @@ Environment:
   process.exit(code);
 }
 
-const VALID_SCOPES = new Set([
-  "ocr:submit",
-  "ocr:read",
-  "ocr:control",
-  "settings:read",
-  "settings:write",
-  "webhooks:read",
-  "webhooks:write",
-  "presets:read",
-  "presets:write",
-  "search:read",
-  "*",
-]);
+const VALID_SCOPES = new Set<string>([...ALL_SCOPES, WILDCARD_SCOPE]);
 
 function parseFlags(args: string[]): { scopes: string[] | null; rateLimit: number | null; positional: string[] } {
   const positional: string[] = [];
@@ -79,7 +68,7 @@ function parseFlags(args: string[]): { scopes: string[] | null; rateLimit: numbe
         console.error(`ERROR: invalid scope(s): ${invalid.join(", ")}`);
         process.exit(1);
       }
-      scopes = list.includes("*") ? ["*"] : list;
+      scopes = list.includes(WILDCARD_SCOPE) ? [WILDCARD_SCOPE] : list;
     } else if (arg.startsWith("--rate-limit=")) {
       const n = Number(arg.slice("--rate-limit=".length));
       if (!Number.isFinite(n) || n < 1 || n > 600) {
@@ -120,7 +109,7 @@ async function cmdCreate(
     process.exit(1);
   }
 
-  const effectiveScopes = scopes && scopes.length > 0 ? scopes : ["*"];
+  const effectiveScopes = scopes && scopes.length > 0 ? scopes : [WILDCARD_SCOPE];
   const { plaintext, prefix, keyHash } = generateApiKey();
   const created = await prisma.apiKey.create({
     data: {
