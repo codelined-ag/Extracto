@@ -2,7 +2,7 @@
 
 Extracto is a self-hosted OCR web app with a proper backend, persistent settings, authentication, OCR history, and Docker-first operations.
 
-It supports three model providers — Ollama on your host machine, the Mistral OCR API, and OpenRouter (any vision-capable model in their catalog) — plus multi-page PDF extraction and optional AI post-processing.
+It supports four model providers — Ollama on your host machine, the Mistral OCR API, OpenRouter, and any **OpenAI-compatible endpoint** (api.openai.com itself, plus self-hosted vLLM / LocalAI / llama.cpp server, Groq, Together, Fireworks, etc.) — plus multi-page PDF extraction and optional AI post-processing.
 
 ## Why Extracto
 
@@ -20,8 +20,12 @@ It supports three model providers — Ollama on your host machine, the Mistral O
   - Mistral OCR API.
   - OpenRouter (OpenAI-compatible chat completions with vision; any model in
     the OpenRouter catalog that accepts image inputs).
+  - **OpenAI-compatible** — any endpoint that speaks the OpenAI Chat
+    Completions wire format with vision content blocks. Works with
+    `api.openai.com`, self-hosted vLLM / LocalAI / llama.cpp server, Groq,
+    Together, Fireworks, Anyscale, and similar.
 - Dynamic model discovery from each configured provider — including live
-  OpenRouter `/models` lookup using the user's saved API key.
+  OpenRouter and OpenAI-compatible `/models` lookup using the user's saved key.
 - Per-user persisted provider settings: provider, endpoint, API key.
 - PDF pipeline:
   - Every page is rendered to image first.
@@ -103,10 +107,20 @@ Important variables:
 - `OPENROUTER_REFERER` / `OPENROUTER_TITLE`: sent as `HTTP-Referer` / `X-Title`
   for OpenRouter analytics.
 - `OPENROUTER_MODELS`: optional comma-separated fallback model list.
-- `OLLAMA_ALLOWED_HOSTS` / `MISTRAL_ALLOWED_HOSTS` / `OPENROUTER_ALLOWED_HOSTS`:
-  optional comma-separated allowlists for provider endpoints. User-submitted
-  endpoints are validated against these patterns; defaults cover localhost,
-  docker gateway hosts, `*.mistral.ai`, and `*.openrouter.ai`.
+- `OPENAI_COMPAT_API_URL`: base URL placeholder shown when "OpenAI-compatible"
+  is selected (default `https://api.openai.com/v1`). Users override per
+  account from the Settings → API dialog.
+- `OPENAI_COMPAT_API_KEY`: optional fallback API key when a user has not
+  saved one.
+- `OPENAI_COMPAT_MODELS`: optional comma-separated fallback model list shown
+  when `/models` discovery fails (e.g. for servers that don't expose it).
+- `OLLAMA_ALLOWED_HOSTS` / `MISTRAL_ALLOWED_HOSTS` / `OPENROUTER_ALLOWED_HOSTS`
+  / `OPENAI_COMPAT_ALLOWED_HOSTS`: optional comma-separated allowlists for
+  provider endpoints. User-submitted endpoints are validated against these
+  patterns; defaults cover localhost, docker gateway hosts, `*.mistral.ai`,
+  `*.openrouter.ai`, and `*.openai.com`. **Extend
+  `OPENAI_COMPAT_ALLOWED_HOSTS` to authorize self-hosted vLLM/LocalAI hosts**
+  (e.g. `api.openai.com,my-vllm.internal,groq.com,api.together.xyz`).
 
 ## Ollama Host Connectivity
 
@@ -141,7 +155,7 @@ Auth endpoints:
 
 ## Providers
 
-Three providers are supported. Each is configured per user from the UI
+Four providers are supported. Each is configured per user from the UI
 (Settings → API), and the same configuration is used by both the browser UI
 and the headless API.
 
@@ -150,11 +164,24 @@ and the headless API.
 | Ollama | local or remote `http://host:11434` | no | `GET /api/tags` (or `/v1/models`) |
 | Mistral OCR API | `https://api.mistral.ai/v1/ocr` | yes | static catalog (configurable via `MISTRAL_MODELS`) |
 | OpenRouter | `https://openrouter.ai/api/v1` | yes | live `GET /models` using the saved key |
+| OpenAI-compatible | any base URL (default `https://api.openai.com/v1`) | yes | live `GET /models` using the saved key |
 
 For OpenRouter, any vision-capable model in the catalog can be used (e.g.
 `anthropic/claude-3.5-sonnet`, `openai/gpt-4o`, `google/gemini-2.0-flash-001`,
 `qwen/qwen-2-vl-72b-instruct`). The dynamic catalog refreshes every five
 minutes; if discovery fails, a configurable fallback list is shown.
+
+The **OpenAI-compatible** provider lets you point at any server that speaks
+the OpenAI Chat Completions wire format with vision content blocks: the real
+`api.openai.com`, a self-hosted [vLLM](https://github.com/vllm-project/vllm)
+or [LocalAI](https://localai.io) instance, [Groq](https://groq.com),
+[Together](https://together.ai), [Fireworks](https://fireworks.ai),
+[Anyscale](https://anyscale.com), etc. Requests use a bare
+`Authorization: Bearer <key>` (no `X-Title` / `HTTP-Referer` headers — those
+are OpenRouter-specific and trip strict OpenAI servers). The base path you
+paste into the endpoint field is preserved verbatim — `/v1`, `/openai/v1`,
+or whatever your server uses. Set `OPENAI_COMPAT_ALLOWED_HOSTS` to authorize
+self-hosted endpoints (defaults to `api.openai.com` only).
 
 ## Headless API
 

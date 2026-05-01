@@ -20,6 +20,10 @@ const DEFAULT_OPENROUTER_API_ENDPOINT = normalizeHostEndpoint(
   process.env.OPENROUTER_API_URL || "",
   "https://openrouter.ai/api/v1"
 );
+const DEFAULT_OPENAI_COMPAT_API_ENDPOINT = normalizeHostEndpoint(
+  process.env.OPENAI_COMPAT_API_URL || "",
+  "https://api.openai.com/v1"
+);
 const SHOULD_PRESERVE_LOCALHOST =
   (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase() === "host";
 const FALLBACK_OLLAMA_HOST = resolveOllamaHostEndpoint(
@@ -36,12 +40,13 @@ const DATA_ROOT = (() => {
   return path.dirname(databaseFile);
 })();
 
-export type ProviderId = "ollama" | "mistral" | "openrouter";
+export type ProviderId = "ollama" | "mistral" | "openrouter" | "openai_compat";
 
 function normalizeProvider(rawProvider?: string): ProviderId {
   const provider = (rawProvider || "").trim().toLowerCase().split(":")[0];
   if (provider === "mistral") return "mistral";
   if (provider === "openrouter") return "openrouter";
+  if (provider === "openai_compat") return "openai_compat";
   return "ollama";
 }
 
@@ -122,6 +127,22 @@ function normalizeOpenRouterEndpoint(rawEndpoint?: string): string {
   }
 }
 
+function normalizeOpenAICompatEndpoint(rawEndpoint?: string): string {
+  // No path rewriting: OpenAI-compatible endpoints are BYO, so we must respect
+  // whatever base path the operator pointed at (e.g. /v1, /api/v1, /openai/v1,
+  // a self-hosted vLLM at /). We only normalize scheme + drop search/hash and
+  // trailing slashes.
+  const normalized = normalizeHostEndpoint(rawEndpoint || "", DEFAULT_OPENAI_COMPAT_API_ENDPOINT);
+  try {
+    const url = new URL(normalized);
+    url.search = "";
+    url.hash = "";
+    return url.toString().replace(/\/+$/u, "");
+  } catch {
+    return DEFAULT_OPENAI_COMPAT_API_ENDPOINT;
+  }
+}
+
 function normalizeApiEndpoint(rawEndpoint: string | undefined, provider: ProviderId): string {
   if (provider === "mistral") {
     return normalizeMistralEndpoint(rawEndpoint);
@@ -129,6 +150,10 @@ function normalizeApiEndpoint(rawEndpoint: string | undefined, provider: Provide
 
   if (provider === "openrouter") {
     return normalizeOpenRouterEndpoint(rawEndpoint);
+  }
+
+  if (provider === "openai_compat") {
+    return normalizeOpenAICompatEndpoint(rawEndpoint);
   }
 
   return normalizeOllamaEndpoint(rawEndpoint);
@@ -161,7 +186,9 @@ const normalizeSettings = (settings: Partial<ApiProviderSettings>): ApiProviderS
       ? enforceProviderEndpointPolicy("mistral", normalizedEndpoint, DEFAULT_MISTRAL_OCR_ENDPOINT)
       : provider === "openrouter"
         ? enforceProviderEndpointPolicy("openrouter", normalizedEndpoint, DEFAULT_OPENROUTER_API_ENDPOINT)
-        : enforceProviderEndpointPolicy("ollama", normalizedEndpoint, FALLBACK_OLLAMA_HOST);
+        : provider === "openai_compat"
+          ? enforceProviderEndpointPolicy("openai_compat", normalizedEndpoint, DEFAULT_OPENAI_COMPAT_API_ENDPOINT)
+          : enforceProviderEndpointPolicy("ollama", normalizedEndpoint, FALLBACK_OLLAMA_HOST);
 
   return {
     provider,
@@ -232,7 +259,9 @@ export async function saveApiSettings(
         ? DEFAULT_MISTRAL_OCR_ENDPOINT
         : provider === "openrouter"
           ? DEFAULT_OPENROUTER_API_ENDPOINT
-          : FALLBACK_OLLAMA_HOST;
+          : provider === "openai_compat"
+            ? DEFAULT_OPENAI_COMPAT_API_ENDPOINT
+            : FALLBACK_OLLAMA_HOST;
   const normalized = normalizeSettings({
     ...current,
     ...settings,

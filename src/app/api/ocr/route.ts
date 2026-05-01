@@ -85,12 +85,13 @@ interface ModelCatalog {
   ollama: string[];
   mistral: string[];
   openrouter: string[];
+  openai_compat: string[];
 }
 
 interface OcrJsonResult {
   fileName: string;
   extractedAt: string;
-  provider: "ollama" | "mistral" | "openrouter";
+  provider: "ollama" | "mistral" | "openrouter" | "openai_compat";
   model: string;
   settings: AdvancedSettings;
   text: string;
@@ -100,7 +101,7 @@ interface OcrJsonResult {
     characterCount: number;
     wordCount: number;
     lineCount: number;
-    provider: "ollama" | "mistral" | "openrouter";
+    provider: "ollama" | "mistral" | "openrouter" | "openai_compat";
     [key: string]: unknown;
   };
   rawExtractionText?: string;
@@ -150,7 +151,7 @@ interface OcrProgressMetadata {
     outputFormat?: PostProcessOutputFormat;
     instruction?: string;
     model?: string;
-    provider?: "ollama" | "mistral" | "openrouter";
+    provider?: "ollama" | "mistral" | "openrouter" | "openai_compat";
     error?: string;
   };
 }
@@ -221,6 +222,23 @@ const OPENROUTER_REFERER = (process.env.OPENROUTER_REFERER || "").trim();
 const OPENROUTER_TITLE = (process.env.OPENROUTER_TITLE || "Extracto").trim();
 const OPENROUTER_MODEL_CACHE_TTL_MS = 5 * 60_000;
 
+const DEFAULT_OPENAI_COMPAT_API_URL =
+  process.env.OPENAI_COMPAT_API_URL?.trim() || "https://api.openai.com/v1";
+const DEFAULT_OPENAI_COMPAT_FALLBACK_MODELS = (() => {
+  const configured = (process.env.OPENAI_COMPAT_MODELS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return configured.length > 0
+    ? configured
+    : [
+        "gpt-4o",
+        "gpt-4o-mini",
+      ];
+})();
+const OPENAI_COMPAT_MODEL_CACHE_TTL_MS = 5 * 60_000;
+const OPENAI_COMPAT_MODEL_CACHE_MAX_ENTRIES = 256;
+
 const REQUEST_TIMEOUT_MS = 60_000;
 const OLLAMA_MODEL_CACHE_TTL_MS = 60_000;
 const MAX_STORED_PREVIEW_LENGTH = 1_500_000;
@@ -245,6 +263,11 @@ let ollamaModelCache: {
 
 const OPENROUTER_MODEL_CACHE_MAX_ENTRIES = 256;
 const openRouterModelCache = new Map<
+  string,
+  { values: string[]; expiresAt: number }
+>();
+
+const openAICompatModelCache = new Map<
   string,
   { values: string[]; expiresAt: number }
 >();
@@ -309,12 +332,13 @@ function getOllamaCandidatesForOcr(endpoint: string): string[] {
   return Array.from(new Set(candidates));
 }
 
-type ProviderHint = "ollama" | "mistral" | "openrouter";
+type ProviderHint = "ollama" | "mistral" | "openrouter" | "openai_compat";
 
 function parseProviderHint(rawProvider: string | undefined): ProviderHint {
   const value = rawProvider?.trim().toLowerCase().split(":")[0] || "ollama";
   if (value === "mistral") return "mistral";
   if (value === "openrouter") return "openrouter";
+  if (value === "openai_compat") return "openai_compat";
   return "ollama";
 }
 
@@ -336,6 +360,10 @@ function normalizeApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
     normalizedEndpoint = normalizeMistralOcrEndpoint(raw.apiEndpoint || DEFAULT_MISTRAL_API_URL);
   } else if (provider === "openrouter") {
     normalizedEndpoint = normalizeOpenRouterApiBase(raw.apiEndpoint || DEFAULT_OPENROUTER_API_URL);
+  } else if (provider === "openai_compat") {
+    normalizedEndpoint = normalizeOpenAICompatApiBase(
+      raw.apiEndpoint || DEFAULT_OPENAI_COMPAT_API_URL
+    );
   } else {
     normalizedEndpoint = resolveOllamaHostEndpoint(
       raw.apiEndpoint || OLLAMA_DISCOVERY_FALLBACK_HOST,
@@ -352,6 +380,12 @@ function normalizeApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
       normalizedEndpoint,
       DEFAULT_OPENROUTER_API_URL
     );
+  } else if (provider === "openai_compat") {
+    safeEndpoint = enforceProviderEndpointPolicy(
+      "openai_compat",
+      normalizedEndpoint,
+      DEFAULT_OPENAI_COMPAT_API_URL
+    );
   } else {
     safeEndpoint = enforceProviderEndpointPolicy("ollama", normalizedEndpoint, OLLAMA_DISCOVERY_FALLBACK_HOST);
   }
@@ -361,6 +395,28 @@ function normalizeApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
     apiEndpoint: safeEndpoint,
     apiKey: raw.apiKey?.trim() || "",
   };
+}
+
+function normalizeOpenAICompatApiBase(rawEndpoint: string): string {
+  // BYO endpoint: respect operator-supplied base path verbatim. We only
+  // normalize scheme, drop trailing slash and any chat/completions or
+  // models suffix the user might have pasted.
+  const trimmed = rawEndpoint.trim();
+  if (!trimmed) {
+    return DEFAULT_OPENAI_COMPAT_API_URL;
+  }
+  try {
+    const url = new URL(/^https?:\/\//iu.test(trimmed) ? trimmed : `https://${trimmed}`);
+    url.search = "";
+    url.hash = "";
+    const pathname = url.pathname
+      .replace(/\/+$/u, "")
+      .replace(/\/(chat\/completions|models)$/u, "");
+    url.pathname = pathname;
+    return url.toString().replace(/\/+$/u, "");
+  } catch {
+    return DEFAULT_OPENAI_COMPAT_API_URL;
+  }
 }
 
 function normalizeOpenRouterApiBase(rawEndpoint: string): string {
@@ -1002,7 +1058,7 @@ function buildProgressMetadata(input: {
 function buildJsonResult(
   fileName: string,
   model: string,
-  provider: "ollama" | "mistral" | "openrouter",
+  provider: "ollama" | "mistral" | "openrouter" | "openai_compat",
   settings: AdvancedSettings,
   markdown: string,
   structured: Record<string, unknown>,
@@ -1223,7 +1279,7 @@ async function resolveOllamaEndpoint(endpoint: string): Promise<string> {
 async function resolveProvider(
   model: string,
   settings: ApiProviderSettings
-): Promise<"ollama" | "mistral" | "openrouter"> {
+): Promise<"ollama" | "mistral" | "openrouter" | "openai_compat"> {
   const normalizedModel = model.trim();
   const providerHint = parseProviderHint(settings.provider);
   if (!normalizedModel) {
@@ -1236,6 +1292,10 @@ async function resolveProvider(
 
   if (providerHint === "openrouter") {
     return "openrouter";
+  }
+
+  if (providerHint === "openai_compat") {
+    return "openai_compat";
   }
 
   if (providerHint === "ollama") {
@@ -2067,10 +2127,259 @@ async function runOpenRouterPostProcessing(
   };
 }
 
+function buildOpenAICompatEndpoint(
+  rawEndpoint: string,
+  suffix: "/chat/completions" | "/models"
+): string {
+  const base = normalizeOpenAICompatApiBase(rawEndpoint || DEFAULT_OPENAI_COMPAT_API_URL);
+  return enforceProviderEndpointPolicy(
+    "openai_compat",
+    `${base}${suffix}`,
+    `${DEFAULT_OPENAI_COMPAT_API_URL}${suffix}`
+  );
+}
+
+function buildOpenAICompatCacheKey(endpoint: string, apiKey: string): string {
+  if (!apiKey) {
+    return `${endpoint}|anonymous`;
+  }
+  const digest = createHash("sha256")
+    .update(endpoint, "utf8")
+    .update("|", "utf8")
+    .update(apiKey, "utf8")
+    .digest("hex");
+  return `${endpoint}|${digest}`;
+}
+
+function pruneOpenAICompatModelCache() {
+  const now = Date.now();
+  for (const [key, entry] of openAICompatModelCache) {
+    if (entry.expiresAt <= now) {
+      openAICompatModelCache.delete(key);
+    }
+  }
+  while (openAICompatModelCache.size > OPENAI_COMPAT_MODEL_CACHE_MAX_ENTRIES) {
+    const oldestKey = openAICompatModelCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    openAICompatModelCache.delete(oldestKey);
+  }
+}
+
+function getCachedOpenAICompatModels(endpoint: string, apiKey: string): string[] | null {
+  const cacheKey = buildOpenAICompatCacheKey(endpoint, apiKey);
+  const entry = openAICompatModelCache.get(cacheKey);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    openAICompatModelCache.delete(cacheKey);
+    return null;
+  }
+  openAICompatModelCache.delete(cacheKey);
+  openAICompatModelCache.set(cacheKey, entry);
+  return entry.values.length > 0 ? entry.values : null;
+}
+
+function setOpenAICompatModelCache(endpoint: string, apiKey: string, values: string[]) {
+  openAICompatModelCache.set(buildOpenAICompatCacheKey(endpoint, apiKey), {
+    values,
+    expiresAt: Date.now() + OPENAI_COMPAT_MODEL_CACHE_TTL_MS,
+  });
+  pruneOpenAICompatModelCache();
+}
+
+function buildOpenAICompatHeaders(apiKey: string): Record<string, string> {
+  // Vanilla OpenAI shape: just Bearer auth + JSON. No X-Title, no HTTP-Referer
+  // (those are OpenRouter-specific and confuse strict OpenAI servers).
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+  };
+}
+
+async function discoverOpenAICompatModels(
+  apiEndpoint: string,
+  apiKey: string
+): Promise<string[]> {
+  const endpoint = buildOpenAICompatEndpoint(apiEndpoint, "/models");
+  const cached = getCachedOpenAICompatModels(endpoint, apiKey);
+  if (cached) {
+    return cached;
+  }
+
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
+
+  const response = await fetchWithTimeout(endpoint, { headers });
+  const payload = await parseResponseText(response);
+  if (!response.ok) {
+    throw new ApiRouteError(
+      `OpenAI-compatible model discovery failed (${response.status}): ${parseServiceError(response, payload)}`,
+      response.status
+    );
+  }
+
+  if (!payload || typeof payload !== "object") {
+    throw new ApiRouteError("Invalid OpenAI-compatible model response", 502);
+  }
+
+  const data = (payload as { data?: unknown }).data;
+  if (!Array.isArray(data)) {
+    return [];
+  }
+
+  const models = data
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return "";
+      const id = (entry as { id?: unknown }).id;
+      return typeof id === "string" ? id.trim() : "";
+    })
+    .filter(Boolean);
+
+  const unique = Array.from(new Set(models));
+  setOpenAICompatModelCache(endpoint, apiKey, unique);
+  return unique;
+}
+
+async function runOpenAICompatOcr(
+  apiEndpoint: string,
+  model: string,
+  apiKey: string,
+  prompt: string,
+  preview: string,
+  signal?: AbortSignal
+): Promise<{ text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> }> {
+  if (!apiKey) {
+    throw new ApiRouteError("OpenAI-compatible API key is not configured", 500);
+  }
+
+  const imageData = parsePreviewImageData(preview);
+  if (!imageData.dataUrl) {
+    throw new ApiRouteError("Invalid image data for OpenAI-compatible OCR", 400);
+  }
+
+  const endpoint = buildOpenAICompatEndpoint(apiEndpoint, "/chat/completions");
+  const response = await fetchWithTimeout(
+    endpoint,
+    {
+      method: "POST",
+      headers: buildOpenAICompatHeaders(apiKey),
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: imageData.dataUrl } },
+            ],
+          },
+        ],
+        temperature: 0,
+        stream: false,
+      }),
+    },
+    REQUEST_TIMEOUT_MS,
+    signal
+  );
+
+  const payload = await parseResponseText(response);
+  if (!response.ok) {
+    throw new ApiRouteError(
+      `OpenAI-compatible OCR failed (${response.status}): ${parseServiceError(response, payload)}`,
+      response.status
+    );
+  }
+
+  if (!payload || typeof payload !== "object") {
+    throw new ApiRouteError("Invalid OCR response from OpenAI-compatible endpoint", 502);
+  }
+
+  const choices = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices;
+  const message = Array.isArray(choices) ? choices[0]?.message : undefined;
+  const text = extractChatContentText(message?.content);
+  if (!text) {
+    throw new ApiRouteError("OpenAI-compatible OCR response had no text", 502);
+  }
+
+  const parsed = parseJsonCandidate(text);
+  const normalized = normalizeStructuredMarkdownPayload(parsed, text);
+  if (!normalized.markdown) {
+    throw new ApiRouteError("OpenAI-compatible OCR response markdown was empty", 502);
+  }
+
+  const usage = (payload as { usage?: Record<string, unknown> }).usage;
+  return {
+    text: normalized.markdown,
+    structured: normalized.structured,
+    metadata: {
+      endpoint,
+      outputFormat: normalized.parseMode,
+      usage,
+    },
+  };
+}
+
+async function runOpenAICompatPostProcessing(
+  apiEndpoint: string,
+  model: string,
+  apiKey: string,
+  systemPrompt: string,
+  userPrompt: string,
+  outputFormat: PostProcessOutputFormat
+): Promise<{ text: string; metadata: Record<string, unknown> }> {
+  if (!apiKey) {
+    throw new ApiRouteError("OpenAI-compatible API key is not configured", 500);
+  }
+
+  const endpoint = buildOpenAICompatEndpoint(apiEndpoint, "/chat/completions");
+  const response = await fetchWithTimeout(endpoint, {
+    method: "POST",
+    headers: buildOpenAICompatHeaders(apiKey),
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      ...(outputFormat === "json"
+        ? { response_format: { type: "json_object" } }
+        : {}),
+      temperature: 0,
+      stream: false,
+    }),
+  });
+
+  const payload = await parseResponseText(response);
+  if (!response.ok) {
+    throw new ApiRouteError(
+      `OpenAI-compatible post-processing failed (${response.status}): ${parseServiceError(response, payload)}`,
+      response.status
+    );
+  }
+
+  if (!payload || typeof payload !== "object") {
+    throw new ApiRouteError("Invalid post-processing response from OpenAI-compatible endpoint", 502);
+  }
+
+  const choices = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices;
+  const message = Array.isArray(choices) ? choices[0]?.message : undefined;
+  const text = extractChatContentText(message?.content);
+  if (!text) {
+    throw new ApiRouteError("OpenAI-compatible post-processing returned empty output", 502);
+  }
+
+  return {
+    text,
+    metadata: { endpoint },
+  };
+}
+
 async function getModelCatalog(settings: ApiProviderSettings): Promise<ModelCatalog> {
   const mistralModels = normalizeMistralModels();
   let ollamaModels: string[] = [];
   let openRouterModels: string[] = [];
+  let openAICompatModels: string[] = [];
 
   try {
     const discovered = await getOllamaModels(settings.apiEndpoint);
@@ -2097,10 +2406,34 @@ async function getModelCatalog(settings: ApiProviderSettings): Promise<ModelCata
     openRouterModels = [...DEFAULT_OPENROUTER_FALLBACK_MODELS];
   }
 
+  try {
+    const endpointForDiscovery =
+      settings.provider === "openai_compat"
+        ? settings.apiEndpoint
+        : DEFAULT_OPENAI_COMPAT_API_URL;
+    const apiKeyForDiscovery =
+      settings.provider === "openai_compat"
+        ? settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || ""
+        : process.env.OPENAI_COMPAT_API_KEY || "";
+    if (apiKeyForDiscovery) {
+      openAICompatModels = await discoverOpenAICompatModels(
+        endpointForDiscovery,
+        apiKeyForDiscovery
+      );
+    }
+  } catch (error) {
+    console.error("Failed to fetch OpenAI-compatible model catalog:", error);
+  }
+
+  if (openAICompatModels.length === 0 && settings.provider === "openai_compat") {
+    openAICompatModels = [...DEFAULT_OPENAI_COMPAT_FALLBACK_MODELS];
+  }
+
   return {
     ollama: ollamaModels,
     mistral: mistralModels,
     openrouter: openRouterModels,
+    openai_compat: openAICompatModels,
   };
 }
 
@@ -2110,7 +2443,7 @@ interface ProcessOcrJobInput {
   fileName: string;
   model: string;
   ocrModel: string;
-  provider: "ollama" | "mistral" | "openrouter";
+  provider: "ollama" | "mistral" | "openrouter" | "openai_compat";
   settings: ApiProviderSettings;
   settingsPayload: AdvancedSettings;
   postProcessingPayload: PostProcessingSettings;
@@ -2334,6 +2667,19 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
             pagePreview,
             pageAbortController.signal
           ));
+        } else if (input.provider === "openai_compat") {
+          const openAICompatEndpoint =
+            input.settings.provider === "openai_compat"
+              ? input.settings.apiEndpoint
+              : DEFAULT_OPENAI_COMPAT_API_URL;
+          ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runOpenAICompatOcr(
+            openAICompatEndpoint,
+            input.ocrModel,
+            input.settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "",
+            input.prompt,
+            pagePreview,
+            pageAbortController.signal
+          ));
         } else {
           const mistralEndpoint =
             input.settings.provider === "mistral"
@@ -2504,6 +2850,17 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
               : DEFAULT_OPENROUTER_API_URL,
             postProcessingModel,
             input.settings.apiKey || process.env.OPENROUTER_API_KEY || "",
+            systemPrompt,
+            postProcessRequestText,
+            input.postProcessingPayload.outputFormat
+          );
+        } else if (postProcessingProvider === "openai_compat") {
+          postProcessResult = await runOpenAICompatPostProcessing(
+            input.settings.provider === "openai_compat"
+              ? input.settings.apiEndpoint
+              : DEFAULT_OPENAI_COMPAT_API_URL,
+            postProcessingModel,
+            input.settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "",
             systemPrompt,
             postProcessRequestText,
             input.postProcessingPayload.outputFormat
@@ -2751,6 +3108,10 @@ export async function GET(request: NextRequest) {
 
     if (provider === "openrouter") {
       return NextResponse.json({ success: true, models: catalog.openrouter });
+    }
+
+    if (provider === "openai_compat") {
+      return NextResponse.json({ success: true, models: catalog.openai_compat });
     }
 
     return NextResponse.json({ success: true, models: catalog });

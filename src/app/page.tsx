@@ -159,7 +159,7 @@ interface HistoryJobDetail extends HistoryJobSummary {
   result?: unknown;
 }
 
-type ProviderKind = "ollama" | "mistral" | "openrouter";
+type ProviderKind = "ollama" | "mistral" | "openrouter" | "openai_compat";
 type ProviderModelSelections = Partial<Record<ProviderKind, string>>;
 type UiLanguage = "it" | "en" | "fr" | "es" | "de";
 
@@ -188,6 +188,7 @@ function isUiLanguage(value: unknown): value is UiLanguage {
 const DEFAULT_OLLAMA_ENDPOINT = "http://localhost:11434";
 const DEFAULT_MISTRAL_ENDPOINT = "https://api.mistral.ai/v1/ocr";
 const DEFAULT_OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1";
+const DEFAULT_OPENAI_COMPAT_ENDPOINT = "https://api.openai.com/v1";
 const MODEL_SELECTIONS_STORAGE_KEY = "extracto:model-selections:v1";
 const POST_PROCESS_MODEL_SELECTIONS_STORAGE_KEY =
   "extracto:post-process-model-selections:v1";
@@ -197,12 +198,14 @@ function normalizeProvider(provider?: string): ProviderKind {
   const v = provider?.trim().toLowerCase().split(":")[0];
   if (v === "mistral") return "mistral";
   if (v === "openrouter") return "openrouter";
+  if (v === "openai_compat") return "openai_compat";
   return "ollama";
 }
 
 function defaultEndpointForProvider(provider: ProviderKind): string {
   if (provider === "mistral") return DEFAULT_MISTRAL_ENDPOINT;
   if (provider === "openrouter") return DEFAULT_OPENROUTER_ENDPOINT;
+  if (provider === "openai_compat") return DEFAULT_OPENAI_COMPAT_ENDPOINT;
   return DEFAULT_OLLAMA_ENDPOINT;
 }
 
@@ -278,6 +281,7 @@ function readProviderModelSelections(storageKey: string): ProviderModelSelection
       ollama: typeof typed.ollama === "string" ? typed.ollama.trim() : "",
       mistral: typeof typed.mistral === "string" ? typed.mistral.trim() : "",
       openrouter: typeof typed.openrouter === "string" ? typed.openrouter.trim() : "",
+      openai_compat: typeof typed.openai_compat === "string" ? typed.openai_compat.trim() : "",
     };
   } catch {
     return {};
@@ -299,6 +303,7 @@ function writeProviderModelSelections(
         ollama: selections.ollama || "",
         mistral: selections.mistral || "",
         openrouter: selections.openrouter || "",
+        openai_compat: selections.openai_compat || "",
       })
     );
   } catch {
@@ -1925,6 +1930,7 @@ export default function ExtractoPage() {
                   <SelectItem value="ollama">Ollama</SelectItem>
                   <SelectItem value="mistral">Mistral OCR API</SelectItem>
                   <SelectItem value="openrouter">OpenRouter</SelectItem>
+                  <SelectItem value="openai_compat">OpenAI-compatible</SelectItem>
                 </SelectContent>
               </Select>
             </div>
