@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { authenticateMutation, getAuthenticatedUserId } from "@/lib/auth/request";
+import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
 import { getApiSettings, saveApiSettings, toClientApiSettings } from "@/lib/settings-store";
 
 export async function GET(request: NextRequest) {
-  const userId = await getAuthenticatedUserId(request);
-  if (!userId) {
+  const auth = await authenticateRequest(request);
+  if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const scopeError = requireScope(auth, "settings:read");
+  if (scopeError) return scopeError;
+  const userId = auth.userId;
 
   try {
     const settings = await getApiSettings(userId);
@@ -27,6 +30,8 @@ export async function POST(request: NextRequest) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
+  const scopeError = requireScope(result.auth, "settings:write");
+  if (scopeError) return scopeError;
   const userId = result.auth.userId;
 
   const body = (await request.json().catch(() => ({}))) as Partial<{

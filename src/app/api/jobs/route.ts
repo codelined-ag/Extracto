@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus } from "@prisma/client";
 
-import { authenticateMutation, getAuthenticatedUserId } from "@/lib/auth/request";
+import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 
 const MAX_PAGE_SIZE = 100;
@@ -25,10 +25,13 @@ const parseStatusFilter = (value: string | null) => {
 };
 
 export async function GET(request: NextRequest) {
-  const userId = await getAuthenticatedUserId(request);
-  if (!userId) {
+  const auth = await authenticateRequest(request);
+  if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const scopeError = requireScope(auth, "ocr:read");
+  if (scopeError) return scopeError;
+  const userId = auth.userId;
 
   const { searchParams } = new URL(request.url);
   const limit = parseLimit(searchParams.get("limit"));
@@ -74,6 +77,8 @@ export async function DELETE(request: NextRequest) {
   if (!authResult.ok) {
     return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
+  const scopeError = requireScope(authResult.auth, "ocr:control");
+  if (scopeError) return scopeError;
   const userId = authResult.auth.userId;
 
   const { searchParams } = new URL(request.url);

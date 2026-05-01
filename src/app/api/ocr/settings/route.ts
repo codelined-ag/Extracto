@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OcrSetting } from "@prisma/client";
 import { db } from "@/lib/db";
-import { authenticateMutation, getAuthenticatedUserId } from "@/lib/auth/request";
+import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
 import {
   DEFAULT_SETTINGS,
   OCR_SETTINGS_KEY,
@@ -35,10 +35,12 @@ async function getDefaultSettingsRow() {
 }
 
 export async function GET(request: NextRequest) {
-  const userId = await getAuthenticatedUserId(request);
-  if (!userId) {
+  const auth = await authenticateRequest(request);
+  if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const scopeError = requireScope(auth, "settings:read");
+  if (scopeError) return scopeError;
 
   const settings = await getDefaultSettingsRow();
   return NextResponse.json(mapSettingsResponse(settings));
@@ -49,6 +51,8 @@ export async function PUT(request: NextRequest) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
+  const scopeError = requireScope(result.auth, "settings:write");
+  if (scopeError) return scopeError;
 
   const body = await request.json().catch(() => ({}));
   const normalized = normalizeAdvancedSettings(body);

@@ -5,7 +5,12 @@ import { chmod, chown, mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { ApiProviderSettings, getApiSettings } from "@/lib/settings-store";
-import { authenticateMutation, getAuthenticatedUserId } from "@/lib/auth/request";
+import { authenticateMutation, authHasScope, getAuthenticatedUserId } from "@/lib/auth/request";
+import {
+  maybeUploadResultJson,
+  maybeUploadResultText,
+} from "@/lib/result-store";
+import { dispatchJobWebhooks } from "@/lib/webhooks";
 import { db } from "@/lib/db";
 import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
 import {
@@ -15,6 +20,7 @@ import {
   markOcrJobRunning,
   registerOcrJobAbortController,
   unregisterOcrJobAbortController,
+  withOcrJobSlot,
 } from "@/lib/ocr/job-control";
 import {
   buildOllamaHostCandidates,
@@ -60,6 +66,8 @@ interface OCRRequestBody {
   model?: unknown;
   preview?: unknown;
   pages?: unknown;
+  priority?: unknown;
+  batchId?: unknown;
   settings?: Partial<AdvancedSettings>;
   postProcessing?: Partial<PostProcessingSettings>;
   mode?: unknown;
@@ -73,6 +81,11 @@ interface OCRRequestBody {
     apiKey?: unknown;
     obsidianBaseDir?: unknown;
   };
+}
+
+function parseRequestPriority(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.max(-10, Math.min(10, Math.trunc(value)));
 }
 
 interface OcrPage {
@@ -3297,18 +3310,18 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       },
     });
     clearOcrJobRunning(input.jobId);
-    clearOcrJobStop(input.jobId);
+    await clearOcrJobStop(input.jobId);
   };
 
   try {
-    clearOcrJobStop(input.jobId);
+    await clearOcrJobStop(input.jobId);
     markOcrJobRunning(input.jobId);
     if (input.provider === "ollama") {
       await warmupOllamaModel(input.settings.apiEndpoint, input.ocrModel);
     }
 
     for (let index = startIndex; index < input.inputPreviews.length; index++) {
-      if (isOcrJobStopRequested(input.jobId)) {
+      if (await isOcrJobStopRequested(input.jobId)) {
         await pauseAtCheckpoint(
           "Stopped. Resume to continue from checkpoint.",
           `Stopped at ${pageOutputs.length}/${input.inputPreviews.length} page(s)`
@@ -3367,7 +3380,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
           ));
         }
       } catch (error) {
-        if (error instanceof OcrStopRequestedError || isOcrJobStopRequested(input.jobId)) {
+        if (error instanceof OcrStopRequestedError || (await isOcrJobStopRequested(input.jobId))) {
           await pauseAtCheckpoint(
             "Stopped during inference. Resume to continue from checkpoint.",
             `Stopped during page ${pageNumber}/${input.inputPreviews.length} at ${pageOutputs.length}/${input.inputPreviews.length} page(s)`
@@ -3724,22 +3737,30 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
     });
     extractedMetadata.progress = latestMetadata;
 
+    const [extractedTextOffload, resultOffload] = await Promise.all([
+      maybeUploadResultText(input.jobId, finalMarkdown),
+      maybeUploadResultJson(input.jobId, result),
+    ]);
+
     await db.ocrJob.update({
       where: { id: input.jobId },
       data: {
         status: OcrJobStatus.COMPLETED,
-        extractedText: finalMarkdown,
-        result: toJsonValue(result),
+        extractedText: extractedTextOffload.inline,
+        extractedTextLocation: extractedTextOffload.location,
+        result: (resultOffload.inline ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        resultLocation: resultOffload.location,
         metadata: toJsonValue(extractedMetadata),
         completedAt: new Date(),
         processingMs: Date.now() - input.startedAtMs,
       },
     });
+    void dispatchJobWebhooks(input.jobId, "job.completed").catch(() => undefined);
     for (const ollamaModel of usedOllamaModels) {
       await unloadOllamaModel(input.settings.apiEndpoint, ollamaModel);
     }
     clearOcrJobRunning(input.jobId);
-    clearOcrJobStop(input.jobId);
+    await clearOcrJobStop(input.jobId);
   } catch (error) {
     progressEvents = appendProgressEvent(
       progressEvents,
@@ -3770,11 +3791,12 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
         processingMs: Date.now() - input.startedAtMs,
       },
     });
+    void dispatchJobWebhooks(input.jobId, "job.failed").catch(() => undefined);
     for (const ollamaModel of usedOllamaModels) {
       await unloadOllamaModel(input.settings.apiEndpoint, ollamaModel);
     }
     clearOcrJobRunning(input.jobId);
-    clearOcrJobStop(input.jobId);
+    await clearOcrJobStop(input.jobId);
   }
 }
 
@@ -3874,12 +3896,24 @@ export async function POST(request: NextRequest) {
     if (!authResult.ok) {
       throw new ApiRouteError(authResult.error, authResult.status);
     }
-    const userId = authResult.auth.userId;
+    const auth = authResult.auth;
+    if (!authHasScope(auth, "ocr:submit")) {
+      throw new ApiRouteError("Missing required scope: ocr:submit", 403);
+    }
+    const userId = auth.userId;
 
     const clientIp = getClientIpAddress(request);
+    const rateLimitKey =
+      auth.method === "api-key" && auth.apiKeyId
+        ? `ocr:job:key:${auth.apiKeyId}`
+        : `ocr:job:${userId}:${clientIp}`;
+    const rateLimitMax =
+      auth.method === "api-key" && auth.rateLimitPerMinute && auth.rateLimitPerMinute > 0
+        ? auth.rateLimitPerMinute
+        : OCR_RATE_LIMIT_MAX;
     const rateLimit = consumeRateLimit({
-      key: `ocr:job:${userId}:${clientIp}`,
-      max: OCR_RATE_LIMIT_MAX,
+      key: rateLimitKey,
+      max: rateLimitMax,
       windowMs: OCR_RATE_LIMIT_WINDOW_MS,
     });
     if (!rateLimit.allowed) {
@@ -3972,6 +4006,7 @@ export async function POST(request: NextRequest) {
           status: true,
           result: true,
           metadata: true,
+          priority: true,
         },
       });
       if (!existingJob) {
@@ -4060,24 +4095,27 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      void processOcrJobInBackground({
-        jobId: existingJob.id,
-        startedAtMs,
-        fileName,
-        model,
-        ocrModel,
-        provider,
-        mode,
-        settings,
-        settingsPayload,
-        postProcessingPayload,
-        obsidianPayload: effectiveObsidianPayload,
-        inputPreviews,
-        prompt,
-        initialPageOutputs,
-        startIndex,
-        resumed: true,
-      });
+      const resumePriority = (existingJob as { priority?: number }).priority ?? 0;
+      void withOcrJobSlot(resumePriority, () =>
+        processOcrJobInBackground({
+          jobId: existingJob.id,
+          startedAtMs,
+          fileName,
+          model,
+          ocrModel,
+          provider,
+          mode,
+          settings,
+          settingsPayload,
+          postProcessingPayload,
+          obsidianPayload: effectiveObsidianPayload,
+          inputPreviews,
+          prompt,
+          initialPageOutputs,
+          startIndex,
+          resumed: true,
+        })
+      );
 
       return NextResponse.json(
         {
@@ -4130,10 +4168,17 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    const requestedPriority = parseRequestPriority(body?.priority);
+    const requestedBatchId = typeof body?.batchId === "string" && body.batchId.trim()
+      ? body.batchId.trim().slice(0, 64)
+      : null;
     const createdJob = await db.ocrJob.create({
       data: {
         userId,
+        apiKeyId: authResult.auth.method === "api-key" ? authResult.auth.apiKeyId ?? null : null,
         status: OcrJobStatus.PROCESSING,
+        priority: requestedPriority,
+        batchId: requestedBatchId,
         fileName,
         sourcePreview,
         model,
@@ -4154,21 +4199,23 @@ export async function POST(request: NextRequest) {
       },
       select: { id: true },
     });
-    void processOcrJobInBackground({
-      jobId: createdJob.id,
-      startedAtMs,
-      fileName,
-      model,
-      ocrModel,
-      provider,
-      mode,
-      settings,
-      settingsPayload,
-      postProcessingPayload,
-      obsidianPayload: effectiveObsidianPayload,
-      inputPreviews,
-      prompt,
-    });
+    void withOcrJobSlot(requestedPriority, () =>
+      processOcrJobInBackground({
+        jobId: createdJob.id,
+        startedAtMs,
+        fileName,
+        model,
+        ocrModel,
+        provider,
+        mode,
+        settings,
+        settingsPayload,
+        postProcessingPayload,
+        obsidianPayload: effectiveObsidianPayload,
+        inputPreviews,
+        prompt,
+      })
+    );
 
     return NextResponse.json(
       {

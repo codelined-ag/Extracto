@@ -21,29 +21,64 @@ enum OcrJobStatus {
 }
 
 model AuthUser {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  passwordHash String
-  name         String?
-  jobs         OcrJob[]
-  apiKeys      ApiKey[]
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  name          String?
+  jobs          OcrJob[]
+  apiKeys       ApiKey[]
+  webhooks      Webhook[]
+  outputPresets OutputPreset[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 model ApiKey {
-  id          String    @id @default(cuid())
-  userId      String
-  user        AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name        String
-  prefix      String
-  keyHash     String    @unique
-  lastUsedAt  DateTime?
-  revokedAt   DateTime?
-  createdAt   DateTime  @default(now())
+  id                  String    @id @default(cuid())
+  userId              String
+  user                AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  prefix              String
+  keyHash             String    @unique
+  scopes              String    @default("[\"*\"]")
+  rateLimitPerMinute  Int?
+  totalRequests       Int       @default(0)
+  requestsThisMonth   Int       @default(0)
+  monthlyResetAt      DateTime?
+  lastUsedAt          DateTime?
+  revokedAt           DateTime?
+  createdAt           DateTime  @default(now())
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([keyHash])
+}
+
+model Webhook {
+  id         String    @id @default(cuid())
+  userId     String
+  user       AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url        String
+  secret     String
+  events     String    @default("[\"job.completed\",\"job.failed\"]")
+  active     Boolean   @default(true)
+  lastFiredAt DateTime?
+  failureCount Int      @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model OutputPreset {
+  id           String   @id @default(cuid())
+  userId       String
+  user         AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  instruction  String
+  outputFormat String   @default("markdown")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model OcrSetting {
@@ -64,7 +99,9 @@ model OcrJob {
   id                     String       @id @default(cuid())
   userId                 String?
   user                   AuthUser?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  apiKeyId               String?
   status                 OcrJobStatus @default(QUEUED)
+  priority               Int          @default(0)
   fileName               String
   sourcePreview          String?
   model                  String
@@ -79,17 +116,23 @@ model OcrJob {
   settingsSnapshot       Json
   prompt                 String
   extractedText          String?
+  extractedTextLocation  String?
   result                 Json?
+  resultLocation         String?
   metadata               Json?
   errorMessage           String?
+  stopRequestedAt        DateTime?
+  batchId                String?
   startedAt              DateTime     @default(now())
   completedAt            DateTime?
   processingMs           Int?
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt
 
+  @@index([status, priority(sort: Desc), createdAt])
   @@index([status, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@index([settingsId])
   @@index([userId, createdAt(sort: Desc)])
+  @@index([batchId])
 }

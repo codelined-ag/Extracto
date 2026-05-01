@@ -1,23 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { authenticateMutation, getAuthenticatedUserId } from "@/lib/auth/request";
+import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
 import { db } from "@/lib/db";
+import { readResultJson, readResultText } from "@/lib/result-store";
 
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const userId = await getAuthenticatedUserId(request);
-  if (!userId) {
+  const auth = await authenticateRequest(request);
+  if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const scopeError = requireScope(auth, "ocr:read");
+  if (scopeError) return scopeError;
+  const userId = auth.userId;
 
   const { id } = await context.params;
   if (!id) {
     return NextResponse.json({ error: "Job id is required" }, { status: 400 });
   }
 
-  const job = await db.ocrJob.findFirst({
+  const row = await db.ocrJob.findFirst({
     where: { id, userId },
     select: {
       id: true,
@@ -31,13 +35,35 @@ export async function GET(
       metadata: true,
       errorMessage: true,
       extractedText: true,
+      extractedTextLocation: true,
       result: true,
+      resultLocation: true,
     },
   });
 
-  if (!job) {
+  if (!row) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
+
+  const [extractedText, result] = await Promise.all([
+    readResultText(row.extractedTextLocation, row.extractedText),
+    readResultJson(row.resultLocation, row.result),
+  ]);
+
+  const job = {
+    id: row.id,
+    status: row.status,
+    fileName: row.fileName,
+    sourcePreview: row.sourcePreview,
+    model: row.model,
+    createdAt: row.createdAt,
+    completedAt: row.completedAt,
+    processingMs: row.processingMs,
+    metadata: row.metadata,
+    errorMessage: row.errorMessage,
+    extractedText,
+    result,
+  };
 
   return NextResponse.json({ job });
 }
@@ -50,6 +76,8 @@ export async function DELETE(
   if (!authResult.ok) {
     return NextResponse.json({ error: authResult.error }, { status: authResult.status });
   }
+  const scopeError = requireScope(authResult.auth, "ocr:control");
+  if (scopeError) return scopeError;
   const userId = authResult.auth.userId;
 
   const { id } = await context.params;

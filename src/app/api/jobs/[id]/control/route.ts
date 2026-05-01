@@ -43,7 +43,7 @@ export async function POST(
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
 
-  requestOcrJobStop(id);
+  await requestOcrJobStop(id);
   abortOcrJobRequests(id);
   const running = isOcrJobRunning(id);
 
