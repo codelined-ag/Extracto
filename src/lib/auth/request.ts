@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { Prisma } from "@prisma/client";
+
 import {
   compareKeyHashes,
   extractBearerToken,
@@ -68,26 +70,29 @@ async function verifyApiKeyToken(token: string): Promise<ApiKeyVerifyResult | nu
   }
 
   const now = new Date();
-  const shouldReset =
-    !record.monthlyResetAt || record.monthlyResetAt.getTime() <= now.getTime();
   const nextReset = startOfNextMonth(now);
 
-  void db.apiKey
-    .update({
-      where: { id: record.id },
-      data: shouldReset
-        ? {
-            lastUsedAt: now,
-            totalRequests: { increment: 1 },
-            requestsThisMonth: 1,
-            monthlyResetAt: nextReset,
-          }
-        : {
-            lastUsedAt: now,
-            totalRequests: { increment: 1 },
-            requestsThisMonth: { increment: 1 },
-          },
-    })
+  // Atomic CASE update so concurrent requests racing across the month
+  // boundary cannot both observe `shouldReset` and clobber each other's
+  // counter. SQLite evaluates the CASE against the row's current value.
+  void db
+    .$executeRaw(Prisma.sql`
+      UPDATE "ApiKey"
+      SET
+        "lastUsedAt" = ${now},
+        "totalRequests" = "totalRequests" + 1,
+        "monthlyResetAt" = CASE
+          WHEN "monthlyResetAt" IS NULL OR "monthlyResetAt" <= ${now}
+            THEN ${nextReset}
+          ELSE "monthlyResetAt"
+        END,
+        "requestsThisMonth" = CASE
+          WHEN "monthlyResetAt" IS NULL OR "monthlyResetAt" <= ${now}
+            THEN 1
+          ELSE "requestsThisMonth" + 1
+        END
+      WHERE "id" = ${record.id}
+    `)
     .catch(() => undefined);
 
   return {
