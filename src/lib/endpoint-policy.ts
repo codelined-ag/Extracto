@@ -77,8 +77,13 @@ function getConfiguredPatterns(provider: ProviderKind): string[] {
   }
 
   if (provider === "openai_compat") {
+    // Additive (not replacement-only): the OpenAI-compatible slot is BYO
+    // endpoint by design. An operator who lists their self-hosted vLLM
+    // would otherwise silently lose access to api.openai.com.
     const configured = parsePatternList(process.env.OPENAI_COMPAT_ALLOWED_HOSTS || "");
-    return configured.length > 0 ? configured : DEFAULT_OPENAI_COMPAT_HOST_PATTERNS;
+    return configured.length > 0
+      ? Array.from(new Set([...DEFAULT_OPENAI_COMPAT_HOST_PATTERNS, ...configured]))
+      : DEFAULT_OPENAI_COMPAT_HOST_PATTERNS;
   }
 
   const configured = parsePatternList(process.env.OLLAMA_ALLOWED_HOSTS || "");
