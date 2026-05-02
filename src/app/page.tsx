@@ -10,7 +10,6 @@ import {
  ScanLine,
  ImageOff,
  Columns,
- Info,
  MoreHorizontal,
 } from"lucide-react";
 
@@ -27,7 +26,6 @@ import { DeleteIcon } from"@/components/ui/delete";
 import { DownloadIcon } from"@/components/ui/download";
 import { EyeIcon } from"@/components/ui/eye";
 import { FileTextIcon } from"@/components/ui/file-text";
-import { GithubIcon } from"@/components/ui/github";
 import { HistoryIcon } from"@/components/ui/history";
 import { LanguagesIcon } from"@/components/ui/languages";
 import { LoaderCircleIcon } from"@/components/ui/loader-circle";
@@ -37,7 +35,6 @@ import { PlayIcon } from"@/components/ui/play";
 import { SettingsIcon } from"@/components/ui/settings";
 import { SparklesIcon } from"@/components/ui/sparkles";
 import { XIcon } from"@/components/ui/x";
-import { SearchIcon } from"@/components/ui/search";
 import { UserIcon } from"@/components/ui/user";
 import { ZapIcon } from"@/components/ui/zap";
 import { useRouter } from"next/navigation";
@@ -102,6 +99,13 @@ import {
   sleep,
   translatePipelineMessage,
 } from "@/app/page-utils";
+import {
+  HintInfo,
+  SettingsSection,
+  ToggleRow,
+} from "@/app/page-components/settings-primitives";
+import { Footer } from "@/app/page-components/footer";
+import { HistoryDialog } from "@/app/page-components/history-dialog";
 import ReactMarkdown from"react-markdown";
 
 // Types
@@ -569,8 +573,6 @@ export default function ExtractoPage() {
  const [isLoadingHistory, setIsLoadingHistory] = React.useState(false);
  const [isLoadingHistoryDetail, setIsLoadingHistoryDetail] = React.useState(false);
  const [isDeletingHistory, setIsDeletingHistory] = React.useState(false);
- const [historySearch, setHistorySearch] = React.useState("");
- const [historyFilter, setHistoryFilter] = React.useState<"all"|"completed"|"failed"|"running"|"paused">("all");
 
  // Advanced settings state
  const ocrSettingsLoadedRef = React.useRef(false);
@@ -2477,300 +2479,28 @@ export default function ExtractoPage() {
  </DialogContent>
  </Dialog>
 
- <Dialog
- open={historyOpen}
- onOpenChange={(open) => {
- setHistoryOpen(open);
- if (!open) {
- setSelectedHistoryId(null);
- setSelectedHistoryJob(null);
- setHistorySearch("");
- setHistoryFilter("all");
- }
- }}
- >
- <DialogContent className="w-[96vw] !max-w-6xl h-[92vh] flex flex-col overflow-hidden p-0">
- {(() => {
- const counts = {
- all: historyJobs.length,
- completed: historyJobs.filter((j) => j.status ==="COMPLETED").length,
- failed: historyJobs.filter((j) => j.status ==="FAILED").length,
- running: historyJobs.filter((j) => j.status ==="PROCESSING"|| j.status ==="QUEUED").length,
- paused: historyJobs.filter((j) => j.status === ("PAUSED"as HistoryJobSummary["status"])).length,
- };
- const search = historySearch.trim().toLowerCase();
- const filtered = historyJobs.filter((j) => {
- const matchesText = !search || j.fileName.toLowerCase().includes(search) || (j.model ||"").toLowerCase().includes(search);
- const matchesFilter = historyFilter ==="all"
- || (historyFilter ==="completed"&& j.status ==="COMPLETED")
- || (historyFilter ==="failed"&& j.status ==="FAILED")
- || (historyFilter ==="running"&& (j.status ==="PROCESSING"|| j.status ==="QUEUED"))
- || (historyFilter ==="paused"&& (j.status as string) ==="PAUSED");
- return matchesText && matchesFilter;
- });
- return (
- <>
- <header className="px-7 pt-7 pb-5 space-y-4">
- <div className="space-y-1">
- <h2 className="font-display text-3xl font-semibold tracking-tight">
- {t("Cronologia","History","Historique","Historial","Verlauf")}
- </h2>
- <p className="text-sm text-muted-foreground">
- {counts.all === 0
- ? t("Nessuna estrazione ancora.","No extractions yet.","Aucune extraction pour l'instant.","Aún no hay extracciones.","Noch keine Extraktionen.")
- : t(
- `${counts.all} esecuzioni · ${counts.completed} completate · ${counts.failed} fallite`,
- `${counts.all} runs · ${counts.completed} completed · ${counts.failed} failed`,
- `${counts.all} exécutions · ${counts.completed} terminées · ${counts.failed} échouées`,
- `${counts.all} ejecuciones · ${counts.completed} completadas · ${counts.failed} fallidas`,
- `${counts.all} Läufe · ${counts.completed} abgeschlossen · ${counts.failed} fehlgeschlagen`,
- )}
- </p>
- </div>
- {counts.all > 0 ? (
- <div className="flex flex-wrap items-center gap-3">
- <div className="relative flex-1 min-w-[14rem]">
- <SearchIcon size={14} className="inline-flex items-center justify-center absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/70 pointer-events-none"/>
- <Input
- value={historySearch}
- onChange={(e) => setHistorySearch(e.target.value)}
- placeholder={t("Cerca per nome o modello","Search by file or model","Rechercher par fichier ou modèle","Buscar por archivo o modelo","Suche nach Datei oder Modell")}
- className="pl-9"
- />
- </div>
- <div className="surface-soft rounded-xl p-1 flex items-center gap-0.5">
- {([
- ["all", t("Tutto","All","Tout","Todo","Alle")],
- ["completed", t("Completate","Completed","Terminées","Completadas","Abgeschlossen")],
- ["failed", t("Fallite","Failed","Échouées","Fallidas","Fehlgeschlagen")],
- ["running", t("In corso","Running","En cours","En curso","Läuft")],
- ] as const).map(([key, label]) => (
- <button
- key={key}
- type="button"
- onClick={() => setHistoryFilter(key)}
- className={cn(
-"px-3 py-1 rounded-lg text-xs font-medium transition-colors",
- historyFilter === key
- ?"bg-card text-foreground shadow-[var(--shadow-soft)]"
- :"text-muted-foreground/80 hover:text-foreground",
- )}
- >
- {label}
- <span className="ml-1.5 text-[10px] tabular text-muted-foreground/70">{counts[key]}</span>
- </button>
- ))}
- </div>
- </div>
- ) : null}
- </header>
-
- <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] flex-1 min-h-0 min-w-0 overflow-hidden hairline-t">
- <aside className="min-h-0 min-w-0 lg:hairline-b-0 surface-soft/50 border-r border-transparent">
- <ScrollArea className="h-full">
- {isLoadingHistory ? (
- <div className="h-32 flex items-center justify-center">
- <LoaderCircleIcon size={18} className="inline-flex items-center justify-center text-muted-foreground"/>
- </div>
- ) : filtered.length === 0 ? (
- <div className="px-5 py-12 text-center text-sm text-muted-foreground">
- {counts.all === 0
- ? t("Nessuna esecuzione salvata","Nothing saved yet","Rien enregistré","Nada guardado","Noch nichts")
- : t("Nessun risultato","No matches","Aucun résultat","Sin resultados","Keine Treffer")}
- </div>
- ) : (
- <div className="px-3 py-3 space-y-1">
- {filtered.map((job) => {
- const active = selectedHistoryId === job.id;
- const statusTone = job.status ==="FAILED"
- ? "text-destructive"
- : job.status ==="COMPLETED"
- ? "text-[oklch(0.55_0.13_150)]"
- : "text-accent-foreground";
- const statusLabel = job.status ==="FAILED"? t("fallito","failed","échoué","fallido","fehlgeschlagen")
- : job.status ==="COMPLETED"? t("completato","completed","terminé","completado","abgeschlossen")
- : t("in corso","running","en cours","en curso","läuft");
- return (
- <button
- key={job.id}
- type="button"
- onClick={() => setSelectedHistoryId(job.id)}
- className={cn(
-"group relative w-full text-left rounded-xl px-3 py-3 transition-[background-color,transform] duration-200 ease-[cubic-bezier(0.2,0.7,0.2,1)]",
- active ?"bg-card shadow-[var(--shadow-soft)]":"hover:bg-card/60 hover:translate-x-0.5",
- )}
- >
- {active ? <span className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-primary"/> : null}
- <div className="flex items-start justify-between gap-2">
- <p className={cn("text-sm font-medium truncate", active ?"text-foreground":"text-foreground/85")}>
- {job.fileName}
- </p>
- </div>
- <div className="mt-1 flex items-center gap-2 text-[11px]">
- <span className={cn("inline-flex items-center gap-1 font-medium", statusTone)}>
- <span className="status-dot"/>
- {statusLabel}
- </span>
- <span className="text-muted-foreground/50">·</span>
- <span className="font-mono text-[10px] text-muted-foreground/80 truncate">{job.model}</span>
- </div>
- <p className="mt-0.5 text-[11px] text-muted-foreground/70 tabular">
- {formatTimestamp(job.createdAt)}
- </p>
- </button>
- );
- })}
- </div>
- )}
- </ScrollArea>
- </aside>
-
- <section className="min-h-0 min-w-0 flex flex-col overflow-hidden">
- {isLoadingHistoryDetail ? (
- <div className="flex-1 flex items-center justify-center">
- <LoaderCircleIcon size={22} className="inline-flex items-center justify-center text-muted-foreground"/>
- </div>
- ) : !selectedHistoryJob ? (
- <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
- <div className="grid place-items-center mb-4 text-muted-foreground">
- <HistoryIcon size={32} className="inline-flex items-center justify-center"/>
- </div>
- <p className="font-display text-xl font-semibold tracking-tight">
- {t("Seleziona un'esecuzione","Pick a run","Choisissez une exécution","Selecciona una ejecución","Lauf auswählen")}
- </p>
- <p className="text-sm text-muted-foreground mt-1 max-w-xs">
- {t("Apri qualsiasi voce a sinistra per vedere il risultato e scaricarlo.","Open any item on the left to see its output and download it.","Ouvrez un élément à gauche pour voir sa sortie et la télécharger.","Abre cualquier elemento de la izquierda para ver su salida y descargarla.","Wähle links einen Eintrag, um Ausgabe und Download zu sehen.")}
- </p>
- </div>
- ) : (
- <div className="flex-1 flex flex-col min-h-0 min-w-0">
- <div className="px-7 pt-6 pb-4 space-y-3">
- <div className="space-y-1">
- <h3 className="font-display text-2xl font-semibold tracking-tight truncate">{selectedHistoryJob.fileName}</h3>
- <div className="flex flex-wrap items-center gap-2 text-xs">
- <span className={cn(
-"inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium",
- selectedHistoryJob.status ==="FAILED"?"bg-destructive/15 text-destructive"
- : selectedHistoryJob.status ==="COMPLETED"?"bg-[oklch(0.55_0.13_150)]/15 text-[oklch(0.55_0.13_150)]"
- :"bg-accent text-accent-foreground",
- )}>
- <span className="status-dot"/>
- {selectedHistoryJob.status ==="FAILED"? t("fallito","failed","échoué","fallido","fehlgeschlagen")
- : selectedHistoryJob.status ==="COMPLETED"? t("completato","completed","terminé","completado","abgeschlossen")
- : t("in corso","running","en cours","en curso","läuft")}
- </span>
- <span className="text-muted-foreground">·</span>
- <span className="font-mono text-[11px] text-muted-foreground">{selectedHistoryJob.model}</span>
- <span className="text-muted-foreground">·</span>
- <span className="text-muted-foreground tabular">{formatTimestamp(selectedHistoryJob.createdAt)}</span>
- {selectedHistoryJob.processingMs ? (
- <>
- <span className="text-muted-foreground">·</span>
- <span className="text-muted-foreground tabular">{(selectedHistoryJob.processingMs / 1000).toFixed(1)}s</span>
- </>
- ) : null}
- </div>
- </div>
- {selectedHistoryJob.sourcePreview ? (
- <div className="surface-soft rounded-2xl p-3">
- <img
- src={selectedHistoryJob.sourcePreview}
- alt={selectedHistoryJob.fileName}
- className="max-h-[180px] mx-auto object-contain rounded-xl"
- />
- </div>
- ) : null}
- </div>
-
- <Tabs defaultValue="markdown"className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden gap-0">
- <div className="px-7 pb-2">
- <TabsList>
- <TabsTrigger value="markdown"className="gap-1.5">
- <FileTextIcon size={14} className="inline-flex items-center justify-center"/>
- Markdown
- </TabsTrigger>
- <TabsTrigger value="markdown-raw"className="gap-1.5">
- <FileTextIcon size={14} className="inline-flex items-center justify-center"/>
- {t("Grezzo","Raw","Brut","Sin procesar","Roh")}
- </TabsTrigger>
- <TabsTrigger value="json"className="gap-1.5">
- <Code className="size-3.5"/>
- JSON
- </TabsTrigger>
- </TabsList>
- </div>
- <div className="flex-1 min-h-0 min-w-0">
- <TabsContent value="markdown"className="h-full m-0">
- <ScrollArea className="h-full">
- <div className="prose prose-sm dark:prose-invert max-w-none px-7 py-4 break-words [overflow-wrap:anywhere] [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:[overflow-wrap:anywhere] [&_code]:break-words">
- <ReactMarkdown>{selectedHistoryMarkdown}</ReactMarkdown>
- </div>
- </ScrollArea>
- </TabsContent>
- <TabsContent value="markdown-raw"className="h-full m-0">
- <ScrollArea className="h-full">
- <pre className="px-7 py-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-foreground/90">
- {selectedHistoryMarkdown}
- </pre>
- </ScrollArea>
- </TabsContent>
- <TabsContent value="json"className="h-full m-0">
- <ScrollArea className="h-full">
- <pre className="px-7 py-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-foreground/90">
- {JSON.stringify(selectedHistoryStructuredJson, null, 2)}
- </pre>
- </ScrollArea>
- </TabsContent>
- </div>
- </Tabs>
- </div>
- )}
- </section>
- </div>
-
- <DialogFooter className="px-7 py-4 hairline-t flex items-center justify-between gap-2">
- <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
- {selectedHistoryJob ? <span className="font-mono truncate max-w-[20rem]">{selectedHistoryJob.id}</span> : null}
- </div>
- <div className="flex items-center gap-2">
- {selectedHistoryJob ? (
- <DropdownMenu>
- <DropdownMenuTrigger asChild>
- <Button variant="outline"size="sm">
- <DownloadIcon size={14} className="inline-flex items-center justify-center mr-1.5"/>
- {t("Scarica","Download","Télécharger","Descargar","Herunterladen")}
- </Button>
- </DropdownMenuTrigger>
- <DropdownMenuContent align="end">
- <DropdownMenuItem onSelect={() => downloadHistoryResult("md")}>
- <DownloadIcon size={16} className="inline-flex"/>
- <span>Markdown</span>
- </DropdownMenuItem>
- <DropdownMenuItem onSelect={() => downloadHistoryResult("json")}>
- <DownloadIcon size={16} className="inline-flex"/>
- <span>JSON</span>
- </DropdownMenuItem>
- </DropdownMenuContent>
- </DropdownMenu>
- ) : null}
- <Button
- variant="destructive"
- size="sm"
- onClick={deleteHistoryJob}
- disabled={!selectedHistoryId || isDeletingHistory}
- >
- {isDeletingHistory
- ? <LoaderCircleIcon size={14} className="inline-flex items-center justify-center mr-1.5"/>
- : <DeleteIcon size={14} className="inline-flex items-center justify-center mr-1.5"/>}
- {t("Elimina","Delete","Supprimer","Eliminar","Löschen")}
- </Button>
- </div>
- </DialogFooter>
- </>
- );
- })()}
- </DialogContent>
- </Dialog>
+      <HistoryDialog
+        open={historyOpen}
+        onOpenChange={(open) => {
+          setHistoryOpen(open);
+          if (!open) {
+            setSelectedHistoryId(null);
+            setSelectedHistoryJob(null);
+          }
+        }}
+        t={t}
+        jobs={historyJobs}
+        isLoadingJobs={isLoadingHistory}
+        selectedJobId={selectedHistoryId}
+        onSelectJobId={setSelectedHistoryId}
+        selectedJobDetail={selectedHistoryJob}
+        isLoadingDetail={isLoadingHistoryDetail}
+        selectedMarkdown={selectedHistoryMarkdown}
+        selectedStructuredJson={selectedHistoryStructuredJson}
+        isDeleting={isDeletingHistory}
+        onDelete={deleteHistoryJob}
+        onDownload={downloadHistoryResult}
+      />
 
  {/* Main Content */}
  <main className="flex-1 min-h-0 overflow-y-auto custom-scroll lg:overflow-hidden container mx-auto px-3 py-4 sm:px-5 sm:py-6">
@@ -3529,77 +3259,8 @@ export default function ExtractoPage() {
  </div>
  </main>
 
- {/* Footer */}
- <motion.footer
- initial={{ y: 20, opacity: 0 }}
- animate={{ y: 0, opacity: 1 }}
- transition={{ duration: 0.4, delay: 0.3 }}
- className="mt-auto">
- <div className="container mx-auto px-3 sm:px-5 min-h-14 py-2 flex flex-wrap items-center justify-between gap-3">
- <p className="text-xs text-muted-foreground">
- © {new Date().getFullYear()}{" "}
- <span className="font-display italic font-medium text-foreground/80">Extracto</span>{" "}
- {t("di","by","par","por","von")}{" "}
- <a
- href="https://github.com/codelined-ag"
- target="_blank"
- rel="noopener noreferrer"
- className="inline-flex items-center gap-1 text-foreground/80 hover:text-primary transition-colors group"
- >
- <span className="font-medium">codelined</span>
- <GithubIcon size={12} className="inline-flex items-center justify-center transition-transform duration-200 group-hover:rotate-6 group-hover:scale-110"/>
- </a>
- </p>
- <a
- href="https://github.com/codelined-ag"
- target="_blank"
- rel="noopener noreferrer"
- className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70 hover:text-primary transition-colors"
- >
- github
- </a>
+ <Footer t={t} />
  </div>
- </motion.footer>
- </div>
- );
-}
-
-function SettingsSection({ title, hint, right, children }: { title: React.ReactNode; hint?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }) {
- return (
- <div className="space-y-2">
- <div className="flex items-baseline justify-between gap-3">
- <div>
- <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
- {hint ? <p className="text-[12px] text-muted-foreground/90 leading-relaxed mt-0.5">{hint}</p> : null}
- </div>
- {right ? <div className="shrink-0">{right}</div> : null}
- </div>
- <div>{children}</div>
- </div>
- );
-}
-
-function ToggleRow({ label, checked, onCheckedChange }: { label: string; hint?: string; checked: boolean; onCheckedChange: (v: boolean) => void }) {
- return (
- <div className="flex items-center justify-between gap-4 surface-soft rounded-xl px-3.5 py-2.5">
- <div className="min-w-0">
- <Label className="text-sm font-medium">{label}</Label>
- </div>
- <Switch checked={checked} onCheckedChange={onCheckedChange} />
- </div>
- );
-}
-
-function HintInfo({ text }: { text: string }) {
- return (
- <Tooltip>
- <TooltipTrigger asChild>
- <button type="button"className="text-muted-foreground/60 hover:text-foreground transition-colors"aria-label={text}>
- <Info className="h-3 w-3"/>
- </button>
- </TooltipTrigger>
- <TooltipContent>{text}</TooltipContent>
- </Tooltip>
  );
 }
 
