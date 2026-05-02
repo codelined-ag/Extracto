@@ -1,3 +1,4 @@
+import { ApiRouteError } from "@/lib/api-error";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
@@ -11,13 +12,13 @@ export const POST = withMutationAuth<{ id: string }>(
   async (request: NextRequest, { params, auth }) => {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: "Job id is required" }, { status: 400 });
+      throw new ApiRouteError("Job id is required", 400);
     }
 
     const body = await parseJsonBody<{ action?: unknown }>(request);
     const action = typeof body.action === "string" ? body.action.trim().toLowerCase() : "";
     if (action !== "stop") {
-      return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
+      throw new ApiRouteError("Unsupported action", 400);
     }
 
     const job = await db.ocrJob.findFirst({
@@ -30,7 +31,7 @@ export const POST = withMutationAuth<{ id: string }>(
     });
 
     if (!job) {
-      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+      throw new ApiRouteError("Job not found", 404);
     }
 
     await requestOcrJobStop(id);

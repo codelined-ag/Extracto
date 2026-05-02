@@ -1,3 +1,4 @@
+import { ApiRouteError } from "@/lib/api-error";
 import { NextRequest, NextResponse } from "next/server";
 
 import { withAuth } from "@/lib/auth/request";
@@ -22,13 +23,13 @@ export const GET = withAuth("search:read", async (request: NextRequest, { auth }
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") || "").trim();
   if (!q) {
-    return NextResponse.json({ error: "q is required" }, { status: 400 });
+    throw new ApiRouteError("q is required", 400);
   }
   if (q.length < 2) {
-    return NextResponse.json({ error: "q must be at least 2 characters" }, { status: 400 });
+    throw new ApiRouteError("q must be at least 2 characters", 400);
   }
   if (q.length > 200) {
-    return NextResponse.json({ error: "q is too long (max 200 chars)" }, { status: 400 });
+    throw new ApiRouteError("q is too long (max 200 chars)", 400);
   }
 
   const rawLimit = Number(searchParams.get("limit") || "20");

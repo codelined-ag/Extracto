@@ -1,3 +1,4 @@
+import { ApiRouteError } from "@/lib/api-error";
 import { NextRequest, NextResponse } from "next/server";
 
 import { parseJsonBody } from "@/lib/api-error";
@@ -12,7 +13,7 @@ export const PATCH = withMutationAuth<{ id: string }>(
   async (request: NextRequest, { params, auth }) => {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: "Preset id is required" }, { status: 400 });
+      throw new ApiRouteError("Preset id is required", 400);
     }
 
     const body = await parseJsonBody<{
@@ -25,14 +26,14 @@ export const PATCH = withMutationAuth<{ id: string }>(
     if (typeof body.name === "string") {
       const name = body.name.trim();
       if (!name || name.length > MAX_NAME_LENGTH) {
-        return NextResponse.json({ error: "Invalid name" }, { status: 400 });
+        throw new ApiRouteError("Invalid name", 400);
       }
       data.name = name;
     }
     if (typeof body.instruction === "string") {
       const instruction = body.instruction.trim();
       if (!instruction || instruction.length > MAX_INSTRUCTION_LENGTH) {
-        return NextResponse.json({ error: "Invalid instruction" }, { status: 400 });
+        throw new ApiRouteError("Invalid instruction", 400);
       }
       data.instruction = instruction;
     }
@@ -41,7 +42,7 @@ export const PATCH = withMutationAuth<{ id: string }>(
     }
 
     if (Object.keys(data).length === 0) {
-      return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+      throw new ApiRouteError("No fields to update", 400);
     }
 
     const updated = await db.outputPreset.updateMany({
@@ -49,7 +50,7 @@ export const PATCH = withMutationAuth<{ id: string }>(
       data,
     });
     if (updated.count === 0) {
-      return NextResponse.json({ error: "Preset not found" }, { status: 404 });
+      throw new ApiRouteError("Preset not found", 404);
     }
     return NextResponse.json({ updated: updated.count });
   },
@@ -60,12 +61,12 @@ export const DELETE = withMutationAuth<{ id: string }>(
   async (_request: NextRequest, { params, auth }) => {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: "Preset id is required" }, { status: 400 });
+      throw new ApiRouteError("Preset id is required", 400);
     }
 
     const deleted = await db.outputPreset.deleteMany({ where: { id, userId: auth.userId } });
     if (deleted.count === 0) {
-      return NextResponse.json({ error: "Preset not found" }, { status: 404 });
+      throw new ApiRouteError("Preset not found", 404);
     }
     return NextResponse.json({ deleted: deleted.count });
   },

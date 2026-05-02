@@ -1,3 +1,4 @@
+import { ApiRouteError } from "@/lib/api-error";
 import { NextRequest, NextResponse } from "next/server";
 
 import { withAuth, withMutationAuth } from "@/lib/auth/request";
@@ -9,7 +10,7 @@ export const GET = withAuth<{ id: string }>(
   async (_request: NextRequest, { params, auth }) => {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: "Job id is required" }, { status: 400 });
+      throw new ApiRouteError("Job id is required", 400);
     }
 
     const row = await db.ocrJob.findFirst({
@@ -33,7 +34,7 @@ export const GET = withAuth<{ id: string }>(
     });
 
     if (!row) {
-      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+      throw new ApiRouteError("Job not found", 404);
     }
 
     const [extractedText, result] = await Promise.all([
@@ -65,7 +66,7 @@ export const DELETE = withMutationAuth<{ id: string }>(
   async (_request: NextRequest, { params, auth }) => {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: "Job id is required" }, { status: 400 });
+      throw new ApiRouteError("Job id is required", 400);
     }
 
     const deleteResult = await db.ocrJob.deleteMany({
@@ -73,7 +74,7 @@ export const DELETE = withMutationAuth<{ id: string }>(
     });
 
     if (deleteResult.count === 0) {
-      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+      throw new ApiRouteError("Job not found", 404);
     }
 
     return NextResponse.json({ deleted: deleteResult.count });

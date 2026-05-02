@@ -112,13 +112,14 @@ function parseChunking(raw: unknown): ChunkingOptions {
     throw new ApiRouteError("chunking (object) is required", 400);
   }
   const r = raw as Record<string, unknown>;
-  const strategy = r.strategy as ChunkingStrategy;
-  if (!VALID_STRATEGIES.includes(strategy)) {
+  const rawStrategy = r.strategy;
+  if (typeof rawStrategy !== "string" || !VALID_STRATEGIES.includes(rawStrategy as ChunkingStrategy)) {
     throw new ApiRouteError(
       `chunking.strategy must be one of: ${VALID_STRATEGIES.join(", ")}`,
       400,
     );
   }
+  const strategy = rawStrategy as ChunkingStrategy;
   const maxChunkSize = typeof r.maxChunkSize === "number" ? r.maxChunkSize : 0;
   if (!Number.isInteger(maxChunkSize) || maxChunkSize <= 0 || maxChunkSize > 10_000) {
     throw new ApiRouteError("chunking.maxChunkSize must be an integer in 1..10000", 400);
@@ -139,13 +140,14 @@ function parseEmbedding(raw: unknown): EmbeddingProviderConfig {
     throw new ApiRouteError("embedding (object) is required", 400);
   }
   const r = raw as Record<string, unknown>;
-  const provider = r.provider as EmbeddingProviderKind;
-  if (!VALID_PROVIDERS.includes(provider)) {
+  const rawProvider = r.provider;
+  if (typeof rawProvider !== "string" || !VALID_PROVIDERS.includes(rawProvider as EmbeddingProviderKind)) {
     throw new ApiRouteError(
       `embedding.provider must be one of: ${VALID_PROVIDERS.join(", ")}`,
       400,
     );
   }
+  const provider = rawProvider as EmbeddingProviderKind;
   const apiEndpoint = stringField(r.apiEndpoint, "embedding.apiEndpoint");
   const model = stringField(r.model, "embedding.model");
   const apiKey = typeof r.apiKey === "string" ? r.apiKey : undefined;

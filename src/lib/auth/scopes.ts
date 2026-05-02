@@ -17,21 +17,40 @@ export const WILDCARD_SCOPE = "*";
 
 export type ScopeEntry = Scope | typeof WILDCARD_SCOPE;
 
+const VALID_SCOPE_ENTRIES: ReadonlySet<string> = new Set([...ALL_SCOPES, WILDCARD_SCOPE]);
+
+function isScopeEntryString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+/**
+ * Parse a stored or user-supplied scope list into a strongly-typed
+ * ScopeEntry[]. Strings that don't match a known scope (after
+ * case-folding + trim) are dropped — callers should NOT assume that
+ * arbitrary strings round-trip; this is the validation barrier.
+ */
 export function parseScopeList(raw: unknown): ScopeEntry[] {
+  let candidates: string[] = [];
   if (typeof raw === "string") {
     try {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.filter((value): value is ScopeEntry => typeof value === "string") as ScopeEntry[];
+        candidates = parsed.filter(isScopeEntryString);
       }
     } catch {
       return [];
     }
+  } else if (Array.isArray(raw)) {
+    candidates = raw.filter(isScopeEntryString);
   }
-  if (Array.isArray(raw)) {
-    return raw.filter((value): value is ScopeEntry => typeof value === "string") as ScopeEntry[];
+  const normalized: ScopeEntry[] = [];
+  for (const candidate of candidates) {
+    const trimmed = candidate.trim().toLowerCase();
+    if (VALID_SCOPE_ENTRIES.has(trimmed)) {
+      normalized.push(trimmed as ScopeEntry);
+    }
   }
-  return [];
+  return normalized;
 }
 
 export function serializeScopeList(scopes: string[]): string {
@@ -40,21 +59,10 @@ export function serializeScopeList(scopes: string[]): string {
 
 export function normalizeRequestedScopes(input: unknown): string[] {
   const list = parseScopeList(input);
-  const normalized = new Set<string>();
-  for (const entry of list) {
-    const trimmed = entry.trim().toLowerCase();
-    if (!trimmed) continue;
-    if (trimmed === WILDCARD_SCOPE) {
-      return [WILDCARD_SCOPE];
-    }
-    if (ALL_SCOPES.includes(trimmed as Scope)) {
-      normalized.add(trimmed);
-    }
-  }
-  if (normalized.size === 0) {
-    return [...ALL_SCOPES];
-  }
-  return Array.from(normalized);
+  if (list.includes(WILDCARD_SCOPE)) return [WILDCARD_SCOPE];
+  const filtered = Array.from(new Set(list.filter((s): s is Scope => s !== WILDCARD_SCOPE)));
+  if (filtered.length === 0) return [...ALL_SCOPES];
+  return filtered;
 }
 
 export function scopeListGrants(scopes: string[], required: Scope): boolean {

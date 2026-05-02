@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus } from "@prisma/client";
 
-import { errorMessage } from "@/lib/api-error";
+import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { authenticateMutation, authHasScope } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
@@ -217,14 +217,23 @@ export async function POST(request: NextRequest) {
   );
   } catch (error) {
     // Wrap in OpenAI's nested-error envelope so the entire route surface
-    // (success + every failure path) speaks the same shape.
+    // (success + every failure path) speaks the same shape. The OpenAI
+    // error category is mapped from the HTTP status range so callers can
+    // distinguish 4xx (request) from 5xx (server) without parsing the
+    // message.
     const message = errorMessage(error, "Internal server error");
-    const status = error instanceof Error && "status" in error && typeof (error as { status?: unknown }).status === "number"
-      ? (error as { status: number }).status
-      : 500;
-    return NextResponse.json(
-      { error: { message, type: "internal_error" } },
-      { status },
-    );
+    const status = error instanceof ApiRouteError ? error.status : 500;
+    const type = openAiErrorTypeFromStatus(status);
+    return NextResponse.json({ error: { message, type } }, { status });
   }
+}
+
+function openAiErrorTypeFromStatus(status: number): string {
+  if (status === 400) return "invalid_request_error";
+  if (status === 401 || status === 403) return "permission_error";
+  if (status === 404) return "not_found_error";
+  if (status === 429) return "rate_limit_error";
+  if (status === 504) return "timeout_error";
+  if (status >= 400 && status < 500) return "invalid_request_error";
+  return "internal_error";
 }

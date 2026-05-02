@@ -1,3 +1,4 @@
+import { ApiRouteError } from "@/lib/api-error";
 import { NextRequest, NextResponse } from "next/server";
 
 import { withSessionAuth } from "@/lib/auth/request";
@@ -9,7 +10,7 @@ export const DELETE = withSessionAuth<{ id: string }>(
   async (_request: NextRequest, { params, auth }) => {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: "Key id is required" }, { status: 400 });
+      throw new ApiRouteError("Key id is required", 400);
     }
 
     const updated = await db.apiKey.updateMany({
@@ -18,7 +19,7 @@ export const DELETE = withSessionAuth<{ id: string }>(
     });
 
     if (updated.count === 0) {
-      return NextResponse.json({ error: "Key not found" }, { status: 404 });
+      throw new ApiRouteError("Key not found", 404);
     }
 
     return NextResponse.json({ revoked: updated.count });

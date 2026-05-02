@@ -1,3 +1,4 @@
+import { ApiRouteError } from "@/lib/api-error";
 import { NextRequest, NextResponse } from "next/server";
 
 import { parseJsonBody } from "@/lib/api-error";
@@ -9,12 +10,12 @@ export const DELETE = withMutationAuth<{ id: string }>(
   async (_request: NextRequest, { params, auth }) => {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: "Webhook id is required" }, { status: 400 });
+      throw new ApiRouteError("Webhook id is required", 400);
     }
 
     const deleted = await db.webhook.deleteMany({ where: { id, userId: auth.userId } });
     if (deleted.count === 0) {
-      return NextResponse.json({ error: "Webhook not found" }, { status: 404 });
+      throw new ApiRouteError("Webhook not found", 404);
     }
 
     return NextResponse.json({ deleted: deleted.count });
@@ -26,12 +27,12 @@ export const PATCH = withMutationAuth<{ id: string }>(
   async (request: NextRequest, { params, auth }) => {
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: "Webhook id is required" }, { status: 400 });
+      throw new ApiRouteError("Webhook id is required", 400);
     }
 
     const body = await parseJsonBody<{ active?: unknown }>(request);
     if (typeof body.active !== "boolean") {
-      return NextResponse.json({ error: "active (boolean) is required" }, { status: 400 });
+      throw new ApiRouteError("active (boolean) is required", 400);
     }
 
     const updated = await db.webhook.updateMany({
@@ -39,7 +40,7 @@ export const PATCH = withMutationAuth<{ id: string }>(
       data: { active: body.active },
     });
     if (updated.count === 0) {
-      return NextResponse.json({ error: "Webhook not found" }, { status: 404 });
+      throw new ApiRouteError("Webhook not found", 404);
     }
     return NextResponse.json({ updated: updated.count });
   },

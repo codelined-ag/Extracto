@@ -109,7 +109,11 @@ export class ChromaAdapter implements VectorStoreAdapter {
     }
     const json = (await resp.json()) as { id?: string; name?: string };
     if (typeof json.id !== "string") {
-      throw new Error(`Chroma get_or_create_collection: response missing id`);
+      throw new VectorStoreError(
+        "chroma",
+        "get_or_create_collection: response missing id",
+        resp.status,
+      );
     }
     return json.id;
   }
@@ -132,7 +136,7 @@ export class ChromaAdapter implements VectorStoreAdapter {
     }
   }
 
-  private async parseChromaError(resp: Response, op: string): Promise<Error> {
+  private async parseChromaError(resp: Response, op: string): Promise<VectorStoreError> {
     let detail = `${resp.status} ${resp.statusText}`;
     try {
       const json = (await resp.json()) as { error?: string; detail?: string };
@@ -140,6 +144,22 @@ export class ChromaAdapter implements VectorStoreAdapter {
     } catch {
       /* response wasn't JSON */
     }
-    return new Error(`Chroma ${op} failed: ${detail}`);
+    return new VectorStoreError("chroma", `${op} failed: ${detail}`, resp.status);
+  }
+}
+
+/**
+ * Symmetric typed error for vector-store failures — mirrors EmbeddingError
+ * from lib/kb/embedding.ts so callers can catch a single shape and read
+ * provider + status without parsing the message.
+ */
+export class VectorStoreError extends Error {
+  constructor(
+    public readonly store: string,
+    message: string,
+    public readonly status?: number,
+  ) {
+    super(`${store}: ${message}`);
+    this.name = "VectorStoreError";
   }
 }

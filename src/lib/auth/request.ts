@@ -260,35 +260,29 @@ export function withSessionAuth<P = unknown>(
     ctx: RouteHandlerContext<P> = { params: Promise.resolve({} as P) },
   ): Promise<Response> => {
     try {
-      const auth =
-        methodKind === "mutation" ? await authenticateMutation(request) : null;
-      const ctxAuth = methodKind === "mutation"
-        ? (() => {
-            if (!auth || !auth.ok) {
-              return { ok: false as const, response: NextResponse.json(
-                { error: auth && !auth.ok ? auth.error : "Unauthorized" },
-                { status: auth && !auth.ok ? auth.status : 401 },
-              ) };
-            }
-            return { ok: true as const, auth: auth.auth };
-          })()
-        : (await (async () => {
-            const a = await authenticateRequest(request);
-            if (!a) {
-              return { ok: false as const, response: NextResponse.json(
-                { error: "Unauthorized" }, { status: 401 },
-              ) };
-            }
-            return { ok: true as const, auth: a };
-          })());
-      if (!ctxAuth.ok) return ctxAuth.response;
-      if (ctxAuth.auth.method !== "session") {
+      let auth: AuthContext | null;
+      if (methodKind === "mutation") {
+        const result = await authenticateMutation(request);
+        if (!result.ok) {
+          return NextResponse.json({ error: result.error }, { status: result.status });
+        }
+        auth = result.auth;
+      } else {
+        auth = await authenticateRequest(request);
+        if (!auth) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+      }
+
+      if (auth.method !== "session") {
+        const verb = methodKind === "mutation" ? "modified" : "viewed";
         return NextResponse.json(
-          { error: `${resourceLabel} can only be ${methodKind === "mutation" ? "modified" : "viewed"} via an interactive session` },
+          { error: `${resourceLabel} can only be ${verb} via an interactive session` },
           { status: 403 },
         );
       }
-      return await handler(request, { ...ctx, auth: ctxAuth.auth });
+
+      return await handler(request, { ...ctx, auth });
     } catch (error) {
       return handleApiError(error);
     }

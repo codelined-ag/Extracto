@@ -1,3 +1,4 @@
+import { ApiRouteError } from "@/lib/api-error";
 import { NextRequest, NextResponse } from "next/server";
 
 import { parseJsonBody } from "@/lib/api-error";
@@ -50,7 +51,7 @@ export const POST = withSessionAuth("mutation", "API keys", async (request: Next
   }>(request);
   const rawName = typeof body.name === "string" ? body.name.trim() : "";
   if (!rawName) {
-    return NextResponse.json({ error: "Key name is required" }, { status: 400 });
+    throw new ApiRouteError("Key name is required", 400);
   }
   if (rawName.length > MAX_KEY_NAME_LENGTH) {
     return NextResponse.json(

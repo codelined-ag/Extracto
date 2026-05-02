@@ -610,14 +610,14 @@ export default function ExtractoPage() {
  const payload = (await response.json()) as { models?: Model[] };
  const discoveredModels = Array.isArray(payload.models) ? payload.models : [];
  const fallbackModels = getFallbackModelsForProvider(
- normalizedSettings.provider as ProviderKind
+ normalizedSettings.provider
  );
  const nextModels = discoveredModels.length > 0 ? discoveredModels : fallbackModels;
  const providerModelIds = nextModels
  .filter((model) => normalizeProvider(model.provider) === normalizedSettings.provider)
  .map((model) => model.id);
  const storedModel =
- modelSelectionsRef.current[normalizedSettings.provider as ProviderKind]?.trim() ||"";
+ modelSelectionsRef.current[normalizedSettings.provider]?.trim() ||"";
  const providerFirstModelId =
  pickPreferredProviderModelId(
  normalizedSettings.provider as"ollama"|"mistral",
@@ -636,7 +636,7 @@ export default function ExtractoPage() {
  if (nextValue) {
  persistProviderSelection(
  MODEL_SELECTIONS_STORAGE_KEY,
- normalizedSettings.provider as ProviderKind,
+ normalizedSettings.provider,
  nextValue
  );
  }
@@ -647,14 +647,14 @@ export default function ExtractoPage() {
  const message = error instanceof Error ? error.message :"Unable to fetch models";
  setModelError(message);
  const fallbackModels = getFallbackModelsForProvider(
- normalizedSettings.provider as ProviderKind
+ normalizedSettings.provider
  );
  setModels(fallbackModels);
  const providerModelIds = fallbackModels
  .filter((model) => normalizeProvider(model.provider) === normalizedSettings.provider)
  .map((model) => model.id);
  const storedModel =
- modelSelectionsRef.current[normalizedSettings.provider as ProviderKind]?.trim() ||"";
+ modelSelectionsRef.current[normalizedSettings.provider]?.trim() ||"";
  const providerFirstModelId =
  pickPreferredProviderModelId(
  normalizedSettings.provider as"ollama"|"mistral",
@@ -671,7 +671,7 @@ export default function ExtractoPage() {
  if (nextValue) {
  persistProviderSelection(
  MODEL_SELECTIONS_STORAGE_KEY,
- normalizedSettings.provider as ProviderKind,
+ normalizedSettings.provider,
  nextValue
  );
  }
@@ -956,7 +956,7 @@ export default function ExtractoPage() {
 
  const provider = normalizeProvider(apiSettings.provider);
  const storedModel =
- postProcessModelSelectionsRef.current[provider as ProviderKind]?.trim() ||"";
+ postProcessModelSelectionsRef.current[provider]?.trim() ||"";
  const providerModelIds = models
  .filter((model) => normalizeProvider(model.provider) === provider)
  .map((model) => model.id);

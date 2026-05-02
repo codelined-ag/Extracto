@@ -1,3 +1,4 @@
+import { ApiRouteError } from "@/lib/api-error";
 import { NextRequest, NextResponse } from "next/server";
 
 import { parseJsonBody } from "@/lib/api-error";
@@ -66,16 +67,16 @@ export const POST = withMutationAuth("webhooks:write", async (request: NextReque
 
   const url = typeof body.url === "string" ? body.url.trim() : "";
   if (!url || url.length > MAX_URL_LENGTH) {
-    return NextResponse.json({ error: "url must be a non-empty https/http URL" }, { status: 400 });
+    throw new ApiRouteError("url must be a non-empty https/http URL", 400);
   }
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(url);
   } catch {
-    return NextResponse.json({ error: "url is not a valid URL" }, { status: 400 });
+    throw new ApiRouteError("url is not a valid URL", 400);
   }
   if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
-    return NextResponse.json({ error: "url must be http or https" }, { status: 400 });
+    throw new ApiRouteError("url must be http or https", 400);
   }
 
   const events = parseEventsArray(body.events) ?? (["job.completed", "job.failed"] as WebhookEvent[]);
