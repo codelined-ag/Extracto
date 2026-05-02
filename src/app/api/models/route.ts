@@ -60,13 +60,13 @@ function getModelPaths(providerHint: ProviderKind): readonly string[] {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await authenticateRequest(request);
-  if (!authResult.ok) {
-    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+  const auth = await authenticateRequest(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const scopeError = requireScope(authResult.auth, "ocr:read");
+  const scopeError = requireScope(auth, "ocr:read");
   if (scopeError) return scopeError;
-  const userId = authResult.auth.userId;
+  const userId = auth.userId;
 
   const settings = await getApiSettings(userId);
   const query = new URL(request.url).searchParams;

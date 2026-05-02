@@ -3001,13 +3001,13 @@ function parseCheckpointPages(
 
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await authenticateRequest(request);
-    if (!authResult.ok) {
-      throw new ApiRouteError(authResult.error, authResult.status);
+    const auth = await authenticateRequest(request);
+    if (!auth) {
+      throw new ApiRouteError("Unauthorized", 401);
     }
-    const scopeError = requireScope(authResult.auth, "ocr:read");
+    const scopeError = requireScope(auth, "ocr:read");
     if (scopeError) return scopeError;
-    const userId = authResult.auth.userId;
+    const userId = auth.userId;
 
     const storedSettings = normalizeApiSettings(await getApiSettings(userId));
     const query = new URL(request.url).searchParams;
