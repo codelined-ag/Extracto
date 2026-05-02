@@ -4,9 +4,18 @@ import { OcrJobStatus } from "@prisma/client";
 
 import { errorMessage } from "@/lib/api-error";
 import { authenticateMutation, authHasScope } from "@/lib/auth/request";
-import { buildOcrForwardHeaders, resolveInternalOcrEndpoint } from "@/lib/ocr/forward";
 import { db } from "@/lib/db";
+import { normalizeProvider } from "@/lib/endpoint-policy";
+import {
+  buildPrompt,
+  resolveProvider,
+  sanitizePostProcessing,
+  submitOcrJob,
+} from "@/lib/ocr/pipeline";
+import { resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
+import { normalizeAdvancedSettings } from "@/lib/ocr/settings";
 import { readResultText } from "@/lib/result-store";
+import { getApiSettings } from "@/lib/settings-store";
 
 interface OpenAIChatRequest {
   model?: unknown;
@@ -112,38 +121,45 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const fetchHeaders = buildOcrForwardHeaders(request);
+  // Submit directly via the pipeline helper (no HTTP-loopback to /api/ocr).
+  const storedSettings = await getApiSettings(result.auth.userId);
+  const settings = { ...storedSettings, provider: normalizeProvider(storedSettings.provider) };
+  const settingsPayload = normalizeAdvancedSettings(undefined);
+  const postProcessingPayload = sanitizePostProcessing(
+    prompt ? { enabled: true, instruction: prompt, outputFormat: "markdown" } : undefined,
+  );
+  const provider = resolveProvider(settings);
+  const ocrModel = provider === "mistral" ? resolveMistralOcrModel(model) : model;
+  const ocrPrompt = buildPrompt(settingsPayload);
 
-  const submitResponse = await fetch(resolveInternalOcrEndpoint(), {
-    method: "POST",
-    headers: fetchHeaders,
-    body: JSON.stringify({
+  let jobId: string;
+  try {
+    const created = await submitOcrJob({
+      userId: result.auth.userId,
+      apiKeyId: result.auth.method === "api-key" ? result.auth.apiKeyId ?? null : null,
       fileName: "openai-adapter",
-      preview,
       model,
-      mode: "ocr",
-      postProcessing: prompt
-        ? { enabled: true, instruction: prompt, outputFormat: "markdown" }
-        : undefined,
-    }),
-  });
-  const submitJson = (await submitResponse.json().catch(() => null)) as
-    | { jobId?: string; error?: string }
-    | null;
-
-  if (!submitResponse.ok || !submitJson?.jobId) {
+      ocrModel,
+      provider,
+      settings,
+      settingsPayload,
+      postProcessingPayload,
+      inputPreviews: [preview],
+      prompt: ocrPrompt,
+      sourcePreview: null,
+    });
+    jobId = created.jobId;
+  } catch (error) {
     return NextResponse.json(
       {
         error: {
-          message: submitJson?.error || `OCR submission failed (HTTP ${submitResponse.status})`,
+          message: errorMessage(error, "OCR submission failed"),
           type: "upstream_error",
         },
       },
-      { status: submitResponse.status || 502 }
+      { status: 502 },
     );
   }
-
-  const jobId = submitJson.jobId;
   const startedAt = Date.now();
   while (Date.now() - startedAt < MAX_WAIT_MS) {
     const job = await db.ocrJob.findUnique({

@@ -29,11 +29,15 @@ import {
 } from "@/lib/ocr/provider-config";
 import {
   buildProgressMetadata,
+  buildPrompt,
   getModelCatalog,
+  normalizePreviewForHistory,
   OLLAMA_DISCOVERY_FALLBACK_HOST,
   parseCheckpointPages,
   processOcrJobInBackground,
   resolveProvider,
+  sanitizePostProcessing,
+  submitOcrJob,
   toJsonValue,
 } from "@/lib/ocr/pipeline";
 
@@ -64,22 +68,10 @@ function parseRequestPriority(value: unknown): number {
 // OLLAMA_DISCOVERY_FALLBACK_HOST is re-exported from there for use in
 // normalizeProviderEndpoint below.
 
-const MAX_STORED_PREVIEW_LENGTH = 1_500_000;
-const MAX_POST_PROCESS_INSTRUCTION_LENGTH = 6000;
 const OCR_RATE_LIMIT_WINDOW_MS = 60_000;
 const OCR_RATE_LIMIT_MAX = 6;
 
 
-function normalizePreviewForHistory(preview: string): string | null {
-  const trimmed = preview.trim();
-  if (!trimmed.startsWith("data:image/")) {
-    return null;
-  }
-  if (trimmed.length > MAX_STORED_PREVIEW_LENGTH) {
-    return null;
-  }
-  return trimmed;
-}
 
 function normalizeProviderEndpoint(provider: ProviderKind, rawEndpoint: string): string {
   if (provider === "mistral") {
@@ -115,73 +107,14 @@ function normalizeAndValidateApiSettings(raw: ApiProviderSettings): ApiProviderS
 // src/lib/ocr/providers/compat.ts (imported above) so the runners can be unit-tested.
 
 
-function sanitizePostProcessing(
-  raw: Partial<PostProcessingSettings> | undefined
-): PostProcessingSettings {
-  const rawInstruction = typeof raw?.instruction === "string" ? raw.instruction.trim() : "";
-  const outputFormat = raw?.outputFormat === "json" ? "json" : "markdown";
-  const model = typeof raw?.model === "string" ? raw.model.trim() : "";
-  const enabled = Boolean(raw?.enabled) && rawInstruction.length > 0;
-
-  return {
-    enabled,
-    instruction: rawInstruction.slice(0, MAX_POST_PROCESS_INSTRUCTION_LENGTH),
-    outputFormat,
-    model,
-  };
-}
+// sanitizePostProcessing + buildPrompt + normalizePreviewForHistory moved
+// to src/lib/ocr/pipeline.ts so v1/ocr/batch + the OpenAI-compat adapter
+// can reuse them and submit jobs directly without HTTP-loopback.
 
 // isLikelyMistralOcrModel + resolveMistralOcrModel moved to src/lib/ocr/providers/mistral.ts.
 
 // parsePreviewImageData, getStringField, parseServiceError moved to
 // src/lib/ocr/error-parsing.ts (imported above) for unit testability.
-
-function buildPrompt(settings: AdvancedSettings): string {
-  const languageInstruction =
-    settings.language !== "auto"
-      ? `The document is in ${settings.language}. Please transcribe in that language.`
-      : "Detect the document language automatically.";
-
-  const tableInstruction = settings.tableDetection
-    ? "If there are tables, format them using markdown tables with proper column alignment."
-    : "Extract table content as plain text.";
-
-  const handwritingInstruction = settings.handwritingRecognition
-    ? "Pay special attention to handwritten text and do your best to transcribe it accurately."
-    : "Focus on printed text only.";
-
-  const formattingInstruction = settings.preserveFormatting
-    ? "Preserve the original formatting, layout, and structure as much as possible including spacing, indentation, and alignment."
-    : "Extract text in a simplified format, focusing on content over formatting.";
-
-  const customInstruction = settings.customPrompt
-    ? `\n\nAdditional instructions from user:\n${settings.customPrompt}`
-    : "";
-
-  return `You are an OCR (Optical Character Recognition) system. Extract all text from this document image.
-
-Instructions:
-1. Extract ALL text visible in the image
-2. ${languageInstruction}
-3. ${tableInstruction}
-4. ${handwritingInstruction}
-5. ${formattingInstruction}
-6. Include any numbers, dates, and special characters exactly as shown
-7. If text is unclear or illegible, indicate with [illegible]${customInstruction}
-
-Quality focus: ${settings.quality}%
-
-Return ONLY valid JSON with this exact shape:
-{
-  "markdown": "clean markdown text extracted from the image",
-  "fields": {}
-}
-
-Rules:
-- "markdown" is required and must contain the extracted OCR content.
-- "fields" is optional but if present must be a JSON object.
-- Do not wrap JSON in markdown code fences.`;
-}
 
 
 // parseResponseText + fetchWithTimeout + OcrStopRequestedError moved to
@@ -396,87 +329,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const initialMetadata = buildProgressMetadata({
-      stage: "queued",
-      message: "Queued for OCR",
-      progressPct: 0,
-      pageCount: inputPreviews.length,
-      processedPages: 0,
-      currentPage: null,
-      etaSeconds: null,
-      startedAt: startedAtIso,
-      events: [
-        {
-          at: startedAtIso,
-          stage: "queued",
-          message: "Job created",
-        },
-        ...(provider === "mistral" && ocrModel !== model
-          ? [
-              {
-                at: startedAtIso,
-                stage: "queued" as const,
-                message: `OCR will use ${ocrModel}; selected inference model is ${model}`,
-              },
-            ]
-          : []),
-      ],
-      checkpoints: [],
-      postProcessing: seedPostProcessingMeta(postProcessingPayload, postProcessingPayload.model || model),
-    });
-
     const requestedPriority = parseRequestPriority(body?.priority);
     const requestedBatchId = typeof body?.batchId === "string" && body.batchId.trim()
       ? body.batchId.trim().slice(0, 64)
       : null;
-    const createdJob = await db.ocrJob.create({
-      data: {
-        userId,
-        apiKeyId: authResult.auth.method === "api-key" ? authResult.auth.apiKeyId ?? null : null,
-        status: OcrJobStatus.PROCESSING,
-        priority: requestedPriority,
-        batchId: requestedBatchId,
-        fileName,
-        sourcePreview,
-        model,
-        language: settingsPayload.language,
-        tableDetection: settingsPayload.tableDetection,
-        handwritingRecognition: settingsPayload.handwritingRecognition,
-        preserveFormatting: settingsPayload.preserveFormatting,
-        customPrompt: settingsPayload.customPrompt,
-        quality: settingsPayload.quality,
-        settingsSnapshot: toJsonValue({
-          settings: settingsPayload,
-          postProcessing: postProcessingPayload,
-        }),
-        prompt,
-        metadata: toJsonValue(initialMetadata),
-      },
-      select: { id: true },
+    const { jobId, pageCount } = await submitOcrJob({
+      userId,
+      apiKeyId: authResult.auth.method === "api-key" ? authResult.auth.apiKeyId ?? null : null,
+      fileName,
+      model,
+      ocrModel,
+      provider,
+      settings,
+      settingsPayload,
+      postProcessingPayload,
+      inputPreviews,
+      prompt,
+      sourcePreview,
+      priority: requestedPriority,
+      batchId: requestedBatchId,
+      startedAtMs,
     });
-    void withOcrJobSlot(requestedPriority, () =>
-      processOcrJobInBackground({
-        jobId: createdJob.id,
-        startedAtMs,
-        fileName,
-        model,
-        ocrModel,
-        provider,
-        settings,
-        settingsPayload,
-        postProcessingPayload,
-        inputPreviews,
-        prompt,
-      })
-    );
 
     return NextResponse.json(
-      {
-        status: OcrJobStatus.PROCESSING,
-        jobId: createdJob.id,
-        pageCount: inputPreviews.length,
-      },
-      { status: 202 }
+      { status: OcrJobStatus.PROCESSING, jobId, pageCount },
+      { status: 202 },
     );
   } catch (error) {
     console.error("OCR processing error:", error);

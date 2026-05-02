@@ -41,6 +41,7 @@ import {
   markOcrJobRunning,
   registerOcrJobAbortController,
   unregisterOcrJobAbortController,
+  withOcrJobSlot,
 } from "@/lib/ocr/job-control";
 import {
   seedExtractedText,
@@ -1219,4 +1220,181 @@ export async function getModelCatalog(settings: ApiProviderSettings): Promise<Mo
     openrouter: resolvedOpenRouterModels,
     openai_compat: resolvedOpenAICompatModels,
   };
+}
+
+// ---- Input normalization helpers ----------------------------------------
+// Used by /api/ocr POST and /api/v1/ocr/batch to prepare a raw body into
+// the inputs submitOcrJob needs.
+
+const MAX_POST_PROCESS_INSTRUCTION_LENGTH = 6000;
+
+export function sanitizePostProcessing(
+  raw: Partial<PostProcessingSettings> | undefined,
+): PostProcessingSettings {
+  const rawInstruction = typeof raw?.instruction === "string" ? raw.instruction.trim() : "";
+  const outputFormat = raw?.outputFormat === "json" ? "json" : "markdown";
+  const model = typeof raw?.model === "string" ? raw.model.trim() : "";
+  const enabled = Boolean(raw?.enabled) && rawInstruction.length > 0;
+  return {
+    enabled,
+    instruction: rawInstruction.slice(0, MAX_POST_PROCESS_INSTRUCTION_LENGTH),
+    outputFormat,
+    model,
+  };
+}
+
+const MAX_STORED_PREVIEW_LENGTH = 1_500_000;
+
+export function normalizePreviewForHistory(preview: string): string | null {
+  const trimmed = preview.trim();
+  if (!trimmed.startsWith("data:image/")) return null;
+  if (trimmed.length > MAX_STORED_PREVIEW_LENGTH) return null;
+  return trimmed;
+}
+
+export function buildPrompt(settings: AdvancedSettings): string {
+  const languageInstruction =
+    settings.language !== "auto"
+      ? `The document is in ${settings.language}. Please transcribe in that language.`
+      : "Detect the document language automatically.";
+  const tableInstruction = settings.tableDetection
+    ? "If there are tables, format them using markdown tables with proper column alignment."
+    : "Extract table content as plain text.";
+  const handwritingInstruction = settings.handwritingRecognition
+    ? "Pay special attention to handwritten text and do your best to transcribe it accurately."
+    : "Focus on printed text only.";
+  const formattingInstruction = settings.preserveFormatting
+    ? "Preserve the original formatting, layout, and structure as much as possible including spacing, indentation, and alignment."
+    : "Extract text in a simplified format, focusing on content over formatting.";
+  const customInstruction = settings.customPrompt
+    ? `\n\nAdditional instructions from user:\n${settings.customPrompt}`
+    : "";
+
+  return `You are an OCR (Optical Character Recognition) system. Extract all text from this document image.
+
+Instructions:
+1. Extract ALL text visible in the image
+2. ${languageInstruction}
+3. ${tableInstruction}
+4. ${handwritingInstruction}
+5. ${formattingInstruction}
+6. Include any numbers, dates, and special characters exactly as shown
+7. If text is unclear or illegible, indicate with [illegible]${customInstruction}
+
+Quality focus: ${settings.quality}%
+
+Return ONLY valid JSON with this exact shape:
+{
+  "markdown": "clean markdown text extracted from the image",
+  "fields": {}
+}
+
+Rules:
+- "markdown" is required and must contain the extracted OCR content.
+- "fields" is optional but if present must be a JSON object.
+- Do not wrap JSON in markdown code fences.`;
+}
+
+// ---- Job submission helper ---------------------------------------------
+// Used by /api/ocr POST and by /api/v1/ocr/batch and the OpenAI-compat
+// adapter so the latter two don't need to HTTP-loopback through /api/ocr.
+// Callers do their own body validation; this helper takes already-normalized
+// inputs, persists the job row, and kicks off processOcrJobInBackground.
+
+export interface SubmitOcrJobInput {
+  userId: string;
+  apiKeyId: string | null;
+  fileName: string;
+  model: string;
+  ocrModel: string;
+  provider: ProviderKind;
+  settings: ApiProviderSettings;
+  settingsPayload: AdvancedSettings;
+  postProcessingPayload: PostProcessingSettings;
+  inputPreviews: string[];
+  prompt: string;
+  sourcePreview: string | null;
+  priority?: number;
+  batchId?: string | null;
+  startedAtMs?: number;
+}
+
+export async function submitOcrJob(
+  input: SubmitOcrJobInput,
+): Promise<{ jobId: string; pageCount: number }> {
+  const startedAtMs = input.startedAtMs ?? Date.now();
+  const startedAtIso = new Date(startedAtMs).toISOString();
+  const priority = input.priority ?? 0;
+
+  const initialMetadata = buildProgressMetadata({
+    stage: "queued",
+    message: "Queued for OCR",
+    progressPct: 0,
+    pageCount: input.inputPreviews.length,
+    processedPages: 0,
+    currentPage: null,
+    etaSeconds: null,
+    startedAt: startedAtIso,
+    events: [
+      { at: startedAtIso, stage: "queued", message: "Job created" },
+      ...(input.provider === "mistral" && input.ocrModel !== input.model
+        ? [
+            {
+              at: startedAtIso,
+              stage: "queued" as const,
+              message: `OCR will use ${input.ocrModel}; selected inference model is ${input.model}`,
+            },
+          ]
+        : []),
+    ],
+    checkpoints: [],
+    postProcessing: seedPostProcessingMeta(
+      input.postProcessingPayload,
+      input.postProcessingPayload.model || input.model,
+    ),
+  });
+
+  const createdJob = await db.ocrJob.create({
+    data: {
+      userId: input.userId,
+      apiKeyId: input.apiKeyId,
+      status: OcrJobStatus.PROCESSING,
+      priority,
+      batchId: input.batchId ?? null,
+      fileName: input.fileName,
+      sourcePreview: input.sourcePreview,
+      model: input.model,
+      language: input.settingsPayload.language,
+      tableDetection: input.settingsPayload.tableDetection,
+      handwritingRecognition: input.settingsPayload.handwritingRecognition,
+      preserveFormatting: input.settingsPayload.preserveFormatting,
+      customPrompt: input.settingsPayload.customPrompt,
+      quality: input.settingsPayload.quality,
+      settingsSnapshot: toJsonValue({
+        settings: input.settingsPayload,
+        postProcessing: input.postProcessingPayload,
+      }),
+      prompt: input.prompt,
+      metadata: toJsonValue(initialMetadata),
+    },
+    select: { id: true },
+  });
+
+  void withOcrJobSlot(priority, () =>
+    processOcrJobInBackground({
+      jobId: createdJob.id,
+      startedAtMs,
+      fileName: input.fileName,
+      model: input.model,
+      ocrModel: input.ocrModel,
+      provider: input.provider,
+      settings: input.settings,
+      settingsPayload: input.settingsPayload,
+      postProcessingPayload: input.postProcessingPayload,
+      inputPreviews: input.inputPreviews,
+      prompt: input.prompt,
+    }),
+  );
+
+  return { jobId: createdJob.id, pageCount: input.inputPreviews.length };
 }

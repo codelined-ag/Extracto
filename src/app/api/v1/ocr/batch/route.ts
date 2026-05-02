@@ -3,7 +3,23 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
-import { buildOcrForwardHeaders, resolveInternalOcrEndpoint } from "@/lib/ocr/forward";
+import { normalizeProvider } from "@/lib/endpoint-policy";
+import {
+  buildPrompt,
+  normalizePreviewForHistory,
+  resolveProvider,
+  sanitizePostProcessing,
+  submitOcrJob,
+} from "@/lib/ocr/pipeline";
+import {
+  resolveMistralOcrModel,
+} from "@/lib/ocr/providers/mistral";
+import {
+  normalizeAdvancedSettings,
+  type AdvancedSettings,
+  type PostProcessingSettings,
+} from "@/lib/ocr/settings";
+import { getApiSettings } from "@/lib/settings-store";
 
 const MAX_BATCH_SIZE = 50;
 
@@ -13,8 +29,8 @@ interface BatchFile {
   pages?: string[];
   model: string;
   priority?: number;
-  postProcessing?: unknown;
-  settings?: unknown;
+  postProcessing?: Partial<PostProcessingSettings>;
+  settings?: Partial<AdvancedSettings>;
 }
 
 function parseBatchBody(raw: unknown): BatchFile[] | { error: string } {
@@ -50,56 +66,57 @@ function parseBatchBody(raw: unknown): BatchFile[] | { error: string } {
       pages,
       model,
       priority,
-      postProcessing: f.postProcessing,
-      settings: f.settings,
+      postProcessing: f.postProcessing as Partial<PostProcessingSettings> | undefined,
+      settings: f.settings as Partial<AdvancedSettings> | undefined,
     });
   }
   return parsed;
 }
 
-export const POST = withMutationAuth("ocr:submit", async (request: NextRequest) => {
+export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, { auth }) => {
   const raw = await request.json().catch(() => null);
   const parsed = parseBatchBody(raw);
   if (!Array.isArray(parsed)) {
     throw new ApiRouteError(parsed.error, 400);
   }
 
+  // Load the user's stored provider settings once for the whole batch.
+  const storedSettings = await getApiSettings(auth.userId);
+  const settings = {
+    ...storedSettings,
+    provider: normalizeProvider(storedSettings.provider),
+  };
+  const apiKeyId = auth.method === "api-key" ? auth.apiKeyId ?? null : null;
   const batchId = `batch_${randomBytes(8).toString("hex")}`;
-  const submitUrl = resolveInternalOcrEndpoint();
-  const fetchHeaders = buildOcrForwardHeaders(request);
 
-  const submissions: Array<{ fileName: string; jobId?: string; error?: string; status?: number }> = [];
+  const submissions: Array<{ fileName: string; jobId?: string; error?: string }> = [];
   for (const file of parsed) {
     try {
-      const response = await fetch(submitUrl, {
-        method: "POST",
-        headers: fetchHeaders,
-        body: JSON.stringify({
-          fileName: file.fileName,
-          preview: file.preview,
-          pages: file.pages,
-          model: file.model,
-          priority: file.priority,
-          batchId,
-          postProcessing: file.postProcessing,
-          settings: file.settings,
-        }),
+      const settingsPayload = normalizeAdvancedSettings(file.settings);
+      const postProcessingPayload = sanitizePostProcessing(file.postProcessing);
+      const provider = resolveProvider(settings);
+      const ocrModel = provider === "mistral" ? resolveMistralOcrModel(file.model) : file.model;
+      const prompt = buildPrompt(settingsPayload);
+      const inputPreviews = file.pages && file.pages.length > 0 ? file.pages : [file.preview];
+      const sourcePreview = normalizePreviewForHistory(inputPreviews[0] || "");
+
+      const { jobId } = await submitOcrJob({
+        userId: auth.userId,
+        apiKeyId,
+        fileName: file.fileName,
+        model: file.model,
+        ocrModel,
+        provider,
+        settings,
+        settingsPayload,
+        postProcessingPayload,
+        inputPreviews,
+        prompt,
+        sourcePreview,
+        priority: file.priority,
+        batchId,
       });
-      const payload = (await response.json().catch(() => null)) as
-        | { jobId?: string; error?: string }
-        | null;
-      if (!response.ok) {
-        submissions.push({
-          fileName: file.fileName,
-          error: payload?.error || `HTTP ${response.status}`,
-          status: response.status,
-        });
-      } else {
-        submissions.push({
-          fileName: file.fileName,
-          jobId: typeof payload?.jobId === "string" ? payload.jobId : undefined,
-        });
-      }
+      submissions.push({ fileName: file.fileName, jobId });
     } catch (error) {
       submissions.push({
         fileName: file.fileName,
