@@ -3,8 +3,7 @@ import { OcrJobStatus } from "@prisma/client";
 
 import { ApiProviderSettings, getApiSettings } from "@/lib/ocr/settings-store";
 import { seedPostProcessingMeta } from "@/lib/ocr/job-seed";
-import { normalizeMistralEndpoint } from "@/lib/ocr/provider-normalization";
-import { resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
+import { normalizeMistralApiBase, resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
 import {
   normalizeOpenAICompatApiBase,
   normalizeOpenRouterApiBase,
@@ -63,7 +62,7 @@ const OCR_RATE_LIMIT_MAX = 6;
 function normalizeProviderEndpoint(provider: ProviderKind, rawEndpoint: string): string {
   if (provider === "mistral") {
     return enforceProviderEndpointPolicy("mistral",
-      normalizeMistralEndpoint(rawEndpoint || getDefaultMistralApiUrl(), getDefaultMistralApiUrl()),
+      normalizeMistralApiBase(rawEndpoint || getDefaultMistralApiUrl()),
       getDefaultMistralApiUrl());
   }
   if (provider === "openrouter") {

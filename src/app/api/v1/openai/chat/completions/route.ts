@@ -76,47 +76,36 @@ function pickImageAndPrompt(messages: unknown): { preview: string | null; prompt
   return { preview, prompt: promptParts.join("\n\n") };
 }
 
+function openAiError(message: string, type: string, status: number): NextResponse {
+  return NextResponse.json({ error: { message, type } }, { status });
+}
+
 export async function POST(request: NextRequest) {
   try {
   const result = await authenticateMutation(request);
   if (!result.ok) {
-    return NextResponse.json({ error: { message: result.error, type: "auth_error" } }, { status: result.status });
+    return openAiError(result.error, "auth_error", result.status);
   }
   if (!authHasScope(result.auth, "ocr:submit")) {
-    // OpenAI-compatible error envelope — cannot use requireScope() which returns plain { error: string }
-    return NextResponse.json(
-      { error: { message: "Missing required scope: ocr:submit", type: "permission_error" } },
-      { status: 403 }
-    );
+    return openAiError("Missing required scope: ocr:submit", "permission_error", 403);
   }
 
   const body = (await request.json().catch(() => null)) as OpenAIChatRequest | null;
   if (!body || typeof body !== "object") {
-    return NextResponse.json(
-      { error: { message: "Invalid JSON body", type: "invalid_request_error" } },
-      { status: 400 }
-    );
+    return openAiError("Invalid JSON body", "invalid_request_error", 400);
   }
 
   const model = typeof body.model === "string" ? body.model.trim() : "";
   if (!model) {
-    return NextResponse.json(
-      { error: { message: "model is required", type: "invalid_request_error" } },
-      { status: 400 }
-    );
+    return openAiError("model is required", "invalid_request_error", 400);
   }
 
   const { preview, prompt } = pickImageAndPrompt(body.messages);
   if (!preview) {
-    return NextResponse.json(
-      {
-        error: {
-          message:
-            "messages must contain at least one image_url part (this adapter performs OCR; text-only requests are not supported)",
-          type: "invalid_request_error",
-        },
-      },
-      { status: 400 }
+    return openAiError(
+      "messages must contain at least one image_url part (this adapter performs OCR; text-only requests are not supported)",
+      "invalid_request_error",
+      400,
     );
   }
 
@@ -149,15 +138,7 @@ export async function POST(request: NextRequest) {
     });
     jobId = created.jobId;
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: {
-          message: errorMessage(error, "OCR submission failed"),
-          type: "upstream_error",
-        },
-      },
-      { status: 502 },
-    );
+    return openAiError(errorMessage(error, "OCR submission failed"), "upstream_error", 502);
   }
   const startedAt = Date.now();
   while (Date.now() - startedAt < MAX_WAIT_MS) {
@@ -191,39 +172,21 @@ export async function POST(request: NextRequest) {
     }
     if (job.status === OcrJobStatus.FAILED) {
       return NextResponse.json(
-        {
-          error: {
-            message: job.errorMessage || "OCR job failed",
-            type: "upstream_error",
-          },
-          extracto: { jobId },
-        },
-        { status: 502 }
+        { error: { message: job.errorMessage || "OCR job failed", type: "upstream_error" }, extracto: { jobId } },
+        { status: 502 },
       );
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
 
   return NextResponse.json(
-    {
-      error: {
-        message: "Timed out waiting for OCR completion",
-        type: "timeout_error",
-      },
-      extracto: { jobId },
-    },
-    { status: 504 }
+    { error: { message: "Timed out waiting for OCR completion", type: "timeout_error" }, extracto: { jobId } },
+    { status: 504 },
   );
   } catch (error) {
-    // Wrap in OpenAI's nested-error envelope so the entire route surface
-    // (success + every failure path) speaks the same shape. The OpenAI
-    // error category is mapped from the HTTP status range so callers can
-    // distinguish 4xx (request) from 5xx (server) without parsing the
-    // message.
     const message = errorMessage(error, "Internal server error");
     const status = error instanceof ApiRouteError ? error.status : 500;
-    const type = openAiErrorTypeFromStatus(status);
-    return NextResponse.json({ error: { message, type } }, { status });
+    return openAiError(message, openAiErrorTypeFromStatus(status), status);
   }
 }
 

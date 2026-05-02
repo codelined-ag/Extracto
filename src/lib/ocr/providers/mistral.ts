@@ -9,12 +9,16 @@
 import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 import { parseServiceError } from "@/lib/ocr/error-parsing";
-import { normalizeMistralEndpoint } from "@/lib/ocr/provider-normalization";
+import { normalizeMistralEndpoint as normalizeMistralEndpointBase } from "@/lib/ocr/provider-normalization";
 import {
   getDefaultMistralApiUrl,
   getDefaultMistralModels,
   getDefaultMistralOcrModel,
 } from "@/lib/ocr/provider-config";
+
+export function normalizeMistralApiBase(rawEndpoint: string): string {
+  return normalizeMistralEndpointBase(rawEndpoint, getDefaultMistralApiUrl());
+}
 import {
   extractChatContentText,
   fetchWithTimeout,
@@ -34,7 +38,7 @@ interface OcrPage {
 }
 
 export function buildMistralOcrEndpointCandidates(rawEndpoint: string): string[] {
-  const baseEndpoint = normalizeMistralEndpoint(rawEndpoint, getDefaultMistralApiUrl());
+  const baseEndpoint = normalizeMistralApiBase(rawEndpoint);
   const withoutProcess = baseEndpoint.replace(/\/process$/iu, "");
   const withProcess = withoutProcess.endsWith("/ocr")
     ? `${withoutProcess}/process`
@@ -115,7 +119,7 @@ export async function runMistralOcr(
     apiEndpoint || getDefaultMistralApiUrl(),
   );
   let endpointUsed = endpointCandidates[0]
-    || normalizeMistralEndpoint(getDefaultMistralApiUrl(), getDefaultMistralApiUrl());
+    || normalizeMistralApiBase(getDefaultMistralApiUrl());
   let payload: unknown = null;
   let response: Response | null = null;
   let lastError: ApiRouteError | null = null;
