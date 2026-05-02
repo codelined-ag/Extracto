@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus } from "@prisma/client";
 
-import { ApiProviderSettings, getApiSettings } from "@/lib/settings-store";
+import { ApiProviderSettings, getApiSettings } from "@/lib/ocr/settings-store";
 import { seedPostProcessingMeta } from "@/lib/ocr/job-seed";
 import { normalizeMistralEndpoint as normalizeMistralEndpointBase } from "@/lib/ocr/provider-normalization";
 import { resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
@@ -11,9 +11,9 @@ import {
 } from "@/lib/ocr/providers/compat";
 import { authenticateMutation, requireScope, withAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-import { enforceProviderEndpointPolicy, normalizeProvider, ProviderKind } from "@/lib/endpoint-policy";
+import { enforceProviderEndpointPolicy, normalizeProvider, ProviderKind } from "@/lib/ocr/endpoint-policy";
 import { withOcrJobSlot } from "@/lib/ocr/job-control";
-import { resolveOllamaHostEndpoint } from "@/lib/host-normalization";
+import { resolveOllamaHostEndpoint } from "@/lib/ocr/host-normalization";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
 import {

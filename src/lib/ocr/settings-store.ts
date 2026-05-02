@@ -2,11 +2,11 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { type ApiProviderSettings, type ClientApiSettings, type ProviderKind, normalizeProvider } from "@/lib/api-types";
-import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
+import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 import {
   normalizeHostEndpoint,
   resolveOllamaHostEndpoint,
-} from "@/lib/host-normalization";
+} from "@/lib/ocr/host-normalization";
 import {
   DEFAULT_MISTRAL_API_URL,
   DEFAULT_OPENAI_COMPAT_API_URL,

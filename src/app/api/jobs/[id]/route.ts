@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { withAuth, withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-import { readResultJson, readResultText } from "@/lib/result-store";
+import { readResultJson, readResultText } from "@/lib/ocr/result-store";
 
 export const GET = withAuth<{ id: string }>(
   "ocr:read",

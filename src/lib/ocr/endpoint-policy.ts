@@ -1,4 +1,4 @@
-import { normalizeHostEndpoint } from "@/lib/host-normalization";
+import { normalizeHostEndpoint } from "@/lib/ocr/host-normalization";
 import { type ProviderKind } from "@/lib/api-types";
 
 export type { ProviderKind } from "@/lib/api-types";

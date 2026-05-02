@@ -5,7 +5,7 @@ import { OcrJobStatus } from "@prisma/client";
 import { errorMessage } from "@/lib/api-error";
 import { authenticateMutation, authHasScope } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-import { normalizeProvider } from "@/lib/endpoint-policy";
+import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
 import {
   buildPrompt,
   resolveProvider,
@@ -14,8 +14,8 @@ import {
 } from "@/lib/ocr/pipeline";
 import { resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
 import { normalizeAdvancedSettings } from "@/lib/ocr/settings";
-import { readResultText } from "@/lib/result-store";
-import { getApiSettings } from "@/lib/settings-store";
+import { readResultText } from "@/lib/ocr/result-store";
+import { getApiSettings } from "@/lib/ocr/settings-store";
 
 interface OpenAIChatRequest {
   model?: unknown;

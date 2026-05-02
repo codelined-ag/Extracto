@@ -11,11 +11,11 @@ vi.mock("node:fs/promises", () => ({
   mkdir: vi.fn(),
 }));
 
-vi.mock("@/lib/endpoint-policy", async (importOriginal) => {
+vi.mock("@/lib/ocr/endpoint-policy", async (importOriginal) => {
   // Keep normalizeProvider real (it is pure and has no side effects), but
   // stub enforceProviderEndpointPolicy so it simply returns its first URL
   // argument — the tests are about normalization, not allowlist policy.
-  const original = await importOriginal<typeof import("@/lib/endpoint-policy")>();
+  const original = await importOriginal<typeof import("@/lib/ocr/endpoint-policy")>();
   return {
     ...original,
     enforceProviderEndpointPolicy: vi.fn(
@@ -24,9 +24,9 @@ vi.mock("@/lib/endpoint-policy", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/host-normalization", async (importOriginal) => {
+vi.mock("@/lib/ocr/host-normalization", async (importOriginal) => {
   // Keep real implementations — they are pure string helpers.
-  return importOriginal<typeof import("@/lib/host-normalization")>();
+  return importOriginal<typeof import("@/lib/ocr/host-normalization")>();
 });
 
 // ---------------------------------------------------------------------------
@@ -39,8 +39,8 @@ import {
   getApiSettings,
   saveApiSettings,
   toClientApiSettings,
-} from "@/lib/settings-store";
-import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
+} from "@/lib/ocr/settings-store";
+import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 
 const mockedReadFile = readFile as ReturnType<typeof vi.fn>;
 const mockedWriteFile = writeFile as ReturnType<typeof vi.fn>;

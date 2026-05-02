@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { ApiRouteError, errorMessage, parseJsonBody } from "@/lib/api-error";
 import { withAuth, withMutationAuth } from "@/lib/auth/request";
-import { getApiSettings, saveApiSettings, toClientApiSettings } from "@/lib/settings-store";
+import { getApiSettings, saveApiSettings, toClientApiSettings } from "@/lib/ocr/settings-store";
 
 export const GET = withAuth("settings:read", async (_request: NextRequest, { auth }) => {
   const settings = await getApiSettings(auth.userId);

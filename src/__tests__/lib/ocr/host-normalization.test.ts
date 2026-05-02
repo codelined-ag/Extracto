@@ -3,7 +3,7 @@ import {
   normalizeHostEndpoint,
   isLikelyLocalhostEndpoint,
   resolveOllamaHostEndpoint,
-} from "@/lib/host-normalization";
+} from "@/lib/ocr/host-normalization";
 
 // ---------------------------------------------------------------------------
 // normalizeHostEndpoint

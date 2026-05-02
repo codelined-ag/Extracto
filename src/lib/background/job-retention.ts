@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { deleteResultArtifacts } from "@/lib/result-store";
+import { deleteResultArtifacts } from "@/lib/ocr/result-store";
 
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const SWEEP_PAGE_SIZE = 500;

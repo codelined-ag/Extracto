@@ -6,7 +6,7 @@
 import {
   isLikelyLocalhostEndpoint,
   normalizeHostEndpoint,
-} from "@/lib/host-normalization";
+} from "@/lib/ocr/host-normalization";
 
 export function normalizeMistralEndpoint(rawEndpoint: string, fallback: string): string {
   const normalized = normalizeHostEndpoint(rawEndpoint || "", fallback);

@@ -11,7 +11,7 @@ import { ApiRouteError } from "@/lib/api-error";
 import {
   enforceProviderEndpointPolicy,
   type ProviderKind,
-} from "@/lib/endpoint-policy";
+} from "@/lib/ocr/endpoint-policy";
 import { parseServiceError, parsePreviewImageData } from "@/lib/ocr/error-parsing";
 import { parseJsonCandidate } from "@/lib/ocr/markdown-routing";
 import {

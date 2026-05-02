@@ -31,7 +31,7 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/db", () => ({ db: m.db }));
-vi.mock("@/lib/result-store", () => ({
+vi.mock("@/lib/ocr/result-store", () => ({
   maybeUploadResultText: m.maybeUploadResultText,
   maybeUploadResultJson: m.maybeUploadResultJson,
 }));

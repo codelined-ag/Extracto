@@ -7,7 +7,7 @@
 // shape logic, not a route concern.
 
 import { ApiRouteError, errorMessage } from "@/lib/api-error";
-import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
+import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 import { parseServiceError } from "@/lib/ocr/error-parsing";
 import { normalizeMistralEndpoint as normalizeMistralEndpointBase } from "@/lib/ocr/provider-normalization";
 import {

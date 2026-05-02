@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 // host-normalization.ts reads /proc/net/route at import time. The functions we
 // test here only call normalizeHostEndpoint and isLikelyLocalhostEndpoint, both
 // pure string operations.
-vi.mock("@/lib/host-normalization", async () => {
+vi.mock("@/lib/ocr/host-normalization", async () => {
   return {
     normalizeHostEndpoint: (raw: string, fallback: string): string => {
       const trimmed = (raw || "").trim();

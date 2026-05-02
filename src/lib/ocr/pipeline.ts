@@ -27,12 +27,12 @@ import {
   enforceProviderEndpointPolicy,
   normalizeProvider,
   type ProviderKind,
-} from "@/lib/endpoint-policy";
+} from "@/lib/ocr/endpoint-policy";
 import {
   buildOllamaHostCandidates,
   normalizeHostEndpoint,
   resolveOllamaHostEndpoint,
-} from "@/lib/host-normalization";
+} from "@/lib/ocr/host-normalization";
 import { parseServiceError } from "@/lib/ocr/error-parsing";
 import {
   clearOcrJobRunning,
@@ -91,11 +91,11 @@ import {
 import {
   maybeUploadResultJson,
   maybeUploadResultText,
-} from "@/lib/result-store";
+} from "@/lib/ocr/result-store";
 import {
   type ApiProviderSettings,
   FALLBACK_OLLAMA_HOST,
-} from "@/lib/settings-store";
+} from "@/lib/ocr/settings-store";
 
 // ---- Types --------------------------------------------------------------
 

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
-import { normalizeProvider } from "@/lib/endpoint-policy";
+import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
 import {
   buildPrompt,
   normalizePreviewForHistory,
@@ -19,7 +19,7 @@ import {
   type AdvancedSettings,
   type PostProcessingSettings,
 } from "@/lib/ocr/settings";
-import { getApiSettings } from "@/lib/settings-store";
+import { getApiSettings } from "@/lib/ocr/settings-store";
 
 const MAX_BATCH_SIZE = 50;
 
