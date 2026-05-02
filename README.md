@@ -57,21 +57,37 @@ It supports four model providers — Ollama on your host machine, the Mistral OC
 
 ## Quick Start
 
-### Option 1: One-command installer (recommended)
+Extracto runs in a single Docker container, so it works the same on Linux, macOS, and Windows. Pick your platform:
+
+### Linux
 
 ```bash
-./install-extracto.sh
+./install-extracto.sh         # installs Docker + Ollama + 'extracto' command
+extracto on                   # build + start
+extracto off                  # stop
+extracto uninstall            # full teardown
 ```
 
-Installer responsibilities:
+`install-extracto.sh` installs Docker if missing, installs Ollama if missing, drops the `extracto` launcher in `~/.local/bin/extracto`, and patches `~/.bashrc` / `~/.zshrc`.
 
-- Installs Docker if missing.
-- Installs Ollama if missing.
-- Installs the `extracto` command under `~/.local/bin/extracto`.
-- Adds shell alias block in `~/.bashrc` and `~/.zshrc`.
-- Builds and starts the stack.
+### macOS
 
-Then use:
+Prerequisites: install [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/) (and optionally [Ollama for Mac](https://ollama.com/download/mac) if you want local OCR providers). Then the same Bash launcher works:
+
+```bash
+./scripts/extracto.sh on
+./scripts/extracto.sh off
+```
+
+To install the `extracto` shortcut on your `$PATH`, the simplest one-liner:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+ln -sf "$PWD/scripts/extracto.sh" "$HOME/.local/bin/extracto"
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
+```
+
+After opening a new shell:
 
 ```bash
 extracto on
@@ -79,19 +95,28 @@ extracto off
 extracto uninstall
 ```
 
-`extracto uninstall` removes Extracto command and app containers/volumes, but keeps Ollama installed.
+### Windows
 
-### Option 2: Manual Docker Compose
+Prerequisites: install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) (with WSL2 backend) and optionally [Ollama for Windows](https://ollama.com/download/windows). Then run from PowerShell:
+
+```powershell
+.\scripts\extracto.ps1 install      # adds 'extracto' to your user PATH
+extracto on                          # build + start
+extracto off                         # stop
+extracto logs                        # follow container logs
+extracto status                      # docker compose ps
+extracto update                      # pull + rebuild
+extracto uninstall                   # full teardown (removes data volume)
+```
+
+If PowerShell blocks the script, run once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
+### Manual Docker Compose (any OS)
 
 ```bash
 docker compose --env-file docker.env up -d --build
 docker compose ps
 docker compose logs -f app
-```
-
-Stop:
-
-```bash
 docker compose --env-file docker.env down
 ```
 

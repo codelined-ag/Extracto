@@ -33,6 +33,8 @@ import {
  Database,
  DatabaseBackup,
  Info,
+ MoreHorizontal,
+ Github,
 } from"lucide-react";
 import { useRouter } from"next/navigation";
 
@@ -74,6 +76,14 @@ import {
  TooltipContent,
  TooltipTrigger,
 } from"@/components/ui/tooltip";
+import {
+ DropdownMenu,
+ DropdownMenuContent,
+ DropdownMenuItem,
+ DropdownMenuLabel,
+ DropdownMenuSeparator,
+ DropdownMenuTrigger,
+} from"@/components/ui/dropdown-menu";
 import { ThemeToggle } from"@/components/theme-toggle";
 import { useToast } from"@/hooks/use-toast";
 import { normalizeProvider, type ProviderKind, type ClientApiSettings } from"@/lib/api-types";
@@ -2720,64 +2730,82 @@ export default function ExtractoPage() {
  )}
  </div>
  <div className="flex items-center gap-1">
- {/* View Mode Toggle */}
  {selectedFile.result && (
  <>
- <Button
- variant={viewMode ==="preview"?"secondary":"ghost"}
- size="sm"className="h-7 px-2 group"onClick={() => setViewMode("preview")}
- >
- <Eye className="h-3.5 w-3.5 text-accent-foreground transition-transform duration-200 group-hover:scale-110"/>
+ <div className="surface-soft rounded-xl p-0.5 flex items-center gap-0.5">
+ <Tooltip>
+ <TooltipTrigger asChild>
+ <button type="button"onClick={() => setViewMode("preview")} className={cn("inline-flex items-center justify-center size-7 rounded-lg transition-colors", viewMode ==="preview"?"bg-card text-foreground shadow-[var(--shadow-soft)]":"text-muted-foreground/80 hover:text-foreground")}>
+ <Eye className="h-3.5 w-3.5"/>
+ </button>
+ </TooltipTrigger>
+ <TooltipContent>{t("Anteprima","Preview","Aperçu","Vista previa","Vorschau")}</TooltipContent>
+ </Tooltip>
+ <Tooltip>
+ <TooltipTrigger asChild>
+ <button type="button"onClick={() => setViewMode("split")} className={cn("inline-flex items-center justify-center size-7 rounded-lg transition-colors", viewMode ==="split"?"bg-card text-foreground shadow-[var(--shadow-soft)]":"text-muted-foreground/80 hover:text-foreground")}>
+ <Columns className="h-3.5 w-3.5"/>
+ </button>
+ </TooltipTrigger>
+ <TooltipContent>{t("Doppia colonna","Split view","Vue partagée","Vista dividida","Geteilte Ansicht")}</TooltipContent>
+ </Tooltip>
+ <Tooltip>
+ <TooltipTrigger asChild>
+ <button type="button"onClick={() => setViewMode("result")} className={cn("inline-flex items-center justify-center size-7 rounded-lg transition-colors", viewMode ==="result"?"bg-card text-foreground shadow-[var(--shadow-soft)]":"text-muted-foreground/80 hover:text-foreground")}>
+ <FileText className="h-3.5 w-3.5"/>
+ </button>
+ </TooltipTrigger>
+ <TooltipContent>{t("Risultato","Result only","Résultat","Resultado","Ergebnis")}</TooltipContent>
+ </Tooltip>
+ </div>
+
+ <DropdownMenu>
+ <DropdownMenuTrigger asChild>
+ <Button variant="ghost"size="sm"className="h-7 gap-1 group">
+ <span className="text-xs">{t("Azioni","Actions","Actions","Acciones","Aktionen")}</span>
+ <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/80 transition-transform duration-200 group-hover:scale-110"/>
  </Button>
- <Button
- variant={viewMode ==="split"?"secondary":"ghost"}
- size="sm"className="h-7 px-2 group"onClick={() => setViewMode("split")}
- >
- <Columns className="h-3.5 w-3.5 text-primary transition-transform duration-200 group-hover:scale-110"/>
- </Button>
- <Button
- variant={viewMode ==="result"?"secondary":"ghost"}
- size="sm"className="h-7 px-2 group"onClick={() => setViewMode("result")}
- >
- <FileText className="h-3.5 w-3.5 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:scale-110"/>
- </Button>
- <Separator orientation="vertical"className="h-5 mx-1"/>
- <Button
- variant="ghost"size="sm"className="h-7 group"onClick={() => copyToClipboard("md")}
- >
- {copied ==="md"? (
- <Check className="h-3.5 w-3.5 text-[oklch(0.55_0.13_150)]"/>
- ) : (
- <Copy className="h-3.5 w-3.5 text-accent-foreground transition-transform duration-200 group-hover:scale-110"/>
- )}
- </Button>
- <Button
- variant="ghost"size="sm"className="h-7 group"onClick={() => downloadResult("md")}
- >
- <Download className="h-3.5 w-3.5 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:-translate-y-0.5"/>
- </Button>
- {selectedFile?.status ==="completed"&& selectedFile.jobId ? (
- <Button
- variant="ghost"size="sm"className="h-7 group"onClick={() => exportFileToKb(selectedFile)}
+ </DropdownMenuTrigger>
+ <DropdownMenuContent align="end"className="min-w-[14rem]">
+ <DropdownMenuLabel>{t("Copia","Copy","Copier","Copiar","Kopieren")}</DropdownMenuLabel>
+ <DropdownMenuItem onSelect={() => copyToClipboard("md")}>
+ {copied ==="md"? <Check className="text-primary"/> : <Copy />}
+ <span>{t("Copia Markdown","Copy Markdown","Copier Markdown","Copiar Markdown","Markdown kopieren")}</span>
+ </DropdownMenuItem>
+ <DropdownMenuItem onSelect={() => copyToClipboard("json")}>
+ {copied ==="json"? <Check className="text-primary"/> : <Copy />}
+ <span>{t("Copia JSON","Copy JSON","Copier JSON","Copiar JSON","JSON kopieren")}</span>
+ </DropdownMenuItem>
+ <DropdownMenuSeparator />
+ <DropdownMenuLabel>{t("Scarica","Download","Télécharger","Descargar","Herunterladen")}</DropdownMenuLabel>
+ <DropdownMenuItem onSelect={() => downloadResult("md")}>
+ <Download />
+ <span>{t("Scarica Markdown","Download Markdown","Télécharger Markdown","Descargar Markdown","Markdown herunterladen")}</span>
+ </DropdownMenuItem>
+ <DropdownMenuItem onSelect={() => downloadResult("json")}>
+ <Download />
+ <span>{t("Scarica JSON","Download JSON","Télécharger JSON","Descargar JSON","JSON herunterladen")}</span>
+ </DropdownMenuItem>
+ {selectedFile.status ==="completed"&& selectedFile.jobId ? (
+ <>
+ <DropdownMenuSeparator />
+ <DropdownMenuItem
+ onSelect={() => exportFileToKb(selectedFile)}
  disabled={selectedFile.kbExport?.status ==="pending"}
- title={
- selectedFile.kbExport?.status ==="success"
- ? t(
- `Riesporta nel KB (ultima: ${selectedFile.kbExport.collectionName ??""})`,
- `Re-export to KB (last: ${selectedFile.kbExport.collectionName ??""})`,
- )
- : t("Invia al vector store","Send to vector store","Envoyer au vector store","Enviar al vector store","An Vektor-Store senden")
- }
  >
- {selectedFile.kbExport?.status ==="pending"? (
- <Loader2 className="h-3.5 w-3.5 animate-spin text-primary"/>
- ) : selectedFile.kbExport?.status ==="success"? (
- <Database className="h-3.5 w-3.5 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:scale-110"/>
- ) : (
- <DatabaseBackup className="h-3.5 w-3.5 text-primary transition-transform duration-200 group-hover:scale-110"/>
- )}
- </Button>
+ {selectedFile.kbExport?.status ==="pending"? <Loader2 className="animate-spin text-primary"/>
+ : selectedFile.kbExport?.status ==="success"? <Database className="text-primary"/>
+ : <DatabaseBackup />}
+ <span>
+ {selectedFile.kbExport?.status ==="success"
+ ? t("Riesporta verso KB","Re-export to KB","Réexporter vers KB","Reexportar a KB","Erneut in KB exportieren")
+ : t("Invia al vector store","Send to vector store","Envoyer au vector store","Enviar al vector store","An Vektor-Store senden")}
+ </span>
+ </DropdownMenuItem>
+ </>
  ) : null}
+ </DropdownMenuContent>
+ </DropdownMenu>
  </>
  )}
  </div>
@@ -3049,10 +3077,29 @@ export default function ExtractoPage() {
  animate={{ y: 0, opacity: 1 }}
  transition={{ duration: 0.4, delay: 0.3 }}
  className="mt-auto">
- <div className="container mx-auto px-4 h-14 flex items-center">
+ <div className="container mx-auto px-5 h-14 flex items-center justify-between gap-3">
  <p className="text-xs text-muted-foreground">
- © {new Date().getFullYear()} Extracto.
+ © {new Date().getFullYear()}{" "}
+ <span className="font-display italic font-medium text-foreground/80">Extracto</span>{" "}
+ {t("di","by","par","por","von")}{" "}
+ <a
+ href="https://github.com/codelined-ag"
+ target="_blank"
+ rel="noopener noreferrer"
+ className="inline-flex items-center gap-1 text-foreground/80 hover:text-primary transition-colors group"
+ >
+ <span className="font-medium">codelined</span>
+ <Github className="h-3 w-3 transition-transform duration-200 group-hover:rotate-6 group-hover:scale-110"/>
+ </a>
  </p>
+ <a
+ href="https://github.com/codelined-ag"
+ target="_blank"
+ rel="noopener noreferrer"
+ className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70 hover:text-primary transition-colors"
+ >
+ {t("github","github","github","github","github")}
+ </a>
  </div>
  </motion.footer>
  </div>

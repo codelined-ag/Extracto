@@ -1,12 +1,3 @@
-// Embedding providers for the KB pipeline.
-//
-// Each adapter takes a list of strings and returns a list of float vectors,
-// in the same order. Implementations call the provider's HTTP API with
-// fetch (no SDK), so the only runtime cost is the network round trip.
-//
-// All providers share the same EmbeddingProviderConfig shape so callers
-// can dispatch via embedTexts() without knowing the underlying API.
-
 import type { EmbeddingProviderConfig } from "@/lib/kb/types";
 
 const EMBEDDING_TIMEOUT_MS = 60_000;
@@ -18,10 +9,6 @@ export class EmbeddingError extends Error {
   }
 }
 
-/**
- * Embed an array of texts via the configured provider. Returns vectors
- * in the same order as the input. Throws EmbeddingError on any failure.
- */
 export async function embedTexts(
   texts: string[],
   config: EmbeddingProviderConfig,
@@ -44,70 +31,159 @@ export async function embedTexts(
   }
 }
 
-/**
- * Ollama exposes /api/embeddings (single prompt at a time) and
- * /api/embed (batch, newer). We use /api/embed when available; fall back
- * to a sequential loop on /api/embeddings for compatibility.
- */
+interface AttemptResult {
+  ok: true;
+  vectors: number[][];
+}
+
+interface AttemptFailure {
+  ok: false;
+  status: number | null;
+  body: string;
+  url: string;
+}
+
+async function readBody(resp: Response): Promise<string> {
+  try {
+    return (await resp.text()).slice(0, 600);
+  } catch {
+    return "";
+  }
+}
+
+function modelMissingHint(body: string, model: string): string | null {
+  if (!body) return null;
+  const lower = body.toLowerCase();
+  if (lower.includes("not found") && lower.includes("model")) {
+    return `Modello embedding "${model}" non installato su Ollama. Esegui: ollama pull ${model}`;
+  }
+  if (lower.includes("file does not exist") || lower.includes("pull it first")) {
+    return `Modello embedding "${model}" non installato su Ollama. Esegui: ollama pull ${model}`;
+  }
+  return null;
+}
+
 async function embedWithOllama(
   texts: string[],
   config: EmbeddingProviderConfig,
   fetchImpl: typeof fetch,
 ): Promise<number[][]> {
   const base = config.apiEndpoint.replace(/\/+$/u, "");
-  // Try the batch endpoint first.
+
   const batchUrl = `${base}/api/embed`;
-  const batchBody = JSON.stringify({ model: config.model, input: texts });
+  const batchAttempt = await tryOllamaEmbed(fetchImpl, batchUrl, texts, config.model);
+  if (batchAttempt.ok) return batchAttempt.vectors;
 
-  const batchResp = await fetchWithTimeout(fetchImpl, batchUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: batchBody,
-  });
+  const v1Url = `${base}/v1/embeddings`;
+  const v1Attempt = await tryOpenAICompatBatch(fetchImpl, v1Url, texts, config.model, undefined);
+  if (v1Attempt.ok) return v1Attempt.vectors;
 
-  if (batchResp.ok) {
-    const json = (await batchResp.json()) as { embeddings?: number[][] };
-    if (Array.isArray(json.embeddings) && json.embeddings.length === texts.length) {
-      return json.embeddings;
-    }
-    throw new EmbeddingError(
-      `Ollama /api/embed returned ${json.embeddings?.length ?? 0} vectors for ${texts.length} inputs`,
-      "ollama",
-    );
-  }
-
-  // Fall back to single-prompt /api/embeddings for older Ollama versions.
   const singleUrl = `${base}/api/embeddings`;
-  const out: number[][] = [];
-  for (const text of texts) {
-    const resp = await fetchWithTimeout(fetchImpl, singleUrl, {
+  const singleAttempt = await tryOllamaSingle(fetchImpl, singleUrl, texts, config.model);
+  if (singleAttempt.ok) return singleAttempt.vectors;
+
+  const failure = singleAttempt.status != null ? singleAttempt
+    : v1Attempt.status != null ? v1Attempt
+    : batchAttempt;
+  const hint = modelMissingHint(failure.body, config.model);
+  const detail = hint
+    ?? `Tutti gli endpoint embedding di Ollama hanno fallito (POST ${batchUrl} → ${batchAttempt.status ?? "?"}, POST ${v1Url} → ${v1Attempt.status ?? "?"}, POST ${singleUrl} → ${singleAttempt.status ?? "?"}). Verifica che Ollama sia in esecuzione e che il modello "${config.model}" sia installato (ollama pull ${config.model}).`;
+  throw new EmbeddingError(detail, "ollama", failure.status ?? undefined);
+}
+
+async function tryOllamaEmbed(
+  fetchImpl: typeof fetch,
+  url: string,
+  texts: string[],
+  model: string,
+): Promise<AttemptResult | AttemptFailure> {
+  let resp: Response;
+  try {
+    resp = await fetchWithTimeout(fetchImpl, url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: config.model, prompt: text }),
+      body: JSON.stringify({ model, input: texts }),
     });
-    if (!resp.ok) {
-      throw new EmbeddingError(
-        `Ollama /api/embeddings ${resp.status}: ${resp.statusText}`,
-        "ollama",
-        resp.status,
-      );
+  } catch (err) {
+    return { ok: false, status: null, body: err instanceof Error ? err.message : String(err), url };
+  }
+  if (!resp.ok) {
+    return { ok: false, status: resp.status, body: await readBody(resp), url };
+  }
+  const json = (await resp.json().catch(() => ({}))) as { embeddings?: number[][] };
+  if (Array.isArray(json.embeddings) && json.embeddings.length === texts.length) {
+    return { ok: true, vectors: json.embeddings };
+  }
+  return { ok: false, status: 200, body: `expected ${texts.length} vectors, got ${json.embeddings?.length ?? 0}`, url };
+}
+
+async function tryOllamaSingle(
+  fetchImpl: typeof fetch,
+  url: string,
+  texts: string[],
+  model: string,
+): Promise<AttemptResult | AttemptFailure> {
+  const out: number[][] = [];
+  for (const text of texts) {
+    let resp: Response;
+    try {
+      resp = await fetchWithTimeout(fetchImpl, url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, prompt: text }),
+      });
+    } catch (err) {
+      return { ok: false, status: null, body: err instanceof Error ? err.message : String(err), url };
     }
-    const json = (await resp.json()) as { embedding?: number[] };
+    if (!resp.ok) {
+      return { ok: false, status: resp.status, body: await readBody(resp), url };
+    }
+    const json = (await resp.json().catch(() => ({}))) as { embedding?: number[] };
     if (!Array.isArray(json.embedding)) {
-      throw new EmbeddingError(
-        `Ollama /api/embeddings returned no 'embedding' field`,
-        "ollama",
-      );
+      return { ok: false, status: 200, body: "missing 'embedding' field", url };
     }
     out.push(json.embedding);
   }
-  return out;
+  return { ok: true, vectors: out };
 }
 
-/**
- * OpenAI-compatible /v1/embeddings (also used for OpenRouter, vLLM,
- * Together, Fireworks, etc.). Single batch request per call.
- */
+async function tryOpenAICompatBatch(
+  fetchImpl: typeof fetch,
+  url: string,
+  texts: string[],
+  model: string,
+  apiKey: string | undefined,
+): Promise<AttemptResult | AttemptFailure> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  let resp: Response;
+  try {
+    resp = await fetchWithTimeout(fetchImpl, url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ model, input: texts }),
+    });
+  } catch (err) {
+    return { ok: false, status: null, body: err instanceof Error ? err.message : String(err), url };
+  }
+  if (!resp.ok) {
+    return { ok: false, status: resp.status, body: await readBody(resp), url };
+  }
+  const json = (await resp.json().catch(() => ({}))) as { data?: Array<{ embedding?: number[]; index?: number }> };
+  if (!Array.isArray(json.data) || json.data.length !== texts.length) {
+    return { ok: false, status: resp.status, body: `expected ${texts.length} vectors, got ${json.data?.length ?? 0}`, url };
+  }
+  const sorted = [...json.data].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+  const vectors: number[][] = [];
+  for (const entry of sorted) {
+    if (!Array.isArray(entry.embedding)) {
+      return { ok: false, status: resp.status, body: "missing 'embedding' on a data entry", url };
+    }
+    vectors.push(entry.embedding);
+  }
+  return { ok: true, vectors };
+}
+
 async function embedWithOpenAICompat(
   texts: string[],
   config: EmbeddingProviderConfig,
@@ -115,45 +191,12 @@ async function embedWithOpenAICompat(
 ): Promise<number[][]> {
   const base = config.apiEndpoint.replace(/\/+$/u, "");
   const url = `${base}/embeddings`.replace(/\/+/g, "/").replace(":/", "://");
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
-
-  const resp = await fetchWithTimeout(fetchImpl, url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ model: config.model, input: texts }),
-  });
-
-  if (!resp.ok) {
-    let message = `${resp.status} ${resp.statusText}`;
-    try {
-      const errJson = (await resp.json()) as { error?: { message?: string } };
-      if (errJson.error?.message) message = errJson.error.message;
-    } catch {
-      /* response wasn't JSON */
-    }
-    throw new EmbeddingError(`OpenAI-compat embeddings: ${message}`, config.provider, resp.status);
-  }
-  const json = (await resp.json()) as { data?: Array<{ embedding?: number[]; index?: number }> };
-  if (!Array.isArray(json.data) || json.data.length !== texts.length) {
-    throw new EmbeddingError(
-      `OpenAI-compat embeddings returned ${json.data?.length ?? 0} for ${texts.length} inputs`,
-      config.provider,
-    );
-  }
-  // OpenAI guarantees response.data is sorted by index, but be defensive.
-  const sorted = [...json.data].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
-  const vectors: number[][] = [];
-  for (const entry of sorted) {
-    if (!Array.isArray(entry.embedding)) {
-      throw new EmbeddingError(
-        `OpenAI-compat embeddings: missing 'embedding' on a data entry`,
-        config.provider,
-      );
-    }
-    vectors.push(entry.embedding);
-  }
-  return vectors;
+  const attempt = await tryOpenAICompatBatch(fetchImpl, url, texts, config.model, config.apiKey);
+  if (attempt.ok) return attempt.vectors;
+  const hint = modelMissingHint(attempt.body, config.model);
+  const detail = hint
+    ?? `OpenAI-compat embeddings failed: ${attempt.status ?? "no response"} ${attempt.body || "(empty body)"}`;
+  throw new EmbeddingError(detail, config.provider, attempt.status ?? undefined);
 }
 
 async function fetchWithTimeout(

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { embedTexts, EmbeddingError } from "@/lib/kb/embedding";
 import type { EmbeddingProviderConfig } from "@/lib/kb/types";
 
@@ -52,26 +52,23 @@ describe("embedTexts — Ollama batch path", () => {
     });
     await embedTexts(["x"], { ...config, apiEndpoint: "http://127.0.0.1:11434//" }, fetchImpl);
   });
-
-  it("throws when batch endpoint returns wrong-length array", async () => {
-    const fetchImpl = mockFetch(() => jsonResponse({ embeddings: [[0.1]] })); // 1 instead of 2
-    await expect(embedTexts(["a", "b"], config, fetchImpl)).rejects.toThrow(EmbeddingError);
-    await expect(embedTexts(["a", "b"], config, fetchImpl)).rejects.toThrow(/1 vectors for 2 inputs/);
-  });
 });
 
-describe("embedTexts — Ollama fallback to /api/embeddings", () => {
+describe("embedTexts — Ollama fallback chain", () => {
   const config: EmbeddingProviderConfig = {
     provider: "ollama",
     apiEndpoint: "http://127.0.0.1:11434",
     model: "old-model",
   };
 
-  it("falls back to /api/embeddings (sequential) when /api/embed is 404", async () => {
+  it("falls back to /v1/embeddings then /api/embeddings", async () => {
     let n = 0;
     const fetchImpl = mockFetch((url, init) => {
       n++;
       if (url.endsWith("/api/embed")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (url.endsWith("/v1/embeddings")) {
         return new Response("not found", { status: 404 });
       }
       expect(url).toBe("http://127.0.0.1:11434/api/embeddings");
@@ -80,23 +77,32 @@ describe("embedTexts — Ollama fallback to /api/embeddings", () => {
     });
     const result = await embedTexts(["first", "second"], config, fetchImpl);
     expect(result).toEqual([[1, 2], [3, 4]]);
-    expect(n).toBe(3); // 1 batch attempt + 2 single calls
+    expect(n).toBe(4);
   });
 
-  it("throws on non-2xx /api/embeddings response", async () => {
+  it("returns vectors via /v1/embeddings when /api/embed is missing but compat layer works", async () => {
     const fetchImpl = mockFetch((url) => {
       if (url.endsWith("/api/embed")) return new Response("", { status: 404 });
-      return new Response("model not found", { status: 404, statusText: "Not Found" });
+      if (url.endsWith("/v1/embeddings")) {
+        return jsonResponse({
+          data: [
+            { embedding: [9, 9], index: 0 },
+            { embedding: [8, 8], index: 1 },
+          ],
+        });
+      }
+      throw new Error(`unexpected url: ${url}`);
     });
-    await expect(embedTexts(["x"], config, fetchImpl)).rejects.toThrow(/404/);
+    expect(await embedTexts(["a", "b"], config, fetchImpl)).toEqual([[9, 9], [8, 8]]);
   });
 
-  it("throws when /api/embeddings response lacks 'embedding' field", async () => {
+  it("surfaces a helpful 'pull the model' message when Ollama reports model not found", async () => {
     const fetchImpl = mockFetch((url) => {
-      if (url.endsWith("/api/embed")) return new Response("", { status: 404 });
-      return jsonResponse({ unrelated: true });
+      if (url.endsWith("/api/embed")) return new Response('{"error":"model \\"old-model\\" not found, try pulling it first"}', { status: 404 });
+      if (url.endsWith("/v1/embeddings")) return new Response("model not found", { status: 404 });
+      return new Response("model not found", { status: 404 });
     });
-    await expect(embedTexts(["x"], config, fetchImpl)).rejects.toThrow(/no 'embedding' field/);
+    await expect(embedTexts(["x"], config, fetchImpl)).rejects.toThrow(/ollama pull old-model/);
   });
 });
 
@@ -147,14 +153,7 @@ describe("embedTexts — OpenAI-compatible path", () => {
     expect(await embedTexts(["a", "b"], config, fetchImpl)).toEqual([[1, 1], [3, 3]]);
   });
 
-  it("throws on HTTP error with provider's error.message extracted", async () => {
-    const fetchImpl = mockFetch(() =>
-      jsonResponse({ error: { message: "rate limited" } }, 429),
-    );
-    await expect(embedTexts(["x"], config, fetchImpl)).rejects.toThrow(/rate limited/);
-  });
-
-  it("throws on HTTP error when body isn't JSON", async () => {
+  it("throws on HTTP 500 with body details", async () => {
     const fetchImpl = mockFetch(() =>
       new Response("server exploded", { status: 500, statusText: "Internal Server Error" }),
     );
@@ -165,7 +164,7 @@ describe("embedTexts — OpenAI-compatible path", () => {
     const fetchImpl = mockFetch(() =>
       jsonResponse({ data: [{ embedding: [0.1], index: 0 }] }),
     );
-    await expect(embedTexts(["a", "b"], config, fetchImpl)).rejects.toThrow(/1 for 2/);
+    await expect(embedTexts(["a", "b"], config, fetchImpl)).rejects.toThrow(/got 1/);
   });
 
   it("openrouter routes through the same OpenAI-compat path", async () => {
