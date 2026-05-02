@@ -43,6 +43,23 @@ describe("chunkFixed", () => {
   it("handles a single chunk that fills exactly maxChunkSize", () => {
     expect(chunkFixed("abcd", 4, 0)).toEqual(["abcd"]);
   });
+
+  it("does NOT emit a duplicate-suffix tail chunk when (len - max) is not divisible by stride", () => {
+    // text length 10, max 4, overlap 1, stride 3:
+    //   i=0 -> "0123" (end=4)
+    //   i=3 -> "3456" (end=7)
+    //   i=6 -> "6789" (end=10)
+    //   i=9 -> end=10 (== lastEnd) -> SKIP (was emitting "9" as a duplicate)
+    const result = chunkFixed("0123456789", 4, 1);
+    expect(result).toEqual(["0123", "3456", "6789"]);
+  });
+
+  it("does not emit a chunk fully contained in the previous one (overlap=2, length-tail edge)", () => {
+    // text length 10, max 4, overlap 2, stride 2:
+    //   i=0 -> "0123" (end=4)
+    //   i=2 -> "2345"; i=4 -> "4567"; i=6 -> "6789" (end=10) — STOP
+    expect(chunkFixed("0123456789", 4, 2)).toEqual(["0123", "2345", "4567", "6789"]);
+  });
 });
 
 describe("chunkSentence", () => {

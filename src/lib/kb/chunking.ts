@@ -42,10 +42,16 @@ export function chunkFixed(text: string, maxChunkSize: number, overlap: number):
   }
   const stride = maxChunkSize - overlap;
   const chunks: string[] = [];
+  let lastEnd = 0;
   for (let i = 0; i < text.length; i += stride) {
-    const piece = text.slice(i, i + maxChunkSize);
-    if (piece) chunks.push(piece);
-    if (i + maxChunkSize >= text.length) break;
+    const end = Math.min(i + maxChunkSize, text.length);
+    // Skip an iteration that would produce a chunk fully contained in the
+    // previous one — this happens at the tail when (text.length - maxChunkSize)
+    // is not divisible by stride.
+    if (end <= lastEnd) break;
+    chunks.push(text.slice(i, end));
+    lastEnd = end;
+    if (end >= text.length) break;
   }
   return chunks;
 }
