@@ -1,5 +1,14 @@
 import { NextResponse } from "next/server";
 
+/**
+ * Pull a string message out of an unknown caught value. Replaces the
+ * `error instanceof Error ? error.message : fallback` ternary that was
+ * repeated 22+ times across handlers and provider runners.
+ */
+export function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 // Helper for the common pattern of parsing a request body that may fail.
 // Returns a Partial<T> so the call site narrows individual fields with
 // typeof guards. Centralizing this in one place lets us swap the parsing

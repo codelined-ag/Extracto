@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus } from "@prisma/client";
 
 import { ApiProviderSettings, getApiSettings } from "@/lib/settings-store";
+import { seedPostProcessingMeta } from "@/lib/ocr/job-seed";
 import { normalizeMistralEndpoint as normalizeMistralEndpointBase } from "@/lib/ocr/provider-normalization";
 import { resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
 import {
@@ -343,16 +344,7 @@ export async function POST(request: NextRequest) {
           durationMs: page.durationMs,
           previewText: page.text.trim().slice(0, 320),
         })),
-        postProcessing: {
-          enabled: postProcessingPayload.enabled,
-          ...(postProcessingPayload.enabled
-            ? {
-                outputFormat: postProcessingPayload.outputFormat,
-                instruction: postProcessingPayload.instruction,
-                model: postProcessingPayload.model || model,
-              }
-            : {}),
-        },
+        postProcessing: seedPostProcessingMeta(postProcessingPayload, postProcessingPayload.model || model),
       });
 
       await db.ocrJob.update({
@@ -430,16 +422,7 @@ export async function POST(request: NextRequest) {
           : []),
       ],
       checkpoints: [],
-      postProcessing: {
-        enabled: postProcessingPayload.enabled,
-        ...(postProcessingPayload.enabled
-          ? {
-              outputFormat: postProcessingPayload.outputFormat,
-              instruction: postProcessingPayload.instruction,
-              model: postProcessingPayload.model || model,
-            }
-          : {}),
-      },
+      postProcessing: seedPostProcessingMeta(postProcessingPayload, postProcessingPayload.model || model),
     });
 
     const requestedPriority = parseRequestPriority(body?.priority);

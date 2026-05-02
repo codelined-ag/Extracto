@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { ApiRouteError } from "@/lib/api-error";
+import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
 import { buildOcrForwardHeaders, resolveInternalOcrEndpoint } from "@/lib/ocr/forward";
 
@@ -103,7 +103,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest) 
     } catch (error) {
       submissions.push({
         fileName: file.fileName,
-        error: error instanceof Error ? error.message : "submission failed",
+        error: errorMessage(error, "submission failed"),
       });
     }
   }

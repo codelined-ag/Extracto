@@ -20,7 +20,7 @@
 
 import { OcrJobStatus, Prisma } from "@prisma/client";
 
-import { ApiRouteError } from "@/lib/api-error";
+import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { dispatchJobWebhooks } from "@/lib/background/webhooks";
 import { db } from "@/lib/db";
 import {
@@ -329,7 +329,7 @@ export async function getOllamaModels(endpoint: string): Promise<OllamaModelCata
         setOllamaModelCache(host, uniqueValues);
         return { host, models: uniqueValues };
       } catch (error) {
-        errors.push(`${host}${path}: ${error instanceof Error ? error.message : "Request failed"}`);
+        errors.push(`${host}${path}: ${errorMessage(error, "Request failed")}`);
       }
     }
   }
@@ -1029,7 +1029,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
           instruction: input.postProcessingPayload.instruction,
           model: postProcessingModel,
           provider: postProcessingProvider,
-          error: error instanceof Error ? error.message : "Post-processing failed",
+          error: errorMessage(error, "Post-processing failed"),
         };
         extractedMetadata.postProcessing = postProcessingMeta;
       }
@@ -1090,11 +1090,11 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
     progressEvents = appendProgressEvent(
       progressEvents,
       "failed",
-      error instanceof Error ? error.message : "OCR processing failed",
+      errorMessage(error, "OCR processing failed"),
     );
     latestMetadata = buildProgressMetadata({
       stage: "failed",
-      message: error instanceof Error ? error.message : "OCR processing failed",
+      message: errorMessage(error, "OCR processing failed"),
       progressPct: latestMetadata.progressPct,
       pageCount: input.inputPreviews.length,
       processedPages: pageOutputs.length,
@@ -1108,7 +1108,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
 
     await persistFailedJob(
       input,
-      error instanceof Error ? error.message : "OCR processing failed",
+      errorMessage(error, "OCR processing failed"),
       latestMetadata,
       usedOllamaModels,
     );

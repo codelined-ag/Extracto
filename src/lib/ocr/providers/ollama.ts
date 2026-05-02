@@ -6,7 +6,7 @@
 // enforcement — those concerns belong to the route handler so that this
 // module can be unit-tested with synthetic hosts and a mocked global.fetch.
 
-import { ApiRouteError } from "@/lib/api-error";
+import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { parseServiceError, parsePreviewImageData } from "@/lib/ocr/error-parsing";
 import { parseJsonCandidate } from "@/lib/ocr/markdown-routing";
 import {
@@ -141,7 +141,7 @@ export async function runOllamaOcr(
           throw error;
         }
         errors.push(
-          `${host}${chatPath}: ${error instanceof Error ? error.message : "Request failed"}`,
+          `${host}${chatPath}: ${errorMessage(error, "Request failed")}`,
         );
       }
     }
@@ -213,7 +213,7 @@ export async function runOllamaPostProcessing(
         };
       } catch (error) {
         errors.push(
-          `${host}${chatPath}: ${error instanceof Error ? error.message : "Request failed"}`,
+          `${host}${chatPath}: ${errorMessage(error, "Request failed")}`,
         );
       }
     }

@@ -6,7 +6,7 @@
 // fallback) is computed inside this module since it's Mistral-specific URL
 // shape logic, not a route concern.
 
-import { ApiRouteError } from "@/lib/api-error";
+import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
 import { parseServiceError } from "@/lib/ocr/error-parsing";
 import { normalizeMistralEndpoint as normalizeMistralEndpointBase } from "@/lib/ocr/provider-normalization";
@@ -154,7 +154,7 @@ export async function runMistralOcr(
       throw error instanceof ApiRouteError
         ? error
         : new ApiRouteError(
-            error instanceof Error ? error.message : "Mistral OCR request failed",
+            errorMessage(error, "Mistral OCR request failed"),
             502,
           );
     }
