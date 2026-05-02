@@ -49,6 +49,8 @@ import {
   authHasScope,
   requireScope,
   authenticateMutation,
+  withAuth,
+  withMutationAuth,
   type AuthContext,
 } from "@/lib/auth/request";
 
@@ -434,5 +436,149 @@ describe("authenticateMutation", () => {
     }
     // isTrustedMutationRequest must NOT have been called for api-key path.
     expect(mockIsTrustedMutationRequest).not.toHaveBeenCalled();
+  });
+});
+
+describe("withAuth higher-order wrapper", () => {
+  function setupSessionAuth() {
+    mockExtractBearerToken.mockReturnValue(null);
+    mockVerifySessionToken.mockResolvedValue({ userId: "u1" });
+    mockGetAuthCookieName.mockReturnValue("estracto_session");
+  }
+
+  it("passes auth context to the inner handler when authenticated and scope OK", async () => {
+    setupSessionAuth();
+    const handler = vi.fn(async (_req, _ctx) => new Response("ok"));
+    const wrapped = withAuth("ocr:read", handler);
+    const req = makeRequest({ cookie: "estracto_session=valid" });
+    const resp = await wrapped(req);
+
+    expect(resp.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+    const ctxArg = handler.mock.calls[0][1] as { auth: AuthContext };
+    expect(ctxArg.auth.method).toBe("session");
+    expect(ctxArg.auth.userId).toBe("u1");
+  });
+
+  it("returns 401 when not authenticated; handler not called", async () => {
+    mockExtractBearerToken.mockReturnValue(null);
+    mockVerifySessionToken.mockResolvedValue(null);
+    const handler = vi.fn();
+    const wrapped = withAuth("ocr:read", handler);
+
+    const resp = await wrapped(makeRequest());
+    expect(resp.status).toBe(401);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when scope is missing; handler not called", async () => {
+    mockExtractBearerToken.mockReturnValue("extr_x");
+    mockIsLikelyApiKey.mockReturnValue(true);
+    mockHashApiKey.mockResolvedValue("hashed");
+    mockDb.apiKey.findUnique.mockResolvedValue({
+      id: "k1",
+      userId: "u1",
+      keyHash: "hashed",
+      revokedAt: null,
+      scopes: '["ocr:read"]',
+      rateLimitPerMinute: null,
+      monthlyResetAt: new Date(),
+    });
+    mockCompareKeyHashes.mockReturnValue(true);
+    const handler = vi.fn();
+    const wrapped = withAuth("settings:write", handler);
+
+    const resp = await wrapped(makeRequest({ authorization: "Bearer extr_x" }));
+    expect(resp.status).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("converts thrown errors via handleApiError (returns 500 JSON)", async () => {
+    setupSessionAuth();
+    const wrapped = withAuth("ocr:read", async () => {
+      throw new Error("boom");
+    });
+    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    expect(resp.status).toBe(500);
+    const body = await resp.json();
+    expect(body.error).toBe("boom");
+  });
+
+  it("preserves params in the context object", async () => {
+    setupSessionAuth();
+    const handler = vi.fn(async (_req, ctx) => {
+      const params = await ctx.params;
+      return Response.json({ id: (params as { id: string }).id });
+    });
+    const wrapped = withAuth<{ id: string }>("ocr:read", handler);
+    const req = makeRequest({ cookie: "estracto_session=v" });
+    const resp = await wrapped(req, { params: Promise.resolve({ id: "abc" }) });
+    const body = await resp.json();
+    expect(body.id).toBe("abc");
+  });
+});
+
+describe("withMutationAuth higher-order wrapper", () => {
+  function setupSessionAuth() {
+    mockExtractBearerToken.mockReturnValue(null);
+    mockVerifySessionToken.mockResolvedValue({ userId: "u1" });
+    mockGetAuthCookieName.mockReturnValue("estracto_session");
+  }
+
+  it("returns 200 when session auth + trusted origin + scope OK", async () => {
+    setupSessionAuth();
+    mockIsTrustedMutationRequest.mockReturnValue(true);
+    const handler = vi.fn(async () => new Response("ok"));
+    const wrapped = withMutationAuth("settings:write", handler);
+
+    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    expect(resp.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("returns 403 when session is untrusted origin (CSRF guard); handler not called", async () => {
+    setupSessionAuth();
+    mockIsTrustedMutationRequest.mockReturnValue(false);
+    const handler = vi.fn();
+    const wrapped = withMutationAuth("settings:write", handler);
+
+    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    expect(resp.status).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("API key auth bypasses the origin check", async () => {
+    mockExtractBearerToken.mockReturnValue("extr_x");
+    mockIsLikelyApiKey.mockReturnValue(true);
+    mockHashApiKey.mockResolvedValue("hashed");
+    mockDb.apiKey.findUnique.mockResolvedValue({
+      id: "k1",
+      userId: "u1",
+      keyHash: "hashed",
+      revokedAt: null,
+      scopes: '["*"]',
+      rateLimitPerMinute: null,
+      monthlyResetAt: new Date(),
+    });
+    mockCompareKeyHashes.mockReturnValue(true);
+    mockIsTrustedMutationRequest.mockReturnValue(false); // shouldn't matter
+    const handler = vi.fn(async () => new Response("ok"));
+    const wrapped = withMutationAuth("settings:write", handler);
+
+    const resp = await wrapped(makeRequest({ authorization: "Bearer extr_x" }));
+    expect(resp.status).toBe(200);
+    expect(mockIsTrustedMutationRequest).not.toHaveBeenCalled();
+  });
+
+  it("converts thrown errors via handleApiError", async () => {
+    setupSessionAuth();
+    mockIsTrustedMutationRequest.mockReturnValue(true);
+    const wrapped = withMutationAuth("settings:write", async () => {
+      throw new Error("write failed");
+    });
+    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    expect(resp.status).toBe(500);
+    const body = await resp.json();
+    expect(body.error).toBe("write failed");
   });
 });

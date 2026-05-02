@@ -1,26 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { handleApiError, parseJsonBody } from "@/lib/api-error";
-import { authenticateMutation, requireScope } from "@/lib/auth/request";
+import { parseJsonBody } from "@/lib/api-error";
+import { withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 
 const MAX_NAME_LENGTH = 80;
 const MAX_INSTRUCTION_LENGTH = 6000;
 
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const result = await authenticateMutation(request);
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
-    }
-    const scopeError = requireScope(result.auth, "presets:write");
-    if (scopeError) return scopeError;
-    const userId = result.auth.userId;
-
-    const { id } = await context.params;
+export const PATCH = withMutationAuth<{ id: string }>(
+  "presets:write",
+  async (request: NextRequest, { params, auth }) => {
+    const { id } = await params;
     if (!id) {
       return NextResponse.json({ error: "Preset id is required" }, { status: 400 });
     }
@@ -55,42 +45,28 @@ export async function PATCH(
     }
 
     const updated = await db.outputPreset.updateMany({
-      where: { id, userId },
+      where: { id, userId: auth.userId },
       data,
     });
     if (updated.count === 0) {
       return NextResponse.json({ error: "Preset not found" }, { status: 404 });
     }
     return NextResponse.json({ updated: updated.count });
-  } catch (error) {
-    return handleApiError(error);
-  }
-}
+  },
+);
 
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const result = await authenticateMutation(request);
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
-    }
-    const scopeError = requireScope(result.auth, "presets:write");
-    if (scopeError) return scopeError;
-    const userId = result.auth.userId;
-
-    const { id } = await context.params;
+export const DELETE = withMutationAuth<{ id: string }>(
+  "presets:write",
+  async (_request: NextRequest, { params, auth }) => {
+    const { id } = await params;
     if (!id) {
       return NextResponse.json({ error: "Preset id is required" }, { status: 400 });
     }
 
-    const deleted = await db.outputPreset.deleteMany({ where: { id, userId } });
+    const deleted = await db.outputPreset.deleteMany({ where: { id, userId: auth.userId } });
     if (deleted.count === 0) {
       return NextResponse.json({ error: "Preset not found" }, { status: 404 });
     }
     return NextResponse.json({ deleted: deleted.count });
-  } catch (error) {
-    return handleApiError(error);
-  }
-}
+  },
+);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { Prisma } from "@prisma/client";
 
+import { handleApiError } from "@/lib/api-error";
 import {
   compareKeyHashes,
   extractBearerToken,
@@ -166,4 +167,75 @@ export async function authenticateMutation(
     return { ok: false, status: 403, error: "Invalid request origin" };
   }
   return { ok: true, auth };
+}
+
+// ----------------------------------------------------------------------
+// Higher-order route wrappers — eliminate the repeated boilerplate of
+// (1) authenticate (2) check scope (3) wrap in try/catch + handleApiError
+// that 12+ route handlers were carrying inline. Each wrapper passes the
+// resolved AuthContext and the original Next.js context (with params)
+// to the inner handler so handlers can focus on business logic.
+// ----------------------------------------------------------------------
+
+export type RouteHandlerContext<P = unknown> = {
+  params: Promise<P>;
+};
+
+export type AuthenticatedHandler<P = unknown> = (
+  request: NextRequest,
+  ctx: RouteHandlerContext<P> & { auth: AuthContext },
+) => Promise<Response | NextResponse> | Response | NextResponse;
+
+/**
+ * Wrap a GET-style handler with auth + scope check + handleApiError.
+ * Uses authenticateRequest (cookie or bearer); does NOT enforce the
+ * CSRF-style origin check — use withMutationAuth for state-changing
+ * methods (POST/PUT/PATCH/DELETE).
+ */
+export function withAuth<P = unknown>(
+  scope: Scope,
+  handler: AuthenticatedHandler<P>,
+) {
+  return async (
+    request: NextRequest,
+    ctx: RouteHandlerContext<P> = { params: Promise.resolve({} as P) },
+  ): Promise<Response> => {
+    try {
+      const auth = await authenticateRequest(request);
+      if (!auth) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const scopeError = requireScope(auth, scope);
+      if (scopeError) return scopeError;
+      return await handler(request, { ...ctx, auth });
+    } catch (error) {
+      return handleApiError(error);
+    }
+  };
+}
+
+/**
+ * Wrap a mutation handler (POST/PUT/PATCH/DELETE) with auth + origin
+ * check + scope check + handleApiError.
+ */
+export function withMutationAuth<P = unknown>(
+  scope: Scope,
+  handler: AuthenticatedHandler<P>,
+) {
+  return async (
+    request: NextRequest,
+    ctx: RouteHandlerContext<P> = { params: Promise.resolve({} as P) },
+  ): Promise<Response> => {
+    try {
+      const result = await authenticateMutation(request);
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status });
+      }
+      const scopeError = requireScope(result.auth, scope);
+      if (scopeError) return scopeError;
+      return await handler(request, { ...ctx, auth: result.auth });
+    } catch (error) {
+      return handleApiError(error);
+    }
+  };
 }

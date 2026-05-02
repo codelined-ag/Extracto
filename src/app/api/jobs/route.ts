@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus } from "@prisma/client";
 
-import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
+import { withAuth, withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-import { handleApiError } from "@/lib/api-error";
 
 const MAX_PAGE_SIZE = 100;
 
@@ -25,91 +24,67 @@ const parseStatusFilter = (value: string | null): OcrJobStatus | null | undefine
     : null;
 };
 
-export async function GET(request: NextRequest) {
-  try {
-    const auth = await authenticateRequest(request);
-    if (!auth) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const scopeError = requireScope(auth, "ocr:read");
-    if (scopeError) return scopeError;
-    const userId = auth.userId;
+export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) => {
+  const { searchParams } = new URL(request.url);
+  const limit = parseLimit(searchParams.get("limit"));
+  const rawStatus = searchParams.get("status");
+  const statusFilter = parseStatusFilter(rawStatus);
 
-    const { searchParams } = new URL(request.url);
-    const limit = parseLimit(searchParams.get("limit"));
-    const rawStatus = searchParams.get("status");
-    const statusFilter = parseStatusFilter(rawStatus);
-
-    if (rawStatus && statusFilter === null) {
-      return NextResponse.json(
-        {
-          error: "Invalid status filter",
-          validStatus: Object.values(OcrJobStatus),
-        },
-        { status: 400 }
-      );
-    }
-
-    const jobs = await db.ocrJob.findMany({
-      orderBy: { createdAt: "desc" },
-      take: limit,
-      where: {
-        userId,
-        ...(statusFilter ? { status: statusFilter } : {}),
+  if (rawStatus && statusFilter === null) {
+    return NextResponse.json(
+      {
+        error: "Invalid status filter",
+        validStatus: Object.values(OcrJobStatus),
       },
-      select: {
-        id: true,
-        status: true,
-        fileName: true,
-        sourcePreview: true,
-        model: true,
-        createdAt: true,
-        completedAt: true,
-        processingMs: true,
-        metadata: true,
-        errorMessage: true,
-      },
-    });
-
-    return NextResponse.json({ jobs });
-  } catch (error) {
-    return handleApiError(error);
+      { status: 400 }
+    );
   }
-}
 
-export async function DELETE(request: NextRequest) {
-  try {
-    const authResult = await authenticateMutation(request);
-    if (!authResult.ok) {
-      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
-    }
-    const scopeError = requireScope(authResult.auth, "ocr:control");
-    if (scopeError) return scopeError;
-    const userId = authResult.auth.userId;
+  const jobs = await db.ocrJob.findMany({
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    where: {
+      userId: auth.userId,
+      ...(statusFilter ? { status: statusFilter } : {}),
+    },
+    select: {
+      id: true,
+      status: true,
+      fileName: true,
+      sourcePreview: true,
+      model: true,
+      createdAt: true,
+      completedAt: true,
+      processingMs: true,
+      metadata: true,
+      errorMessage: true,
+    },
+  });
 
-    const { searchParams } = new URL(request.url);
-    const rawStatus = searchParams.get("status");
-    const statusFilter = parseStatusFilter(rawStatus);
+  return NextResponse.json({ jobs });
+});
 
-    if (rawStatus && statusFilter === null) {
-      return NextResponse.json(
-        {
-          error: "Invalid status filter",
-          validStatus: Object.values(OcrJobStatus),
-        },
-        { status: 400 }
-      );
-    }
+export const DELETE = withMutationAuth("ocr:control", async (request: NextRequest, { auth }) => {
+  const { searchParams } = new URL(request.url);
+  const rawStatus = searchParams.get("status");
+  const statusFilter = parseStatusFilter(rawStatus);
 
-    const bulk = await db.ocrJob.deleteMany({
-      where: {
-        userId,
-        ...(statusFilter ? { status: statusFilter } : {}),
+  if (rawStatus && statusFilter === null) {
+    return NextResponse.json(
+      {
+        error: "Invalid status filter",
+        validStatus: Object.values(OcrJobStatus),
       },
-    });
-
-    return NextResponse.json({ deleted: bulk.count });
-  } catch (error) {
-    return handleApiError(error);
+      { status: 400 }
+    );
   }
-}
+
+  const bulk = await db.ocrJob.deleteMany({
+    where: {
+      userId: auth.userId,
+      ...(statusFilter ? { status: statusFilter } : {}),
+    },
+  });
+
+  return NextResponse.json({ deleted: bulk.count });
+});

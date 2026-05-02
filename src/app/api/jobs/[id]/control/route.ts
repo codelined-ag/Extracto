@@ -1,25 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
-import { handleApiError, parseJsonBody } from "@/lib/api-error";
-import { authenticateMutation, requireScope } from "@/lib/auth/request";
+import { parseJsonBody } from "@/lib/api-error";
+import { withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { abortOcrJobRequests, isOcrJobRunning, requestOcrJobStop } from "@/lib/ocr/job-control";
 
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const authResult = await authenticateMutation(request);
-    if (!authResult.ok) {
-      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
-    }
-    const scopeError = requireScope(authResult.auth, "ocr:control");
-    if (scopeError) return scopeError;
-    const userId = authResult.auth.userId;
-
-    const { id } = await context.params;
+export const POST = withMutationAuth<{ id: string }>(
+  "ocr:control",
+  async (request: NextRequest, { params, auth }) => {
+    const { id } = await params;
     if (!id) {
       return NextResponse.json({ error: "Job id is required" }, { status: 400 });
     }
@@ -31,7 +21,7 @@ export async function POST(
     }
 
     const job = await db.ocrJob.findFirst({
-      where: { id, userId },
+      where: { id, userId: auth.userId },
       select: {
         id: true,
         status: true,
@@ -70,7 +60,5 @@ export async function POST(
       stopRequested: true,
       running,
     });
-  } catch (error) {
-    return handleApiError(error);
-  }
-}
+  },
+);

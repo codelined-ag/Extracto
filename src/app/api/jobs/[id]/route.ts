@@ -1,30 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
+import { withAuth, withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { readResultJson, readResultText } from "@/lib/result-store";
-import { handleApiError } from "@/lib/api-error";
 
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const auth = await authenticateRequest(request);
-    if (!auth) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const scopeError = requireScope(auth, "ocr:read");
-    if (scopeError) return scopeError;
-    const userId = auth.userId;
-
-    const { id } = await context.params;
+export const GET = withAuth<{ id: string }>(
+  "ocr:read",
+  async (_request: NextRequest, { params, auth }) => {
+    const { id } = await params;
     if (!id) {
       return NextResponse.json({ error: "Job id is required" }, { status: 400 });
     }
 
     const row = await db.ocrJob.findFirst({
-      where: { id, userId },
+      where: { id, userId: auth.userId },
       select: {
         id: true,
         status: true,
@@ -68,31 +57,19 @@ export async function GET(
     };
 
     return NextResponse.json({ job });
-  } catch (error) {
-    return handleApiError(error);
-  }
-}
+  },
+);
 
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const authResult = await authenticateMutation(request);
-    if (!authResult.ok) {
-      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
-    }
-    const scopeError = requireScope(authResult.auth, "ocr:control");
-    if (scopeError) return scopeError;
-    const userId = authResult.auth.userId;
-
-    const { id } = await context.params;
+export const DELETE = withMutationAuth<{ id: string }>(
+  "ocr:control",
+  async (_request: NextRequest, { params, auth }) => {
+    const { id } = await params;
     if (!id) {
       return NextResponse.json({ error: "Job id is required" }, { status: 400 });
     }
 
     const deleteResult = await db.ocrJob.deleteMany({
-      where: { id, userId },
+      where: { id, userId: auth.userId },
     });
 
     if (deleteResult.count === 0) {
@@ -100,7 +77,5 @@ export async function DELETE(
     }
 
     return NextResponse.json({ deleted: deleteResult.count });
-  } catch (error) {
-    return handleApiError(error);
-  }
-}
+  },
+);
