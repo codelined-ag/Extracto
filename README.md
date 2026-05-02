@@ -513,14 +513,43 @@ npm run build
 ```text
 src/
   app/
-    api/        # OCR, auth, models, settings, history endpoints
-    auth/       # Auth page
-    page.tsx    # Main OCR UI
+    api/                 # browser-UI-internal routes (cookie auth, no contract)
+      auth/              #   login/signup/signout/session
+      ocr/               #   OCR submit + GET model catalog + per-job settings
+      jobs/              #   list/get/control/stream OCR jobs
+      models/            #   thin shim over pipeline.getModelCatalog
+      settings/          #   per-user provider settings
+    api/v1/              # stable bearer-auth routes (versioned API)
+      ocr/batch/         #   bulk submit
+      openai/            #   OpenAI-compatible chat-completions adapter
+      keys/              #   API key mint/list/revoke (session-only)
+      presets/           #   output presets
+      webhooks/          #   webhook subscriptions
+      search/            #   full-text job search
+      metrics/           #   Prometheus exposition
+      export/kb/         #   chunk + embed + push to vector store
+    auth/                # auth page
+    page.tsx             # main OCR workspace UI
   lib/
-    auth/       # Session token helpers
-    db.ts       # Prisma client
-    settings-store.ts
-    host-normalization.ts
+    api-error.ts         # ApiRouteError + handleApiError + errorMessage helper
+    api-types.ts         # client-safe leaf module
+    auth/                # session tokens, API keys, scopes, route wrappers
+    background/          # webhooks delivery, retention sweep, watched folders
+    db.ts                # Prisma client
+    endpoint-policy.ts   # outbound URL allowlist
+    host-normalization.ts# Ollama host candidate generation
+    kb/                  # KB export: chunking, embeddings, vector stores
+    ocr/                 # OCR pipeline + per-provider runners
+      pipeline.ts        #   processOcrJobInBackground orchestrator
+      providers/         #   per-provider HTTP runners (ollama/mistral/compat)
+      job-control.ts     #   in-memory job registry + abort controllers
+      job-seed.ts        #   pure helpers for orchestrator state init
+      settings.ts        #   per-job advanced settings + post-processing
+      *.ts               #   error-parsing, markdown-routing, text-extract, etc.
+    rate-limit.ts        # in-memory rate-limit window
+    request-security.ts  # CSRF-style origin check + client IP
+    result-store.ts      # local + S3-compat artifact offload
+    settings-store.ts    # per-user provider config (filesystem-backed)
 prisma/
   schema.prisma
 docker-compose.yml
