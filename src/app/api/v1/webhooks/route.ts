@@ -8,7 +8,7 @@ import {
   isSupportedWebhookEvent,
   serializeEventList,
   type WebhookEvent,
-} from "@/lib/webhooks";
+} from "@/lib/background/webhooks";
 
 const MAX_WEBHOOKS_PER_USER = 20;
 const MAX_URL_LENGTH = 1024;

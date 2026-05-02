@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual as cryptoTimingSafeEqual } from "node:crypt
 import { NextRequest } from "next/server";
 
 import { db } from "@/lib/db";
-import { formatPrometheus, getCounters } from "@/lib/metrics";
+import { formatPrometheus, getCounters } from "@/lib/background/metrics";
 import { getOcrQueueDepth } from "@/lib/ocr/job-control";
 
 const METRICS_TOKEN = process.env.METRICS_TOKEN?.trim() || "";
