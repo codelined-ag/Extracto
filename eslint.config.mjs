@@ -38,10 +38,11 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-case-declarations": "off",
     "no-fallthrough": "off",
     "no-mixed-spaces-and-tabs": "off",
-    "no-redeclare": "off",
+    "no-redeclare": "error",
     "no-undef": "off",
-    "no-unreachable": "off",
+    "no-unreachable": "error",
     "no-useless-escape": "off",
+    "react-hooks/rules-of-hooks": "error",
   },
 }, {
   ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "coverage/**", "next-env.d.ts", "examples/**", "skills"]

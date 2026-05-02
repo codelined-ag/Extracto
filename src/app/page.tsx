@@ -38,6 +38,7 @@ import { SettingsIcon } from"@/components/ui/settings";
 import { SparklesIcon } from"@/components/ui/sparkles";
 import { XIcon } from"@/components/ui/x";
 import { SearchIcon } from"@/components/ui/search";
+import { UserIcon } from"@/components/ui/user";
 import { ZapIcon } from"@/components/ui/zap";
 import { useRouter } from"next/navigation";
 
@@ -548,7 +549,7 @@ export default function ExtractoPage() {
  const [apiKeyDirty, setApiKeyDirty] = React.useState(false);
  const [isDragOver, setIsDragOver] = React.useState(false);
  const [isProcessing, setIsProcessing] = React.useState(false);
- const [uiLanguage, setUiLanguage] = React.useState<UiLanguage>("it");
+ const [uiLanguage, setUiLanguage] = React.useState<UiLanguage>("en");
  const [selectedFileId, setSelectedFileId] = React.useState<string | null>(null);
  const [copied, setCopied] = React.useState<"md"|"json"| null>(null);
  const [apiSettingsOpen, setApiSettingsOpen] = React.useState(false);
@@ -1035,6 +1036,11 @@ export default function ExtractoPage() {
  const storedLanguage = window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
  if (isUiLanguage(storedLanguage)) {
  setUiLanguage(storedLanguage);
+ } else {
+ const browserLang = (navigator.language || "en").slice(0, 2).toLowerCase();
+ if (isUiLanguage(browserLang)) {
+ setUiLanguage(browserLang);
+ }
  }
  } catch {
  // ignore storage errors
@@ -1863,12 +1869,9 @@ export default function ExtractoPage() {
  >
  <div className="relative grid place-items-center size-9 text-primary transition-transform duration-200 group-hover:rotate-[-4deg]">
  <ScanLine className="h-5 w-5"/>
- <motion.div
- className="absolute -top-1 -right-1"animate={{ scale: [1, 1.18, 1], rotate: [0, 8, 0] }}
- transition={{ duration: 2.4, repeat: Infinity, ease:"easeInOut"}}
- >
- <SparklesIcon size={12} className="inline-flex items-center justify-center text-accent-foreground"/>
- </motion.div>
+ <div className="absolute -top-1 -right-1 text-accent-foreground">
+ <SparklesIcon size={12} className="inline-flex items-center justify-center"/>
+ </div>
  </div>
  <div className="flex items-baseline gap-0.5 overflow-visible">
  <span className="wordmark font-display text-2xl leading-tight inline-block pr-1.5 overflow-visible">Extracto</span>
@@ -1905,6 +1908,34 @@ export default function ExtractoPage() {
  </TooltipTrigger>
  <TooltipContent>{t("Cambia tema","Toggle theme","Changer de thème","Cambiar tema","Theme wechseln")}</TooltipContent>
  </Tooltip>
+
+ <DropdownMenu>
+ <Tooltip>
+ <TooltipTrigger asChild>
+ <DropdownMenuTrigger asChild>
+ <Button variant="ghost"size="icon"className="group"aria-label={t("Account","Account","Compte","Cuenta","Konto")}>
+ <UserIcon size={16} className="inline-flex items-center justify-center text-foreground/80 group-hover:text-primary"/>
+ </Button>
+ </DropdownMenuTrigger>
+ </TooltipTrigger>
+ <TooltipContent>{t("Account","Account","Compte","Cuenta","Konto")}</TooltipContent>
+ </Tooltip>
+ <DropdownMenuContent align="end"className="min-w-[12rem]">
+ <DropdownMenuItem onSelect={() => { setApiSettingsDraft(apiSettings); setApiKeyDirty(false); setKbDefaultsDraft(kbDefaults); setKbEmbeddingKeyDirty(false); setKbStoreKeyDirty(false); setSettingsTab("provider"); setApiSettingsOpen(true); }}>
+ <SettingsIcon size={16} className="inline-flex"/>
+ <span>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</span>
+ </DropdownMenuItem>
+ <DropdownMenuItem onSelect={() => { setApiSettingsDraft(apiSettings); setApiKeyDirty(false); setKbDefaultsDraft(kbDefaults); setKbEmbeddingKeyDirty(false); setKbStoreKeyDirty(false); setSettingsTab("kb"); setApiSettingsOpen(true); }}>
+ <DatabaseBackupIcon size={16} className="inline-flex"/>
+ <span>{t("Knowledge base","Knowledge base","Base de connaissances","Base de conocimiento","Wissensdatenbank")}</span>
+ </DropdownMenuItem>
+ <DropdownMenuSeparator />
+ <DropdownMenuItem variant="destructive"onSelect={signOut} disabled={isSigningOut}>
+ <LogoutIcon size={16} className="inline-flex"/>
+ <span>{t("Esci","Sign out","Se déconnecter","Cerrar sesión","Abmelden")}</span>
+ </DropdownMenuItem>
+ </DropdownMenuContent>
+ </DropdownMenu>
  </div>
  </div>
  </motion.header>
@@ -2504,7 +2535,7 @@ export default function ExtractoPage() {
  <div className="flex flex-wrap items-center gap-2 text-xs">
  <span className={cn(
 "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium",
- selectedHistoryJob.status ==="FAILED"?"bg-destructive/12 text-destructive"
+ selectedHistoryJob.status ==="FAILED"?"bg-destructive/15 text-destructive"
  : selectedHistoryJob.status ==="COMPLETED"?"bg-[oklch(0.55_0.13_150)]/12 text-[oklch(0.55_0.13_150)]"
  :"bg-accent text-accent-foreground",
  )}>
@@ -2653,12 +2684,9 @@ export default function ExtractoPage() {
  >
  <div className="relative">
  <Upload className="h-10 w-10 text-muted-foreground mb-3"/>
- <motion.div
- className="absolute -top-1 -right-1"animate={{ rotate: [0, 10, -10, 0] }}
- transition={{ duration: 1.5, repeat: Infinity }}
- >
+ <div className="absolute -top-1 -right-1">
  <FileUp className="h-4 w-4 text-primary"/>
- </motion.div>
+ </div>
  </div>
  </motion.div>
  <p className="text-sm font-medium mb-1">
@@ -2684,7 +2712,9 @@ export default function ExtractoPage() {
  <div className="flex items-center gap-2">
  <FileTextIcon size={16} className="inline-flex items-center justify-center text-primary"/>
  <span className="text-sm font-medium">
- {files.length} {t(files.length !== 1 ?"file":"file", files.length !== 1 ?"files":"file")}
+ {files.length} {files.length === 1
+ ? t("file","file","fichier","archivo","Datei")
+ : t("file","files","fichiers","archivos","Dateien")}
  </span>
  {completedCount > 0 && (
  <Badge variant="secondary"className="text-xs">
@@ -3005,7 +3035,7 @@ export default function ExtractoPage() {
  initial={{ x: 20, opacity: 0 }}
  animate={{ x: 0, opacity: 1 }}
  transition={{ duration: 0.4, delay: 0.2 }}
- className="flex flex-col min-h-[420px] md:min-h-[500px] lg:min-h-0">
+ className={cn("flex flex-col lg:min-h-0", selectedFile ?"min-h-[420px] md:min-h-[500px]":"min-h-0")}>
  {selectedFile ? (
  <Card className="flex-1 flex flex-col min-h-0">
  <CardContent className="flex-1 flex flex-col p-0 min-h-0">
@@ -3159,7 +3189,7 @@ export default function ExtractoPage() {
  Markdown
  </TabsTrigger>
  <TabsTrigger value="markdown-raw"className="text-xs gap-1.5 h-6 shrink-0 group">
- <FileTextIcon size={12} className="inline-flex items-center justify-center text-lime-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
+ <FileTextIcon size={12} className="inline-flex items-center justify-center text-accent-foreground transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
  {t("Markdown grezzo","Markdown raw","Markdown brut","Markdown sin procesar","Roh-Markdown")}
  </TabsTrigger>
  <TabsTrigger value="json"className="text-xs gap-1.5 h-6 shrink-0 group">
@@ -3245,7 +3275,7 @@ export default function ExtractoPage() {
  key={`${selectedFile.id}-page-${pageNumber}`}
  className={cn(
 "rounded-md p-2 space-y-2",
- processed ?"bg-emerald-50/20":"")}
+ processed ?"bg-[color-mix(in_oklab,oklch(0.62_0.13_150),transparent_88%)]":"")}
  >
  <img
  src={preview}
@@ -3277,7 +3307,7 @@ export default function ExtractoPage() {
  .map((event, idx) => (
  <div
  key={`${event.at ||"event"}-${idx}`}
- className="rounded bg-muted/20 p-2">
+ className="surface-soft rounded-xl p-2">
  <p className="text-[11px] font-medium">
  {event.stage ||"stage"}
  </p>
@@ -3326,7 +3356,13 @@ export default function ExtractoPage() {
  className="max-w-full max-h-[400px] object-contain rounded-md shadow-sm mb-4"/>
  <p className="text-sm font-medium mb-1">{t("Pronto per OCR","Ready for OCR","Prêt pour l'OCR","Listo para OCR","Bereit für OCR")}</p>
  <p className="text-xs text-muted-foreground">
- {t('Clicca"Avvia OCR"per estrarre il testo da questo documento', 'Click"Run OCR"to extract text from this document')}
+ {t(
+'Clicca "Avvia OCR" per estrarre il testo da questo documento',
+'Click "Run OCR" to extract text from this document',
+'Cliquez sur « Lancer l\'OCR » pour extraire le texte de ce document',
+'Pulsa "Iniciar OCR" para extraer el texto de este documento',
+'Klicke auf „OCR starten", um den Text zu extrahieren',
+)}
  </p>
  </div>
  ) : (
@@ -3339,7 +3375,13 @@ export default function ExtractoPage() {
  </div>
  <p className="text-sm font-medium mb-1">{t("Pronto per OCR","Ready for OCR","Prêt pour l'OCR","Listo para OCR","Bereit für OCR")}</p>
  <p className="text-xs text-muted-foreground">
- {t('Clicca"Avvia OCR"per estrarre il testo', 'Click"Run OCR"to extract text')}
+ {t(
+'Clicca "Avvia OCR" per estrarre il testo',
+'Click "Run OCR" to extract text',
+'Cliquez sur « Lancer l\'OCR » pour extraire le texte',
+'Pulsa "Iniciar OCR" para extraer el texto',
+'Klicke auf „OCR starten", um den Text zu extrahieren',
+)}
  </p>
  </motion.div>
  )}
@@ -3397,7 +3439,7 @@ export default function ExtractoPage() {
  rel="noopener noreferrer"
  className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70 hover:text-primary transition-colors"
  >
- {t("github","github","github","github","github")}
+ github
  </a>
  </div>
  </motion.footer>
@@ -3435,7 +3477,7 @@ function HintInfo({ text }: { text: string }) {
  return (
  <Tooltip>
  <TooltipTrigger asChild>
- <button type="button"className="text-muted-foreground/60 hover:text-foreground transition-colors"aria-label="info">
+ <button type="button"className="text-muted-foreground/60 hover:text-foreground transition-colors"aria-label={text}>
  <Info className="h-3 w-3"/>
  </button>
  </TooltipTrigger>
@@ -3444,12 +3486,3 @@ function HintInfo({ text }: { text: string }) {
  );
 }
 
-function ChevronDown({ className }: { className?: string }) {
- return (
- <svg
- xmlns="http://www.w3.org/2000/svg"viewBox="0 0 24 24"fill="none"stroke="currentColor"strokeWidth="2"strokeLinecap="round"strokeLinejoin="round"className={className}
- >
- <path d="m6 9 6 6 6-6"/>
- </svg>
- );
-}

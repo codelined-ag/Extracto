@@ -10,6 +10,7 @@ import {
   serializeEventList,
   type WebhookEvent,
 } from "@/lib/background/webhooks";
+import { isAllowedExternalUrl, parseAllowlist } from "@/lib/url-safety";
 
 const MAX_WEBHOOKS_PER_USER = 20;
 const MAX_URL_LENGTH = 1024;
@@ -69,14 +70,9 @@ export const POST = withMutationAuth("webhooks:write", async (request: NextReque
   if (!url || url.length > MAX_URL_LENGTH) {
     throw new ApiRouteError("url must be a non-empty https/http URL", 400);
   }
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(url);
-  } catch {
-    throw new ApiRouteError("url is not a valid URL", 400);
-  }
-  if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
-    throw new ApiRouteError("url must be http or https", 400);
+  const safety = isAllowedExternalUrl(url, parseAllowlist(process.env.WEBHOOK_ALLOWED_HOSTS));
+  if (!safety.ok) {
+    throw new ApiRouteError(safety.reason ?? "url is not allowed", 400);
   }
 
   const events = parseEventsArray(body.events) ?? (["job.completed", "job.failed"] as WebhookEvent[]);

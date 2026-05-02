@@ -52,7 +52,7 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [mode, setMode] = React.useState<"signin" | "signup">("signin");
   const [loading, setLoading] = React.useState(false);
-  const [uiLanguage, setUiLanguage] = React.useState<UiLanguage>("it");
+  const [uiLanguage, setUiLanguage] = React.useState<UiLanguage>("en");
   const [form, setForm] = React.useState<AuthFormState>({
     email: "",
     password: "",
@@ -82,6 +82,11 @@ export default function AuthPage() {
       const storedLanguage = window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
       if (isUiLanguage(storedLanguage)) {
         setUiLanguage(storedLanguage);
+        return;
+      }
+      const browserLang = (navigator.language || "en").slice(0, 2).toLowerCase();
+      if (isUiLanguage(browserLang)) {
+        setUiLanguage(browserLang);
       }
     } catch {
       // ignore storage errors
@@ -124,15 +129,15 @@ export default function AuthPage() {
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (!isValidEmail(form.email) || form.password.length < 8) {
+    if (!isValidEmail(form.email) || form.password.length < 12) {
       toast({
-        title: t("Quasi", "Almost there", "Presque", "Casi", "Fast geschafft"),
+        title: t("Controlla i dati", "Check your details", "Vérifiez les champs", "Revisa los datos", "Bitte prüfen"),
         description: t(
-          "Servono un'email valida e una password di almeno 8 caratteri.",
-          "We need a real email and a password of at least 8 characters.",
-          "Il faut un email valide et un mot de passe d'au moins 8 caractères.",
-          "Necesitamos un correo válido y una contraseña de al menos 8 caracteres.",
-          "Eine gültige E-Mail und ein Passwort mit mindestens 8 Zeichen reichen.",
+          "Servono un'email valida e una password di almeno 12 caratteri.",
+          "We need a real email and a password of at least 12 characters.",
+          "Il faut un email valide et un mot de passe d'au moins 12 caractères.",
+          "Necesitamos un correo válido y una contraseña de al menos 12 caracteres.",
+          "Eine gültige E-Mail und ein Passwort mit mindestens 12 Zeichen reichen.",
         ),
         variant: "destructive",
       });
@@ -241,10 +246,19 @@ export default function AuthPage() {
 
         <section className="flex w-full max-w-md flex-col justify-center self-center lg:max-w-none lg:justify-self-end lg:max-w-[28rem]">
           <div className="surface-floating paper-grain rounded-[28px] p-8 anim-fade-in-up text-foreground" style={{ ["--i" as string]: 1 } as React.CSSProperties}>
-            <div className="lg:hidden mb-6">
-              <h1 className="wordmark font-display text-5xl leading-none tracking-tight">
+            <div className="lg:hidden mb-6 space-y-2">
+              <h1 className="wordmark font-display text-5xl leading-tight tracking-tight inline-block pr-1.5">
                 Extracto<span className="text-primary not-italic">.</span>
               </h1>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {t(
+                  "Trasforma documenti in testo pulito e modificabile.",
+                  "Turn documents into clean, editable text.",
+                  "Transformez vos documents en texte propre et modifiable.",
+                  "Convierte documentos en texto limpio y editable.",
+                  "Verwandle Dokumente in sauberen, bearbeitbaren Text.",
+                )}
+              </p>
             </div>
 
             <div className="space-y-1.5">
@@ -320,7 +334,7 @@ export default function AuthPage() {
                     label={t("Password", "Password", "Mot de passe", "Contraseña", "Passwort")}
                     value={form.password}
                     onChange={(v) => setForm((c) => ({ ...c, password: v }))}
-                    helper={t("Minimo 8 caratteri.", "Minimum 8 characters.", "Au moins 8 caractères.", "Mínimo 8 caracteres.", "Mindestens 8 Zeichen.")}
+                    helper={t("Minimo 12 caratteri.", "Minimum 12 characters.", "Au moins 12 caractères.", "Mínimo 12 caracteres.", "Mindestens 12 Zeichen.")}
                   />
                   <Button type="submit" disabled={loading} className="w-full group" size="lg">
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}

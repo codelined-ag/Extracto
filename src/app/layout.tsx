@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Manrope, JetBrains_Mono, Fraunces } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -32,7 +32,6 @@ export const metadata: Metadata = {
   authors: [{ name: "Extracto Team" }],
   applicationName: "Extracto",
   manifest: "/manifest.webmanifest",
-  themeColor: "#1d1813",
   appleWebApp: {
     capable: true,
     title: "Extracto",
@@ -53,6 +52,16 @@ export const metadata: Metadata = {
       },
     ],
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fbf7f0" },
+    { media: "(prefers-color-scheme: dark)", color: "#1d1813" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({

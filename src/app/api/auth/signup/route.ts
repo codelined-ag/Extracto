@@ -16,11 +16,24 @@ import { badRequest, isRequestSecure, normalizeEmail, tooManyRequests } from "@/
 const SIGNUP_IP_LIMIT_MAX = 10;
 const SIGNUP_EMAIL_LIMIT_MAX = 5;
 const SIGNUP_WINDOW_MS = 60_000;
+const MIN_PASSWORD_LENGTH = 12;
+
+function isSignupAllowed(): boolean {
+  const flag = (process.env.ALLOW_SIGNUP ?? "1").trim().toLowerCase();
+  return flag === "1" || flag === "true" || flag === "yes" || flag === "on";
+}
 
 export async function POST(request: NextRequest) {
   try {
     if (!isTrustedMutationRequest(request)) {
       return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+    }
+
+    if (!isSignupAllowed()) {
+      return NextResponse.json(
+        { error: "Account registration is disabled on this instance." },
+        { status: 403 },
+      );
     }
 
     const clientIp = getClientIpAddress(request);
@@ -58,8 +71,8 @@ export async function POST(request: NextRequest) {
       return tooManyRequests(emailLimit.retryAfterSeconds);
     }
 
-    if (!email || !password || password.length < 8) {
-      return badRequest("Email and password (minimum 8 chars) are required");
+    if (!email || !password || password.length < MIN_PASSWORD_LENGTH) {
+      return badRequest(`Email and password (minimum ${MIN_PASSWORD_LENGTH} chars) are required`);
     }
 
     const existing = await findUserByEmail(email);
