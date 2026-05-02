@@ -3,8 +3,6 @@
 import * as React from"react";
 import { motion, AnimatePresence } from"framer-motion";
 import {
- Upload,
- FileUp,
  Code,
  AlertCircle,
  ScanLine,
@@ -91,6 +89,8 @@ import { Footer } from "@/app/page-components/footer";
 import { HeaderBar } from "@/app/page-components/header-bar";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { PreviewHeader } from "@/app/page-components/preview-header";
+import { NoSelectionCard } from "@/app/page-components/no-selection-card";
+import { UploadArea } from "@/app/page-components/upload-area";
 import type {
   OcrPageCheckpointView,
   OcrProgressEventView,
@@ -504,7 +504,6 @@ export default function ExtractoPage() {
  const [apiSettingsOpen, setApiSettingsOpen] = React.useState(false);
  const [settingsTab, setSettingsTab] = React.useState<"model"|"provider"|"kb"|"general"|"account">("model");
  const [viewMode, setViewMode] = React.useState<"preview"|"split"|"result">("split");
- const fileInputRef = React.useRef<HTMLInputElement>(null);
  const pdfPagePreviewCacheRef = React.useRef<Record<string, string[]>>({});
  const modelSelectionsRef = React.useRef<ProviderModelSelections>({});
  const postProcessModelSelectionsRef = React.useRef<ProviderModelSelections>({});
@@ -2393,43 +2392,15 @@ export default function ExtractoPage() {
  animate={{ x: 0, opacity: 1 }}
  transition={{ duration: 0.4, delay: 0.1 }}
  className="flex flex-col gap-4 min-h-0 md:overflow-y-auto md:custom-scroll md:pr-1">
- {/* Upload Area */}
- <Card
- className={cn(
-"transition-all duration-300 cursor-pointer",
- isDragOver
- ?"bg-primary/5 scale-[1.02]":"")}
- onDragOver={handleDragOver}
- onDragLeave={handleDragLeave}
- onDrop={handleDrop}
- onClick={() => fileInputRef.current?.click()}
- >
- <CardContent className="flex flex-col items-center justify-center py-8 px-4">
- <motion.div
- animate={isDragOver ? { scale: 1.1, y: -5 } : { scale: 1, y: 0 }}
- transition={{ type:"spring", stiffness: 300 }}
- >
- <div className="relative">
- <Upload className="h-10 w-10 text-muted-foreground mb-3"/>
- <div className="absolute -top-1 -right-1">
- <FileUp className="h-4 w-4 text-primary"/>
- </div>
- </div>
- </motion.div>
- <p className="text-sm font-medium mb-1">
- {isDragOver ? t("Rilascia qui i file","Drop files here","Déposez les fichiers ici","Suelta los archivos aquí","Dateien hier ablegen") : t("Trascina i documenti o clicca per caricare","Drop documents or click to upload","Glissez-déposez des documents ou cliquez pour téléverser","Arrastra documentos o haz clic para subir","Dokumente hier ablegen oder klicken, um hochzuladen")}
- </p>
- <p className="text-xs text-muted-foreground">
- {t("Supporta immagini, PDF e documenti","Supports images, PDFs, and documents","Prend en charge images, PDF et documents","Admite imágenes, PDF y documentos","Unterstützt Bilder, PDFs und Dokumente")}
- </p>
- </CardContent>
- </Card>
-
- <input
- ref={fileInputRef}
- type="file"multiple
- accept="image/*,.pdf,.doc,.docx"className="hidden"onChange={(e) => e.target.files && handleFiles(e.target.files)}
- />
+            {/* Upload Area */}
+            <UploadArea
+              isDragOver={isDragOver}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onPickFiles={handleFiles}
+              t={t}
+            />
 
  {/* File List */}
  <Card className="min-h-[220px] overflow-hidden">
@@ -2944,23 +2915,7 @@ export default function ExtractoPage() {
  </CardContent>
  </Card>
  ) : (
- <Card className="flex-1 flex items-center justify-center">
- <CardContent className="text-center py-10">
- <motion.div
- initial={{ opacity: 0, y: 10 }}
- animate={{ opacity: 1, y: 0 }}
- transition={{ delay: 0.4 }}
- >
- <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center text-primary">
- <SparklesIcon size={48} className="inline-flex items-center justify-center"/>
- </div>
- <h3 className="text-lg font-semibold mb-2">{t("Seleziona un documento","Select a document","Choisir un document","Selecciona un documento","Dokument wählen")}</h3>
- <p className="text-sm text-muted-foreground max-w-xs mx-auto">
- {t("Carica file e selezionane uno per vedere il risultato OCR","Upload files and select one to view the OCR extraction results","Téléversez des fichiers et sélectionnez-en un pour voir le résultat OCR","Sube archivos y selecciona uno para ver el resultado del OCR","Dateien hochladen und eine auswählen, um das OCR-Ergebnis zu sehen")}
- </p>
- </motion.div>
- </CardContent>
- </Card>
+ <NoSelectionCard t={t} />
  )}
  </motion.div>
  </div>
