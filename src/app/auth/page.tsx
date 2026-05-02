@@ -2,10 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Languages } from "lucide-react";
+import { ArrowRight, Languages, Loader2, Mail, Lock, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -32,6 +31,13 @@ type UiLanguage = "it" | "en" | "fr" | "es" | "de";
 const UI_LANGUAGE_STORAGE_KEY = "extracto:ui-language:v1";
 
 const UI_LANGUAGES: UiLanguage[] = ["it", "en", "fr", "es", "de"];
+const UI_LANGUAGE_LABELS: Record<UiLanguage, string> = {
+  it: "IT",
+  en: "EN",
+  fr: "FR",
+  es: "ES",
+  de: "DE",
+};
 
 function isUiLanguage(value: unknown): value is UiLanguage {
   return typeof value === "string" && (UI_LANGUAGES as string[]).includes(value);
@@ -166,108 +172,237 @@ export default function AuthPage() {
     return null;
   }
 
+  const submitLabelSignIn = t("Accedi", "Sign in", "Se connecter", "Iniciar sesión", "Anmelden");
+  const submitLabelSignUp = t("Crea account", "Create account", "Créer un compte", "Crear cuenta", "Konto erstellen");
+
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10">
-      <Card className="w-full max-w-md border-2">
-        <CardHeader>
-          <div className="flex items-center justify-between gap-3">
-            <CardTitle>{t("Accesso Extracto", "Extracto Access", "Accès Extracto", "Acceso a Extracto", "Extracto-Zugang")}</CardTitle>
-            <Select value={uiLanguage} onValueChange={(value) => setUiLanguage(value as UiLanguage)}>
-              <SelectTrigger className="w-[90px] h-8" aria-label={t("Lingua", "Language", "Langue", "Idioma", "Sprache")}>
-                <div className="flex items-center gap-1.5">
-                  <Languages className="h-3.5 w-3.5 text-primary" />
-                  <SelectValue />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="it">IT</SelectItem>
-                <SelectItem value="en">EN</SelectItem>
-              </SelectContent>
-            </Select>
+    <div className="min-h-screen w-full overflow-y-auto">
+      <div className="absolute inset-0 -z-10 paper-grain text-foreground pointer-events-none" />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-40 -right-32 -z-10 h-[42rem] w-[42rem] rounded-full opacity-60 anim-aurora"
+        style={{
+          background:
+            "radial-gradient(closest-side, color-mix(in oklab, var(--primary), transparent 70%), transparent 70%)",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-32 -left-24 -z-10 h-[34rem] w-[34rem] rounded-full opacity-60 anim-aurora"
+        style={{
+          animationDelay: "-8s",
+          background:
+            "radial-gradient(closest-side, color-mix(in oklab, var(--accent), transparent 60%), transparent 70%)",
+        }}
+      />
+
+      <div className="relative mx-auto grid min-h-screen max-w-6xl grid-cols-1 gap-12 px-6 py-10 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:px-12 lg:py-16">
+        <header className="absolute top-6 right-6 z-10 lg:top-8 lg:right-8">
+          <Select value={uiLanguage} onValueChange={(value) => setUiLanguage(value as UiLanguage)}>
+            <SelectTrigger size="sm" aria-label={t("Lingua", "Language", "Langue", "Idioma", "Sprache")}>
+              <Languages className="h-3.5 w-3.5 text-primary" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              {UI_LANGUAGES.map((lang) => (
+                <SelectItem key={lang} value={lang}>{UI_LANGUAGE_LABELS[lang]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </header>
+
+        <section className="hidden flex-col justify-between lg:flex stagger" style={{ ["--i" as string]: 0 } as React.CSSProperties}>
+          <div className="anim-fade-in-up" style={{ ["--i" as string]: 0 } as React.CSSProperties}>
+            <span className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+              <span className="status-dot text-primary anim-pulse-glow" />
+              {t("OCR di documenti, accurato", "Document OCR, done right", "OCR de documents, juste", "OCR de documentos bien hecho", "Dokument-OCR, präzise")}
+            </span>
           </div>
-          <CardDescription>
-            {t("Accedi o crea un account gratuito per usare l'OCR.", "Sign in or create a free account to access OCR.", "Connectez-vous ou créez un compte gratuit pour utiliser l'OCR.", "Inicia sesión o crea una cuenta gratis para usar OCR.", "Anmelden oder kostenloses Konto erstellen, um OCR zu nutzen.")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs value={mode} onValueChange={(next) => setMode(next as "signin" | "signup")}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">{t("Accedi", "Sign In", "Se connecter", "Iniciar sesión", "Anmelden")}</TabsTrigger>
-              <TabsTrigger value="signup">{t("Registrati", "Sign Up", "S'inscrire", "Registrarse", "Registrieren")}</TabsTrigger>
-            </TabsList>
 
-            <TabsContent value="signin" className="mt-4 space-y-4">
-              <form className="space-y-4" onSubmit={submit}>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
+          <div className="space-y-6">
+            <h1 className="font-display text-[5.5rem] leading-[0.9] font-semibold tracking-tight wordmark anim-fade-in-up" style={{ ["--i" as string]: 1 } as React.CSSProperties}>
+              Extracto
+              <span className="text-primary not-italic">.</span>
+            </h1>
+            <p className="max-w-md text-lg leading-relaxed text-muted-foreground anim-fade-in-up" style={{ ["--i" as string]: 2 } as React.CSSProperties}>
+              {t(
+                "Estrai testo da PDF, immagini e scansioni. Batch, anteprime, post-elaborazione, esportazione verso vector store.",
+                "Extract text from PDFs, images, and scans. Batch, previews, post-processing, vector-store export.",
+                "Extrayez le texte de PDF, images et scans. Batch, aperçus, post-traitement, export vector-store.",
+                "Extrae texto de PDF, imágenes y escaneos. Lotes, vistas previas, post-procesamiento, exportación a vector-store.",
+                "Text aus PDFs, Bildern und Scans extrahieren. Stapel, Vorschauen, Nachverarbeitung, Vector-Store-Export.",
+              )}
+            </p>
+          </div>
+
+          <ul className="space-y-3 text-sm anim-fade-in-up" style={{ ["--i" as string]: 3 } as React.CSSProperties}>
+            {[
+              t("Provider Ollama, Mistral, OpenRouter, OpenAI-compatible", "Ollama, Mistral, OpenRouter, OpenAI-compatible providers"),
+              t("Batch + checkpoint, riprendi qualsiasi job", "Batch + checkpoints, resume any job"),
+              t("Esportazione verso Chroma per knowledge base", "Export to Chroma for knowledge base"),
+            ].map((line, i) => (
+              <li key={i} className="flex items-start gap-3 text-foreground/80">
+                <span className="mt-[7px] inline-block size-1.5 rounded-full bg-primary" />
+                <span className="leading-relaxed">{line}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="flex w-full max-w-md flex-col justify-center self-center lg:max-w-none lg:justify-self-end lg:max-w-[28rem]">
+          <div className="surface-floating paper-grain rounded-[28px] p-8 anim-fade-in-up text-foreground" style={{ ["--i" as string]: 1 } as React.CSSProperties}>
+            <div className="lg:hidden mb-6">
+              <h1 className="wordmark font-display text-5xl leading-none tracking-tight">
+                Extracto<span className="text-primary not-italic">.</span>
+              </h1>
+            </div>
+
+            <div className="space-y-1.5">
+              <h2 className="font-display text-2xl font-semibold tracking-tight">
+                {mode === "signin"
+                  ? t("Bentornato", "Welcome back", "Bon retour", "Bienvenido de nuevo", "Willkommen zurück")
+                  : t("Crea il tuo spazio", "Make it yours", "Faites-le vôtre", "Hazlo tuyo", "Mach es zu deinem")}
+              </h2>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {mode === "signin"
+                  ? t("Accedi per continuare con i tuoi documenti.", "Sign in to keep working on your documents.", "Connectez-vous pour reprendre vos documents.", "Inicia sesión para seguir con tus documentos.", "Melde dich an, um mit deinen Dokumenten fortzufahren.")
+                  : t("Bastano email e password per iniziare.", "Just email and password to get started.", "Email et mot de passe suffisent pour commencer.", "Solo email y contraseña para empezar.", "E-Mail und Passwort reichen, um zu beginnen.")}
+              </p>
+            </div>
+
+            <Tabs value={mode} onValueChange={(next) => setMode(next as "signin" | "signup")} className="mt-6">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="signin">{t("Accedi", "Sign in", "Se connecter", "Iniciar sesión", "Anmelden")}</TabsTrigger>
+                <TabsTrigger value="signup">{t("Registrati", "Sign up", "S'inscrire", "Registrarse", "Registrieren")}</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="signin" className="mt-5 space-y-4">
+                <form className="space-y-4" onSubmit={submit}>
+                  <FieldEmail
                     id="email"
-                    type="email"
+                    label={t("Email", "Email", "Email", "Correo", "E-Mail")}
                     value={form.email}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, email: event.target.value }))
-                    }
+                    onChange={(v) => setForm((c) => ({ ...c, email: v }))}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">{t("Password", "Password", "Mot de passe", "Contraseña", "Passwort")}</Label>
-                  <Input
+                  <FieldPassword
                     id="password"
-                    type="password"
+                    label={t("Password", "Password", "Mot de passe", "Contraseña", "Passwort")}
                     value={form.password}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, password: event.target.value }))
-                    }
+                    onChange={(v) => setForm((c) => ({ ...c, password: v }))}
                   />
-                </div>
-                <Button type="submit" disabled={loading} className="w-full">
-                  {loading ? t("Accesso in corso...", "Signing in...", "Connexion en cours...", "Iniciando sesión...", "Anmeldung läuft...") : t("Accedi", "Sign In", "Se connecter", "Iniciar sesión", "Anmelden")}
-                </Button>
-              </form>
-            </TabsContent>
+                  <Button type="submit" disabled={loading} className="w-full group" size="lg">
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    <span>{loading ? t("Accesso in corso...", "Signing in...", "Connexion...", "Iniciando sesión...", "Anmeldung...") : submitLabelSignIn}</span>
+                    {!loading ? <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" /> : null}
+                  </Button>
+                </form>
+              </TabsContent>
 
-            <TabsContent value="signup" className="mt-4 space-y-4">
-              <form className="space-y-4" onSubmit={submit}>
-                <div className="space-y-2">
-                  <Label htmlFor="name">{t("Nome", "Name", "Nom", "Nombre", "Name")}</Label>
-                  <Input
+              <TabsContent value="signup" className="mt-5 space-y-4">
+                <form className="space-y-4" onSubmit={submit}>
+                  <FieldText
                     id="name"
+                    icon={User}
+                    label={t("Nome", "Name", "Nom", "Nombre", "Name")}
                     value={form.name}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, name: event.target.value }))
-                    }
+                    onChange={(v) => setForm((c) => ({ ...c, name: v }))}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email">{t("Email", "Email", "Email", "Correo", "E-Mail")}</Label>
-                  <Input
+                  <FieldEmail
                     id="signup-email"
-                    type="email"
+                    label={t("Email", "Email", "Email", "Correo", "E-Mail")}
                     value={form.email}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, email: event.target.value }))
-                    }
+                    onChange={(v) => setForm((c) => ({ ...c, email: v }))}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password">{t("Password", "Password", "Mot de passe", "Contraseña", "Passwort")}</Label>
-                  <Input
+                  <FieldPassword
                     id="signup-password"
-                    type="password"
+                    label={t("Password", "Password", "Mot de passe", "Contraseña", "Passwort")}
                     value={form.password}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, password: event.target.value }))
-                    }
+                    onChange={(v) => setForm((c) => ({ ...c, password: v }))}
+                    helper={t("Minimo 8 caratteri.", "Minimum 8 characters.", "Au moins 8 caractères.", "Mínimo 8 caracteres.", "Mindestens 8 Zeichen.")}
                   />
-                </div>
-                <Button type="submit" disabled={loading} className="w-full">
-                  {loading ? t("Creazione account...", "Creating account...", "Création du compte...", "Creando cuenta...", "Konto wird erstellt...") : t("Crea account gratuito", "Create Free Account", "Créer un compte gratuit", "Crear cuenta gratis", "Kostenloses Konto erstellen")}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+                  <Button type="submit" disabled={loading} className="w-full group" size="lg">
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    <span>{loading ? t("Creazione account...", "Creating account...", "Création...", "Creando cuenta...", "Wird erstellt...") : submitLabelSignUp}</span>
+                    {!loading ? <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" /> : null}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          <p className="mt-6 text-center text-[11px] uppercase tracking-[0.18em] text-muted-foreground/80">
+            {t("Privato per impostazione predefinita", "Private by default", "Privé par défaut", "Privado por defecto", "Standardmäßig privat")}
+          </p>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+interface FieldProps {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  helper?: string;
+}
+
+function FieldText({ id, label, value, onChange, icon: Icon, helper }: FieldProps & { icon: React.ComponentType<{ className?: string }> }) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-xs uppercase tracking-wider text-muted-foreground/80">{label}</Label>
+      <div className="relative">
+        <Icon className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
+        <Input
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="pl-10"
+          autoComplete="name"
+        />
+      </div>
+      {helper ? <p className="pl-1 text-[11px] text-muted-foreground/80">{helper}</p> : null}
+    </div>
+  );
+}
+
+function FieldEmail({ id, label, value, onChange, helper }: FieldProps) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-xs uppercase tracking-wider text-muted-foreground/80">{label}</Label>
+      <div className="relative">
+        <Mail className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
+        <Input
+          id={id}
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+      {helper ? <p className="pl-1 text-[11px] text-muted-foreground/80">{helper}</p> : null}
+    </div>
+  );
+}
+
+function FieldPassword({ id, label, value, onChange, helper }: FieldProps) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-xs uppercase tracking-wider text-muted-foreground/80">{label}</Label>
+      <div className="relative">
+        <Lock className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
+        <Input
+          id={id}
+          type="password"
+          autoComplete="current-password"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+      {helper ? <p className="pl-1 text-[11px] text-muted-foreground/80">{helper}</p> : null}
     </div>
   );
 }

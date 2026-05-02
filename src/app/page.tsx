@@ -30,6 +30,9 @@ import {
  PlayCircle,
  Clock3,
  ListChecks,
+ Database,
+ DatabaseBackup,
+ Info,
 } from"lucide-react";
 import { useRouter } from"next/navigation";
 
@@ -66,6 +69,11 @@ import {
  DialogHeader,
  DialogTitle,
 } from"@/components/ui/dialog";
+import {
+ Tooltip,
+ TooltipContent,
+ TooltipTrigger,
+} from"@/components/ui/tooltip";
 import { ThemeToggle } from"@/components/theme-toggle";
 import { useToast } from"@/hooks/use-toast";
 import { normalizeProvider, type ProviderKind, type ClientApiSettings } from"@/lib/api-types";
@@ -79,6 +87,7 @@ import {
   normalizeMarkdownCandidate,
   parseLooseJsonObject,
   sleep,
+  translatePipelineMessage,
 } from "@/app/page-utils";
 import ReactMarkdown from"react-markdown";
 
@@ -106,7 +115,54 @@ interface ProcessingFile {
  checkpoints?: OcrPageCheckpointView[];
  events?: OcrProgressEventView[];
  file?: File;
+ kbExport?: KbExportFileState;
 }
+
+interface KbExportFileState {
+ status:"idle"|"pending"|"success"|"error";
+ chunkCount?: number;
+ collectionName?: string;
+ error?: string;
+}
+
+type KbEmbeddingProvider ="ollama"|"openrouter"|"openai_compat";
+type KbChunkingStrategy ="fixed"|"sentence"|"paragraph";
+
+interface KbDefaultsForm {
+ embeddingProvider: KbEmbeddingProvider;
+ embeddingEndpoint: string;
+ embeddingApiKey: string;
+ embeddingHasApiKey: boolean;
+ embeddingModel: string;
+ embeddingDimensions: string;
+ chunkingStrategy: KbChunkingStrategy;
+ chunkingMaxSize: string;
+ chunkingOverlap: string;
+ chunkingMinSize: string;
+ storeBaseUrl: string;
+ storeApiKey: string;
+ storeHasApiKey: boolean;
+ storeDimensions: string;
+ collectionTemplate: string;
+}
+
+const DEFAULT_KB_FORM: KbDefaultsForm = {
+ embeddingProvider:"ollama",
+ embeddingEndpoint:"http://127.0.0.1:11434",
+ embeddingApiKey:"",
+ embeddingHasApiKey: false,
+ embeddingModel:"nomic-embed-text",
+ embeddingDimensions:"768",
+ chunkingStrategy:"paragraph",
+ chunkingMaxSize:"1200",
+ chunkingOverlap:"100",
+ chunkingMinSize:"200",
+ storeBaseUrl:"http://127.0.0.1:8000",
+ storeApiKey:"",
+ storeHasApiKey: false,
+ storeDimensions:"768",
+ collectionTemplate:"extracto-{jobId}",
+};
 
 interface OcrPageCheckpointView {
  pageNumber: number;
@@ -466,8 +522,8 @@ export default function ExtractoPage() {
  const [uiLanguage, setUiLanguage] = React.useState<UiLanguage>("it");
  const [selectedFileId, setSelectedFileId] = React.useState<string | null>(null);
  const [copied, setCopied] = React.useState<"md"|"json"| null>(null);
- const [advancedSettingsOpen, setAdvancedSettingsOpen] = React.useState(true);
  const [apiSettingsOpen, setApiSettingsOpen] = React.useState(false);
+ const [settingsTab, setSettingsTab] = React.useState<"model"|"provider"|"ocr"|"kb"|"general"|"account">("model");
  const [viewMode, setViewMode] = React.useState<"preview"|"split"|"result">("split");
  const fileInputRef = React.useRef<HTMLInputElement>(null);
  const pdfPagePreviewCacheRef = React.useRef<Record<string, string[]>>({});
@@ -502,6 +558,17 @@ export default function ExtractoPage() {
  outputFormat:"markdown",
  model:"",
  });
+
+ // KB export defaults — loaded from /api/kb/defaults on mount, edited
+ // via the Database header button, used when the user clicks "Send to
+ // KB" on a completed file.
+ const [kbDefaults, setKbDefaults] = React.useState<KbDefaultsForm>(DEFAULT_KB_FORM);
+ const [kbDefaultsDraft, setKbDefaultsDraft] = React.useState<KbDefaultsForm>(DEFAULT_KB_FORM);
+ const [kbDefaultsOpen, setKbDefaultsOpen] = React.useState(false);
+ const [kbEmbeddingKeyDirty, setKbEmbeddingKeyDirty] = React.useState(false);
+ const [kbStoreKeyDirty, setKbStoreKeyDirty] = React.useState(false);
+ const [isSavingKbDefaults, setIsSavingKbDefaults] = React.useState(false);
+ const kbDefaultsLoadedRef = React.useRef(false);
 
  const selectedFile = files.find((f) => f.id === selectedFileId);
  const selectedFileMarkdown = selectedFile?.result
@@ -1011,6 +1078,178 @@ export default function ExtractoPage() {
  }, 1000);
  return () => clearTimeout(t);
  }, [settings]);
+
+ // Load saved KB-export defaults once. Failure is silent — the form
+ // simply stays on its built-in defaults; the user can still configure
+ // and save fresh values. KB_EXPORT_ENABLED gating happens at the
+ // /api/kb/export endpoint, not here, so the UI for *editing* defaults
+ // is always reachable.
+ React.useEffect(() => {
+ if (kbDefaultsLoadedRef.current) return;
+ kbDefaultsLoadedRef.current = true;
+ void (async () => {
+ try {
+ const resp = await fetch("/api/kb/defaults", { cache:"no-store" });
+ if (!resp.ok) return;
+ const payload = await resp.json() as {
+ embedding?: { provider?: KbEmbeddingProvider; apiEndpoint?: string; model?: string; dimensions?: number; hasApiKey?: boolean };
+ chunking?: { strategy?: KbChunkingStrategy; maxChunkSize?: number; overlap?: number; minChunkSize?: number };
+ vectorStore?: { baseUrl?: string; dimensions?: number; hasApiKey?: boolean };
+ collectionNameTemplate?: string;
+ };
+ const next: KbDefaultsForm = {
+ embeddingProvider: payload.embedding?.provider ?? DEFAULT_KB_FORM.embeddingProvider,
+ embeddingEndpoint: payload.embedding?.apiEndpoint ?? DEFAULT_KB_FORM.embeddingEndpoint,
+ embeddingApiKey:"",
+ embeddingHasApiKey: payload.embedding?.hasApiKey === true,
+ embeddingModel: payload.embedding?.model ?? DEFAULT_KB_FORM.embeddingModel,
+ embeddingDimensions: String(payload.embedding?.dimensions ?? DEFAULT_KB_FORM.embeddingDimensions),
+ chunkingStrategy: payload.chunking?.strategy ?? DEFAULT_KB_FORM.chunkingStrategy,
+ chunkingMaxSize: String(payload.chunking?.maxChunkSize ?? DEFAULT_KB_FORM.chunkingMaxSize),
+ chunkingOverlap: payload.chunking?.overlap != null ? String(payload.chunking.overlap) : DEFAULT_KB_FORM.chunkingOverlap,
+ chunkingMinSize: payload.chunking?.minChunkSize != null ? String(payload.chunking.minChunkSize) : DEFAULT_KB_FORM.chunkingMinSize,
+ storeBaseUrl: payload.vectorStore?.baseUrl ?? DEFAULT_KB_FORM.storeBaseUrl,
+ storeApiKey:"",
+ storeHasApiKey: payload.vectorStore?.hasApiKey === true,
+ storeDimensions: String(payload.vectorStore?.dimensions ?? DEFAULT_KB_FORM.storeDimensions),
+ collectionTemplate: payload.collectionNameTemplate ?? DEFAULT_KB_FORM.collectionTemplate,
+ };
+ setKbDefaults(next);
+ setKbDefaultsDraft(next);
+ } catch {
+ // Silent — keep built-in defaults.
+ }
+ })();
+ }, []);
+
+ const saveKbDefaults = async () => {
+ setIsSavingKbDefaults(true);
+ try {
+ const parseInt10 = (v: string): number | undefined => {
+ const n = Number.parseInt(v, 10);
+ return Number.isFinite(n) ? n : undefined;
+ };
+ const body = {
+ embedding: {
+ provider: kbDefaultsDraft.embeddingProvider,
+ apiEndpoint: kbDefaultsDraft.embeddingEndpoint.trim(),
+ model: kbDefaultsDraft.embeddingModel.trim(),
+ dimensions: parseInt10(kbDefaultsDraft.embeddingDimensions),
+ ...(kbEmbeddingKeyDirty ? { apiKey: kbDefaultsDraft.embeddingApiKey, replaceApiKey: true } : {}),
+ },
+ chunking: {
+ strategy: kbDefaultsDraft.chunkingStrategy,
+ maxChunkSize: parseInt10(kbDefaultsDraft.chunkingMaxSize) ?? 1200,
+ overlap: parseInt10(kbDefaultsDraft.chunkingOverlap),
+ minChunkSize: parseInt10(kbDefaultsDraft.chunkingMinSize),
+ },
+ vectorStore: {
+ kind:"chroma"as const,
+ baseUrl: kbDefaultsDraft.storeBaseUrl.trim(),
+ dimensions: parseInt10(kbDefaultsDraft.storeDimensions),
+ ...(kbStoreKeyDirty ? { apiKey: kbDefaultsDraft.storeApiKey, replaceApiKey: true } : {}),
+ },
+ collectionNameTemplate: kbDefaultsDraft.collectionTemplate.trim(),
+ };
+ const resp = await fetch("/api/kb/defaults", {
+ method:"PUT",
+ headers:{"Content-Type":"application/json"},
+ body: JSON.stringify(body),
+ });
+ if (!resp.ok) {
+ const payload = (await resp.json().catch(() => ({}))) as { error?: string };
+ throw new Error(payload.error || `Save failed (${resp.status})`);
+ }
+ const saved = await resp.json() as {
+ embedding: { hasApiKey?: boolean };
+ vectorStore: { hasApiKey?: boolean };
+ };
+ const next: KbDefaultsForm = {
+ ...kbDefaultsDraft,
+ embeddingApiKey:"",
+ embeddingHasApiKey: saved.embedding.hasApiKey === true,
+ storeApiKey:"",
+ storeHasApiKey: saved.vectorStore.hasApiKey === true,
+ };
+ setKbDefaults(next);
+ setKbDefaultsDraft(next);
+ setKbEmbeddingKeyDirty(false);
+ setKbStoreKeyDirty(false);
+ setKbDefaultsOpen(false);
+ toast({
+ title: t("Default KB salvati","KB defaults saved","Valeurs KB enregistrées","Valores KB guardados","KB-Standardwerte gespeichert"),
+ });
+ } catch (error) {
+ toast({
+ title: t("Salvataggio KB non riuscito","KB save failed","Échec d'enregistrement KB","Error al guardar KB","KB-Speicherung fehlgeschlagen"),
+ description: error instanceof Error ? error.message :"",
+ variant:"destructive",
+ });
+ } finally {
+ setIsSavingKbDefaults(false);
+ }
+ };
+
+ const exportFileToKb = async (file: ProcessingFile) => {
+ if (!file.jobId) {
+ toast({
+ title: t("Nessun jobId","Missing jobId","jobId manquant","Falta jobId","jobId fehlt"),
+ description: t(
+"Solo i lavori OCR completati possono essere esportati.",
+"Only completed OCR jobs can be exported.",
+"Seuls les jobs OCR terminés peuvent être exportés.",
+"Solo se pueden exportar trabajos OCR completados.",
+"Nur abgeschlossene OCR-Jobs können exportiert werden.",
+ ),
+ variant:"destructive",
+ });
+ return;
+ }
+ updateFileById(file.id, (entry) => ({ ...entry, kbExport: { status:"pending"} }));
+ try {
+ const resp = await fetch("/api/kb/export", {
+ method:"POST",
+ headers:{"Content-Type":"application/json"},
+ body: JSON.stringify({ jobId: file.jobId }),
+ });
+ const payload = (await resp.json().catch(() => ({}))) as {
+ error?: string;
+ chunkCount?: number;
+ collectionName?: string;
+ };
+ if (!resp.ok) {
+ throw new Error(payload.error || `Export failed (${resp.status})`);
+ }
+ updateFileById(file.id, (entry) => ({
+ ...entry,
+ kbExport: {
+ status:"success",
+ chunkCount: payload.chunkCount ?? 0,
+ collectionName: payload.collectionName ??"",
+ },
+ }));
+ toast({
+ title: t("Esportato nel KB","Exported to KB","Exporté vers KB","Exportado a KB","In KB exportiert"),
+ description: payload.collectionName
+ ? t(
+ `${payload.chunkCount ?? 0} chunk in ${payload.collectionName}`,
+ `${payload.chunkCount ?? 0} chunks in ${payload.collectionName}`,
+ )
+ : undefined,
+ });
+ } catch (error) {
+ const message = error instanceof Error ? error.message :"Unknown error";
+ updateFileById(file.id, (entry) => ({
+ ...entry,
+ kbExport: { status:"error", error: message },
+ }));
+ toast({
+ title: t("Esportazione KB non riuscita","KB export failed","Échec d'export KB","Error de exportación KB","KB-Export fehlgeschlagen"),
+ description: message,
+ variant:"destructive",
+ });
+ }
+ };
 
  // Handle file selection
  const handleFiles = async (fileList: FileList | File[]) => {
@@ -1546,43 +1785,425 @@ export default function ExtractoPage() {
  <div className="h-screen overflow-hidden flex flex-col no-scrollbars">
  {/* Header */}
  <motion.header
- initial={{ y: -20, opacity: 0 }}
+ initial={{ y: -16, opacity: 0 }}
  animate={{ y: 0, opacity: 1 }}
- transition={{ duration: 0.4, ease:"easeOut"}}
- className="sticky top-0 z-50 bg-background/80 backdrop-blur-sm">
- <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+ transition={{ duration: 0.5, ease: [0.2, 0.7, 0.2, 1] }}
+ className="sticky top-0 z-50 bg-background/75 backdrop-blur-md">
+ <div className="container mx-auto px-5 h-16 flex items-center justify-between">
  <motion.div
- className="flex items-center gap-3"whileHover={{ scale: 1.02 }}
- transition={{ type:"spring", stiffness: 400 }}
+ className="flex items-center gap-3 group"whileHover={{ scale: 1.015 }}
+ transition={{ type:"spring", stiffness: 400, damping: 24 }}
  >
- <div className="relative">
- <ScanLine className="h-7 w-7 text-primary"/>
+ <div className="relative grid place-items-center size-9 rounded-xl bg-primary/12 text-primary transition-[background-color,transform] duration-200 group-hover:bg-primary/18 group-hover:rotate-[-4deg]">
+ <ScanLine className="h-4.5 w-4.5"/>
  <motion.div
- className="absolute -top-1 -right-1"animate={{ scale: [1, 1.2, 1] }}
- transition={{ duration: 2, repeat: Infinity }}
+ className="absolute -top-1 -right-1"animate={{ scale: [1, 1.18, 1], rotate: [0, 8, 0] }}
+ transition={{ duration: 2.4, repeat: Infinity, ease:"easeInOut"}}
  >
- <Sparkles className="h-3 w-3 text-amber-500"/>
+ <Sparkles className="h-3 w-3 text-accent-foreground"/>
  </motion.div>
  </div>
- <div>
- <h1 className="text-xl font-bold tracking-tight">Extracto</h1>
+ <div className="flex items-baseline gap-1">
+ <span className="wordmark font-display text-2xl leading-none">Extracto</span>
+ <span className="font-display italic text-2xl leading-none text-primary">.</span>
  </div>
  </motion.div>
 
- <div className="flex items-center gap-3">
- <Select value={uiLanguage} onValueChange={(value) => setUiLanguage(value as UiLanguage)}>
- <SelectTrigger
- className="w-[110px] h-9"aria-label={t("Lingua","Language","Langue","Idioma","Sprache")}
+ <div className="flex items-center gap-2">
+ <Tooltip>
+ <TooltipTrigger asChild>
+ <motion.div whileHover={{ y: -1, scale: 1.05 }} whileTap={{ scale: 0.95 }} transition={{ duration: 0.16 }}>
+ <Button
+ variant="ghost"size="icon"className="group"onClick={() => {
+ setApiSettingsDraft(apiSettings);
+ setApiKeyDirty(false);
+ setKbDefaultsDraft(kbDefaults);
+ setKbEmbeddingKeyDirty(false);
+ setKbStoreKeyDirty(false);
+ setSettingsTab("model");
+ setApiSettingsOpen(true);
+ }}
+ aria-label={t("Impostazioni","Settings","Paramètres","Configuración","Einstellungen")}
  >
- <div className="flex items-center gap-1.5">
- <Languages className="h-3.5 w-3.5 text-primary"/>
+ <Settings2 className="h-4 w-4 text-foreground/80 transition-transform duration-300 group-hover:rotate-90 group-hover:text-primary"/>
+ </Button>
+ </motion.div>
+ </TooltipTrigger>
+ <TooltipContent>{t("Impostazioni","Settings","Paramètres","Configuración","Einstellungen")}</TooltipContent>
+ </Tooltip>
+
+ <Tooltip>
+ <TooltipTrigger asChild>
+ <span><ThemeToggle /></span>
+ </TooltipTrigger>
+ <TooltipContent>{t("Cambia tema","Toggle theme","Changer de thème","Cambiar tema","Theme wechseln")}</TooltipContent>
+ </Tooltip>
+ </div>
+ </div>
+ </motion.header>
+
+ <Dialog
+ open={apiSettingsOpen}
+ onOpenChange={(open) => {
+ setApiSettingsOpen(open);
+ if (!open) {
+ setApiSettingsDraft(apiSettings);
+ setApiKeyDirty(false);
+ setKbDefaultsDraft(kbDefaults);
+ setKbEmbeddingKeyDirty(false);
+ setKbStoreKeyDirty(false);
+ }
+ }}
+ >
+ <DialogContent className="w-[96vw] !max-w-3xl max-h-[92vh] flex flex-col overflow-hidden p-0">
+ <div className="px-6 pt-6 pb-3">
+ <DialogHeader>
+ <DialogTitle>{t("Impostazioni","Settings","Paramètres","Configuración","Einstellungen")}</DialogTitle>
+ <DialogDescription>
+ {t(
+"Modello, parametri OCR, knowledge base, provider e account.",
+"Model, OCR parameters, knowledge base, provider and account.",
+"Modèle, paramètres OCR, base de connaissances, fournisseur et compte.",
+"Modelo, parámetros OCR, base de conocimiento, proveedor y cuenta.",
+"Modell, OCR-Parameter, Wissensdatenbank, Provider und Konto.",
+ )}
+ </DialogDescription>
+ </DialogHeader>
+ </div>
+
+ <Tabs value={settingsTab} onValueChange={(v) => setSettingsTab(v as typeof settingsTab)} className="flex-1 min-h-0 flex flex-col gap-0">
+ <div className="px-6">
+ <TabsList className="w-full justify-start overflow-x-auto">
+ <TabsTrigger value="model"className="gap-1.5"><Sparkles className="h-3.5 w-3.5"/>{t("Modello","Model","Modèle","Modelo","Modell")}</TabsTrigger>
+ <TabsTrigger value="ocr"className="gap-1.5"><ScanLine className="h-3.5 w-3.5"/>{t("OCR","OCR","OCR","OCR","OCR")}</TabsTrigger>
+ <TabsTrigger value="kb"className="gap-1.5"><Database className="h-3.5 w-3.5"/>{t("Knowledge base","Knowledge base","Base de connaissances","Base de conocimiento","Wissensdatenbank")}</TabsTrigger>
+ <TabsTrigger value="provider"className="gap-1.5"><Settings2 className="h-3.5 w-3.5"/>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</TabsTrigger>
+ <TabsTrigger value="general"className="gap-1.5"><Languages className="h-3.5 w-3.5"/>{t("Generale","General","Général","General","Allgemein")}</TabsTrigger>
+ <TabsTrigger value="account"className="gap-1.5"><LogOut className="h-3.5 w-3.5"/>{t("Account","Account","Compte","Cuenta","Konto")}</TabsTrigger>
+ </TabsList>
+ </div>
+
+ <ScrollArea className="flex-1 min-h-0 px-6 pb-2">
+ <TabsContent value="model"className="space-y-5 mt-4">
+ <SettingsSection
+ title={t("Modello OCR","OCR model","Modèle OCR","Modelo OCR","OCR-Modell")}
+ hint={t("Modello usato per leggere ogni pagina del documento.","Model used to read each page of the document.","Modèle utilisé pour lire chaque page.","Modelo usado para leer cada página.","Modell, das jede Seite liest.")}
+ >
+ <Select value={selectedModel} onValueChange={setSelectedModel} disabled={isLoadingModels || models.length === 0}>
+ <SelectTrigger className="w-full">
+ <SelectValue placeholder={isLoadingModels ? t("Caricamento modelli...","Loading models...","Chargement...","Cargando...","Wird geladen...") : t("Seleziona modello","Select model","Choisir","Seleccionar","Wählen")} />
+ </SelectTrigger>
+ <SelectContent>
+ {models.map((model) => (
+ <SelectItem key={model.id} value={model.id}>{model.name}</SelectItem>
+ ))}
+ </SelectContent>
+ </Select>
+ {modelError ? <p className="text-[11px] text-destructive">{modelError}</p> : null}
+ </SettingsSection>
+
+ <SettingsSection
+ title={t("Post-processing","Post-processing","Post-traitement","Post-procesamiento","Nachverarbeitung")}
+ hint={t("Esegui un secondo passaggio modello per riformattare o estrarre dati.","Run a second model pass to reformat or extract data.","Effectuer un second passage du modèle pour reformater ou extraire des données.","Ejecuta un segundo paso para reformatear o extraer datos.","Zweiten Modell-Pass für Neuformatierung oder Datenextraktion ausführen.")}
+ right={
+ <Switch checked={postProcessing.enabled} onCheckedChange={(enabled) => setPostProcessing((prev) => ({ ...prev, enabled }))} />
+ }
+ >
+ {postProcessing.enabled ? (
+ <div className="space-y-3 surface-soft rounded-xl p-3 mt-2">
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
+ {t("Istruzione","Instruction","Instruction","Instrucción","Anweisung")}
+ </Label>
+ <Textarea
+ placeholder={t(
+"Esempio: estrai numero fattura, scadenza e totali, restituisci una tabella.",
+"Example: extract invoice number, due date, totals — return one table.",
+"Exemple : extraire numéro de facture, échéance, totaux — renvoyer un tableau.",
+"Ejemplo: extrae número de factura, vencimiento, totales — devuelve una tabla.",
+"Beispiel: Rechnungsnummer, Fälligkeit, Summen extrahieren — eine Tabelle zurückgeben.",
+ )}
+ value={postProcessing.instruction}
+ onChange={(e) => setPostProcessing((prev) => ({ ...prev, instruction: e.target.value }))}
+ className="min-h-24 text-xs"/>
+ </div>
+ <div className="grid grid-cols-2 gap-3">
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Modello","Model","Modèle","Modelo","Modell")}</Label>
+ <Select value={postProcessModelValue} onValueChange={(value) => setPostProcessing((prev) => ({ ...prev, model: value ==="__same__"?"": value }))}>
+ <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ <SelectItem value="__same__">{t(`Uguale al modello OCR`, `Same as OCR model`,`Identique au modèle OCR`,`Igual que el OCR`,`Wie OCR-Modell`)}</SelectItem>
+ {!selectedPostProcessModelExists && postProcessing.model ? (
+ <SelectItem value={postProcessing.model}>{postProcessing.model}</SelectItem>
+ ) : null}
+ {models.map((model) => (
+ <SelectItem key={`pp-${model.id}`} value={model.id}>{model.name}</SelectItem>
+ ))}
+ </SelectContent>
+ </Select>
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Formato","Format","Format","Formato","Format")}</Label>
+ <Select value={postProcessing.outputFormat} onValueChange={(value: PostProcessOutputFormat) => setPostProcessing((prev) => ({ ...prev, outputFormat: value }))}>
+ <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ <SelectItem value="markdown">Markdown</SelectItem>
+ <SelectItem value="json">{t("JSON strutturato","Structured JSON","JSON structuré","JSON estructurado","Strukturiertes JSON")}</SelectItem>
+ </SelectContent>
+ </Select>
+ </div>
+ </div>
+ </div>
+ ) : null}
+ </SettingsSection>
+ </TabsContent>
+
+ <TabsContent value="ocr"className="space-y-5 mt-4">
+ <SettingsSection
+ title={t("Lingua documento","Document language","Langue du document","Idioma del documento","Dokumentsprache")}
+ hint={t("Suggerimento per il modello: quale lingua aspettarsi nel documento.","Hint to the model: what language to expect in the document.","Indique au modèle la langue attendue.","Indica al modelo qué idioma esperar.","Hinweis ans Modell zur erwarteten Sprache.")}
+ >
+ <Select value={settings.language} onValueChange={(v) => setSettings((s) => ({ ...s, language: v }))}>
+ <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ {LANGUAGES.map((lang) => (
+ <SelectItem key={lang.code} value={lang.code}>{lang.names[uiLanguage] ?? lang.names.en}</SelectItem>
+ ))}
+ </SelectContent>
+ </Select>
+ </SettingsSection>
+
+ <SettingsSection title={t("Comportamento estrazione","Extraction behavior","Comportement d'extraction","Comportamiento de extracción","Extraktionsverhalten")}>
+ <div className="space-y-3">
+ <ToggleRow
+ label={t("Rilevamento tabelle","Table detection","Détection des tableaux","Detección de tablas","Tabellenerkennung")}
+ hint={t("Rileva tabelle e le rende come Markdown.","Detect tables and render them as Markdown.","Détecte les tableaux et les rend en Markdown.","Detecta tablas y las convierte a Markdown.","Erkennt Tabellen und gibt sie als Markdown aus.")}
+ checked={settings.tableDetection}
+ onCheckedChange={(v) => setSettings((s) => ({ ...s, tableDetection: v }))}
+ />
+ <ToggleRow
+ label={t("Riconoscimento scrittura a mano","Handwriting recognition","Reconnaissance d'écriture","Reconocimiento de escritura","Handschrifterkennung")}
+ hint={t("Tenta di leggere testo manoscritto. Più lento e meno preciso.","Attempt to read handwritten text. Slower and less accurate.","Tente de lire le texte manuscrit. Plus lent et moins précis.","Intenta leer texto manuscrito. Más lento y menos preciso.","Versucht, Handschrift zu lesen. Langsamer und ungenauer.")}
+ checked={settings.handwritingRecognition}
+ onCheckedChange={(v) => setSettings((s) => ({ ...s, handwritingRecognition: v }))}
+ />
+ <ToggleRow
+ label={t("Mantieni formattazione","Preserve formatting","Conserver la mise en forme","Conservar formato","Formatierung beibehalten")}
+ hint={t("Conserva titoli, elenchi, spaziatura. Disattiva per testo piatto.","Preserve headings, lists, spacing. Disable for flat text.","Conserve titres, listes et espacements. Désactivez pour du texte brut.","Conserva títulos, listas y espacios. Desactiva para texto plano.","Behält Überschriften, Listen, Abstände. Aus für reinen Text.")}
+ checked={settings.preserveFormatting}
+ onCheckedChange={(v) => setSettings((s) => ({ ...s, preserveFormatting: v }))}
+ />
+ </div>
+ </SettingsSection>
+
+ <SettingsSection
+ title={t("Qualità output","Output quality","Qualité de sortie","Calidad de salida","Ausgabequalität")}
+ hint={t("Più alto: testo più ricco ma più lento.","Higher: richer text but slower.","Plus haut : texte plus riche mais plus lent.","Más alto: texto más rico pero más lento.","Höher: reichhaltiger, aber langsamer.")}
+ right={<span className="text-xs text-muted-foreground tabular">{settings.quality}%</span>}
+ >
+ <Slider value={[settings.quality]} onValueChange={([v]) => setSettings((s) => ({ ...s, quality: v }))} min={50} max={100} step={10} className="py-2"/>
+ </SettingsSection>
+
+ <SettingsSection
+ title={t("Istruzioni personalizzate","Custom instructions","Instructions personnalisées","Instrucciones personalizadas","Eigene Anweisungen")}
+ hint={t("Aggiunte al prompt OCR per ogni pagina.","Appended to the OCR prompt for each page.","Ajoutées au prompt OCR pour chaque page.","Se añaden al prompt OCR de cada página.","Werden dem OCR-Prompt jeder Seite angehängt.")}
+ >
+ <Textarea
+ placeholder={t("Esempio: ignora intestazioni e piè di pagina.","Example: ignore headers and footers.","Exemple : ignore en-têtes et pieds de page.","Ejemplo: ignora encabezados y pies.","Beispiel: Kopf- und Fußzeilen ignorieren.")}
+ value={settings.customPrompt}
+ onChange={(e) => setSettings((s) => ({ ...s, customPrompt: e.target.value }))}
+ className="min-h-20 text-xs"/>
+ </SettingsSection>
+ </TabsContent>
+
+ <TabsContent value="kb"className="space-y-5 mt-4">
+ <p className="text-xs text-muted-foreground">
+ {t(
+"Configura embedding, chunking e vector store. Imposta KB_EXPORT_ENABLED=1 nel container per abilitare l'esportazione.",
+"Configure embedding, chunking, and vector store. Set KB_EXPORT_ENABLED=1 on the container to enable export.",
+"Configurez embedding, découpage et vector store. Activez KB_EXPORT_ENABLED=1 sur le conteneur pour activer l'export.",
+"Configura embedding, chunking y vector store. Activa KB_EXPORT_ENABLED=1 en el contenedor para habilitar la exportación.",
+"Konfigurieren Sie Embedding, Chunking und Vektor-Store. KB_EXPORT_ENABLED=1 setzen, um Export zu aktivieren.",
+ )}
+ </p>
+
+ <SettingsSection title={t("Embedding","Embedding","Embedding","Embedding","Embedding")}>
+ <div className="space-y-3">
+ <div className="grid grid-cols-2 gap-3">
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</Label>
+ <Select value={kbDefaultsDraft.embeddingProvider} onValueChange={(value) => setKbDefaultsDraft((p) => ({ ...p, embeddingProvider: value as KbEmbeddingProvider }))}>
+ <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ <SelectItem value="ollama">Ollama</SelectItem>
+ <SelectItem value="openrouter">OpenRouter</SelectItem>
+ <SelectItem value="openai_compat">OpenAI-compatible</SelectItem>
+ </SelectContent>
+ </Select>
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
+ <span className="inline-flex items-center gap-1">
+ {t("Dimensioni","Dimensions","Dimensions","Dimensiones","Dimensionen")}
+ <HintInfo text={t("Dimensione del vettore restituito dal modello (es. 768 per nomic-embed-text).","Vector dimensionality returned by the model (e.g. 768 for nomic-embed-text).","Dimensions du vecteur (ex. 768 pour nomic-embed-text).","Dimensión del vector (p. ej. 768 para nomic-embed-text).","Vektor-Dimension (z. B. 768 für nomic-embed-text).")} />
+ </span>
+ </Label>
+ <Input type="number"min={1} max={32768} value={kbDefaultsDraft.embeddingDimensions} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, embeddingDimensions: e.target.value }))}/>
+ </div>
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">Endpoint</Label>
+ <Input value={kbDefaultsDraft.embeddingEndpoint} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, embeddingEndpoint: e.target.value }))} placeholder="http://127.0.0.1:11434"/>
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Modello","Model","Modèle","Modelo","Modell")}</Label>
+ <Input value={kbDefaultsDraft.embeddingModel} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, embeddingModel: e.target.value }))} placeholder="nomic-embed-text"/>
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">API key</Label>
+ <Input
+ type="password"
+ value={kbDefaultsDraft.embeddingApiKey}
+ onChange={(e) => { setKbEmbeddingKeyDirty(true); setKbDefaultsDraft((p) => ({ ...p, embeddingApiKey: e.target.value })); }}
+ placeholder={!kbEmbeddingKeyDirty && kbDefaultsDraft.embeddingHasApiKey ? t("Salvata (nascosta)","Saved (hidden)","Enregistrée (masquée)","Guardada (oculta)","Gespeichert (verborgen)") :"sk-..."}
+ />
+ </div>
+ </div>
+ </SettingsSection>
+
+ <SettingsSection title={t("Chunking","Chunking","Découpage","Fragmentación","Chunking")}>
+ <div className="space-y-3">
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Strategia","Strategy","Stratégie","Estrategia","Strategie")}</Label>
+ <Select value={kbDefaultsDraft.chunkingStrategy} onValueChange={(value) => setKbDefaultsDraft((p) => ({ ...p, chunkingStrategy: value as KbChunkingStrategy }))}>
+ <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ <SelectItem value="fixed">{t("Lunghezza fissa","Fixed length","Longueur fixe","Longitud fija","Feste Länge")}</SelectItem>
+ <SelectItem value="sentence">{t("Per frase","Per sentence","Par phrase","Por frase","Pro Satz")}</SelectItem>
+ <SelectItem value="paragraph">{t("Per paragrafo","Per paragraph","Par paragraphe","Por párrafo","Pro Absatz")}</SelectItem>
+ </SelectContent>
+ </Select>
+ </div>
+ <div className="grid grid-cols-3 gap-3">
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Max","Max","Max","Máx","Max")}</Label>
+ <Input type="number"min={1} max={10000} value={kbDefaultsDraft.chunkingMaxSize} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMaxSize: e.target.value }))}/>
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
+ <span className="inline-flex items-center gap-1">
+ {t("Overlap","Overlap","Chevauchement","Solapamiento","Überlappung")}
+ <HintInfo text={t("Solo strategia fissa.","Fixed strategy only.","Stratégie fixe uniquement.","Solo estrategia fija.","Nur feste Strategie.")}/>
+ </span>
+ </Label>
+ <Input type="number"min={0} value={kbDefaultsDraft.chunkingOverlap} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingOverlap: e.target.value }))} disabled={kbDefaultsDraft.chunkingStrategy !=="fixed"}/>
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
+ <span className="inline-flex items-center gap-1">
+ Min
+ <HintInfo text={t("Solo strategie per frase / paragrafo.","Sentence / paragraph strategies only.","Stratégies phrase / paragraphe uniquement.","Solo estrategias por frase / párrafo.","Nur Satz- / Absatz-Strategien.")}/>
+ </span>
+ </Label>
+ <Input type="number"min={0} value={kbDefaultsDraft.chunkingMinSize} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMinSize: e.target.value }))} disabled={kbDefaultsDraft.chunkingStrategy ==="fixed"}/>
+ </div>
+ </div>
+ </div>
+ </SettingsSection>
+
+ <SettingsSection title={t("Vector store","Vector store","Vector store","Vector store","Vektor-Store")}>
+ <div className="space-y-3">
+ <div className="grid grid-cols-2 gap-3">
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Tipo","Kind","Type","Tipo","Typ")}</Label>
+ <Input value="chroma"disabled />
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Dimensioni","Dimensions","Dimensions","Dimensiones","Dimensionen")}</Label>
+ <Input type="number"min={1} max={32768} value={kbDefaultsDraft.storeDimensions} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, storeDimensions: e.target.value }))}/>
+ </div>
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">Base URL</Label>
+ <Input value={kbDefaultsDraft.storeBaseUrl} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, storeBaseUrl: e.target.value }))} placeholder="http://127.0.0.1:8000"/>
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">API key</Label>
+ <Input
+ type="password"
+ value={kbDefaultsDraft.storeApiKey}
+ onChange={(e) => { setKbStoreKeyDirty(true); setKbDefaultsDraft((p) => ({ ...p, storeApiKey: e.target.value })); }}
+ placeholder={!kbStoreKeyDirty && kbDefaultsDraft.storeHasApiKey ? t("Salvata (nascosta)","Saved (hidden)","Enregistrée (masquée)","Guardada (oculta)","Gespeichert (verborgen)") :""}
+ />
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
+ <span className="inline-flex items-center gap-1">
+ {t("Nome collezione","Collection name","Nom collection","Nombre colección","Sammlungsname")}
+ <HintInfo text={t("Sostituzioni: {jobId}, {fileName}.","Substitutions: {jobId}, {fileName}.","Substitutions : {jobId}, {fileName}.","Sustituciones: {jobId}, {fileName}.","Ersetzungen: {jobId}, {fileName}.")}/>
+ </span>
+ </Label>
+ <Input value={kbDefaultsDraft.collectionTemplate} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, collectionTemplate: e.target.value }))} placeholder="extracto-{jobId}"/>
+ </div>
+ </div>
+ </SettingsSection>
+
+ <div className="flex justify-end pt-2">
+ <Button onClick={saveKbDefaults} disabled={isSavingKbDefaults}>
+ {isSavingKbDefaults ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin"/> : null}
+ {t("Salva knowledge base","Save knowledge base","Enregistrer KB","Guardar KB","KB speichern")}
+ </Button>
+ </div>
+ </TabsContent>
+
+ <TabsContent value="provider"className="space-y-5 mt-4">
+ <SettingsSection title={t("Provider","Provider","Fournisseur","Proveedor","Anbieter")} hint={t("Da dove arriva l'inferenza OCR.","Where the OCR inference runs.","D'où vient l'inférence OCR.","De dónde viene la inferencia OCR.","Wo die OCR-Inferenz läuft.")}>
+ <Select value={apiSettingsDraft.provider} onValueChange={(value) => setApiSettingsDraft((prev) => { const nextProvider = normalizeProvider(value); return { ...prev, provider: nextProvider, apiEndpoint: defaultEndpointForProvider(nextProvider) }; })}>
+ <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ <SelectItem value="ollama">Ollama</SelectItem>
+ <SelectItem value="mistral">Mistral OCR API</SelectItem>
+ <SelectItem value="openrouter">OpenRouter</SelectItem>
+ <SelectItem value="openai_compat">OpenAI-compatible</SelectItem>
+ </SelectContent>
+ </Select>
+ </SettingsSection>
+
+ <SettingsSection title={t("Endpoint","Endpoint","Endpoint","Endpoint","Endpoint")}>
+ <Input value={apiSettingsDraft.apiEndpoint} onChange={(event) => setApiSettingsDraft((prev) => ({ ...prev, apiEndpoint: event.target.value }))} placeholder={defaultEndpointForProvider(normalizeProvider(apiSettingsDraft.provider))}/>
+ </SettingsSection>
+
+ <SettingsSection
+ title="API key"
+ hint={!apiKeyDirty && apiSettingsDraft.hasApiKey ? t("Lascia invariata per mantenere la chiave corrente.","Leave unchanged to keep the current key.","Laissez tel quel pour conserver la clé.","Déjala igual para mantener la clave.","Unverändert lassen, um den aktuellen Schlüssel zu behalten.") : undefined}
+ >
+ <Input
+ type="password"
+ value={apiSettingsDraft.apiKey}
+ onChange={(event) => setApiSettingsDraft((prev) => { setApiKeyDirty(true); return { ...prev, apiKey: event.target.value }; })}
+ placeholder={!apiKeyDirty && apiSettingsDraft.hasApiKey ? t("Salvata (nascosta)","Saved (hidden)","Enregistrée (masquée)","Guardada (oculta)","Gespeichert (verborgen)") :"sk-..."}
+ />
+ </SettingsSection>
+
+ <div className="flex justify-end pt-2">
+ <Button onClick={saveApiSettings} disabled={isSavingApiSettings}>
+ {isSavingApiSettings ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin"/> : null}
+ {t("Salva provider","Save provider","Enregistrer le fournisseur","Guardar proveedor","Provider speichern")}
+ </Button>
+ </div>
+ </TabsContent>
+
+ <TabsContent value="general"className="space-y-5 mt-4">
+ <SettingsSection title={t("Lingua interfaccia","Interface language","Langue d'interface","Idioma de la interfaz","Oberflächensprache")}>
+ <Select value={uiLanguage} onValueChange={(value) => setUiLanguage(value as UiLanguage)}>
+ <SelectTrigger className="w-full">
  <SelectValue>
- <span className="inline-flex items-center gap-1.5">
+ <span className="inline-flex items-center gap-2">
  <span aria-hidden>{UI_LANGUAGE_FLAGS[uiLanguage]}</span>
  <span>{UI_LANGUAGE_LABELS[uiLanguage]}</span>
  </span>
  </SelectValue>
- </div>
  </SelectTrigger>
  <SelectContent>
  {UI_LANGUAGES.map((lang) => (
@@ -1595,180 +2216,30 @@ export default function ExtractoPage() {
  ))}
  </SelectContent>
  </Select>
+ </SettingsSection>
 
- {/* Model Selector */}
- <Select
- value={selectedModel}
- onValueChange={setSelectedModel}
- disabled={isLoadingModels || models.length === 0}
- >
- <SelectTrigger className="w-[180px] h-9">
- <SelectValue
- placeholder={isLoadingModels ? t("Caricamento modelli...","Loading models...","Chargement des modèles...","Cargando modelos...","Modelle werden geladen...") : t("Seleziona modello","Select model","Choisir un modèle","Seleccionar modelo","Modell wählen")}
- />
- </SelectTrigger>
- <SelectContent>
- {models.map((model) => (
- <SelectItem key={model.id} value={model.id}>
- {model.name}
- </SelectItem>
- ))}
- </SelectContent>
- </Select>
-
- <motion.div whileHover={{ y: -1, scale: 1.05 }} whileTap={{ scale: 0.95 }} transition={{ duration: 0.16 }}>
- <Button
- variant="outline"size="icon"className="group"onClick={openHistoryModal}
- aria-label={t("OCR passati","Past OCR","OCR précédents","OCR anteriores","Frühere OCRs")}
- title={t("OCR passati","Past OCR","OCR précédents","OCR anteriores","Frühere OCRs")}
- >
- <History className="h-4 w-4 text-sky-400 transition-transform duration-200 group-hover:-rotate-6 group-hover:scale-110"/>
+ <SettingsSection title={t("Esecuzioni passate","Past runs","Exécutions passées","Ejecuciones pasadas","Frühere Läufe")} hint={t("Sfoglia, scarica ed elimina lavori OCR precedenti.","Browse, download, and delete previous OCR runs.","Parcourez, téléchargez et supprimez les exécutions passées.","Explora, descarga y elimina ejecuciones anteriores.","Frühere OCR-Läufe durchsuchen, herunterladen oder löschen.")}>
+ <Button variant="secondary"className="w-full justify-start group"onClick={() => { setApiSettingsOpen(false); openHistoryModal(); }}>
+ <History className="h-4 w-4 mr-2 text-primary transition-transform duration-200 group-hover:-rotate-6"/>
+ {t("Apri cronologia","Open history","Ouvrir l'historique","Abrir historial","Verlauf öffnen")}
  </Button>
- </motion.div>
+ </SettingsSection>
+ </TabsContent>
 
- <motion.div whileHover={{ y: -1, scale: 1.05 }} whileTap={{ scale: 0.95 }} transition={{ duration: 0.16 }}>
- <Button
- variant="outline"size="icon"className="group"onClick={() => {
- setApiSettingsDraft(apiSettings);
- setApiKeyDirty(false);
- setApiSettingsOpen(true);
- }}
- aria-label={t("Impostazioni","Settings","Paramètres","Configuración","Einstellungen")}
- title={t("Impostazioni","Settings","Paramètres","Configuración","Einstellungen")}
- >
- <Settings2 className="h-4 w-4 text-amber-400 transition-transform duration-200 group-hover:rotate-12 group-hover:scale-110"/>
- </Button>
- </motion.div>
-
- {modelError ? <p className="text-xs text-destructive max-w-[180px] truncate">{modelError}</p> : null}
-
- {/* Export All Button */}
- {canExportZip && (
- <motion.div
- initial={{ opacity: 0, scale: 0.9 }}
- animate={{ opacity: 1, scale: 1 }}
- >
- <Button variant="outline"size="sm"className="group"onClick={exportAllAsZip}>
- <FileArchive className="h-4 w-4 mr-1.5 text-violet-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-110"/>
- {t("Esporta ZIP","Export ZIP","Exporter ZIP","Exportar ZIP","ZIP exportieren")}
- </Button>
- </motion.div>
- )}
-
- <ThemeToggle />
- </div>
- </div>
- </motion.header>
-
- <Dialog
- open={apiSettingsOpen}
- onOpenChange={(open) => {
- setApiSettingsOpen(open);
- if (!open) {
- setApiSettingsDraft(apiSettings);
- setApiKeyDirty(false);
- }
- }}
- >
- <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
- <DialogHeader>
- <DialogTitle>{t("Impostazioni API","API Endpoint Settings","Paramètres API","Configuración de API","API-Einstellungen")}</DialogTitle>
- <DialogDescription>
- {t("Configura provider, endpoint e account.","Configure provider access and account actions.","Configurez fournisseur, point de terminaison et compte.","Configura proveedor, endpoint y cuenta.","Provider, Endpoint und Konto konfigurieren.")}
- </DialogDescription>
- </DialogHeader>
- <div className="space-y-4">
- <div className="space-y-2">
- <Label htmlFor="provider">{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</Label>
- <Select
- value={apiSettingsDraft.provider}
- onValueChange={(value) =>
- setApiSettingsDraft((prev) => {
- const nextProvider = normalizeProvider(value);
- return {
- ...prev,
- provider: nextProvider,
- apiEndpoint: defaultEndpointForProvider(nextProvider),
- };
- })
- }
- >
- <SelectTrigger id="provider"className="w-full">
- <SelectValue placeholder={t("Seleziona provider","Select provider","Choisir un fournisseur","Seleccionar proveedor","Anbieter wählen")} />
- </SelectTrigger>
- <SelectContent>
- <SelectItem value="ollama">Ollama</SelectItem>
- <SelectItem value="mistral">Mistral OCR API</SelectItem>
- <SelectItem value="openrouter">OpenRouter</SelectItem>
- <SelectItem value="openai_compat">OpenAI-compatible</SelectItem>
- </SelectContent>
- </Select>
- </div>
- <div className="space-y-2">
- <Label htmlFor="api-endpoint">{t("Endpoint API","API endpoint","Endpoint API","Endpoint API","API-Endpoint")}</Label>
- <Input
- id="api-endpoint"value={apiSettingsDraft.apiEndpoint}
- onChange={(event) =>
- setApiSettingsDraft((prev) => ({ ...prev, apiEndpoint: event.target.value }))
- }
- placeholder={defaultEndpointForProvider(
- normalizeProvider(apiSettingsDraft.provider)
- )}
- />
- </div>
- <div className="space-y-2">
- <Label htmlFor="api-key">{t("API key (opzionale)","API key (optional)","Clé API (facultative)","Clave API (opcional)","API-Schlüssel (optional)")}</Label>
- <Input
- id="api-key"type="password"value={apiSettingsDraft.apiKey}
- onChange={(event) =>
- setApiSettingsDraft((prev) => {
- setApiKeyDirty(true);
- return { ...prev, apiKey: event.target.value };
- })
- }
- placeholder={
- !apiKeyDirty && apiSettingsDraft.hasApiKey
- ? t("Chiave API salvata (non mostrata)","API key is saved (hidden)","Clé API enregistrée (masquée)","Clave API guardada (oculta)","API-Schlüssel gespeichert (verborgen)")
- :"sk-..."}
- />
- {!apiKeyDirty && apiSettingsDraft.hasApiKey ? (
- <p className="text-[11px] text-muted-foreground">
- {t(
-"Lascia il campo invariato per mantenere la chiave corrente.",
-"Leave unchanged to keep the current key.")}
- </p>
- ) : null}
- </div>
- <Separator />
- <div className="space-y-2">
- <Label>{t("Account","Account","Compte","Cuenta","Konto")}</Label>
- <Button
- variant="outline"className="w-full justify-start group"onClick={signOut}
- disabled={isSigningOut}
- >
- {isSigningOut ? (
- <Loader2 className="h-4 w-4 mr-1.5 animate-spin"/>
- ) : (
- <LogOut className="h-4 w-4 mr-1.5 text-rose-400 transition-transform duration-200 group-hover:translate-x-0.5"/>
- )}
+ <TabsContent value="account"className="space-y-5 mt-4">
+ <SettingsSection title={t("Account","Account","Compte","Cuenta","Konto")}>
+ <Button variant="outline"className="w-full justify-start group"onClick={signOut} disabled={isSigningOut}>
+ {isSigningOut ? <Loader2 className="h-4 w-4 mr-2 animate-spin"/> : <LogOut className="h-4 w-4 mr-2 text-destructive transition-transform duration-200 group-hover:translate-x-0.5"/>}
  {t("Esci","Sign out","Se déconnecter","Cerrar sesión","Abmelden")}
  </Button>
- </div>
- </div>
- <DialogFooter>
- <Button
- variant="outline"onClick={() => {
- setApiSettingsOpen(false);
- setApiSettingsDraft(apiSettings);
- setApiKeyDirty(false);
- }}
- disabled={isSavingApiSettings}
- >
- {t("Annulla","Cancel","Annuler","Cancelar","Abbrechen")}
- </Button>
- <Button onClick={saveApiSettings} disabled={isSavingApiSettings}>
- {isSavingApiSettings ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin"/> : null}
- {t("Salva","Save","Enregistrer","Guardar","Speichern")}
+ </SettingsSection>
+ </TabsContent>
+ </ScrollArea>
+ </Tabs>
+
+ <DialogFooter className="px-6 py-4 hairline-t">
+ <Button variant="outline"onClick={() => { setApiSettingsOpen(false); setApiSettingsDraft(apiSettings); setApiKeyDirty(false); setKbDefaultsDraft(kbDefaults); setKbEmbeddingKeyDirty(false); setKbStoreKeyDirty(false); }}>
+ {t("Chiudi","Done","Fermer","Cerrar","Schließen")}
  </Button>
  </DialogFooter>
  </DialogContent>
@@ -1895,7 +2366,7 @@ export default function ExtractoPage() {
  <div className="px-3 pt-2">
  <TabsList className="h-8 w-full justify-start overflow-x-auto">
  <TabsTrigger value="markdown"className="text-xs h-6 shrink-0 gap-1.5 group">
- <FileText className="h-3 w-3 text-emerald-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
+ <FileText className="h-3 w-3 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
  Markdown
  </TabsTrigger>
  <TabsTrigger value="markdown-raw"className="text-xs h-6 shrink-0 gap-1.5 group">
@@ -1903,7 +2374,7 @@ export default function ExtractoPage() {
  {t("Markdown grezzo","Markdown raw","Markdown brut","Markdown sin procesar","Roh-Markdown")}
  </TabsTrigger>
  <TabsTrigger value="json"className="text-xs h-6 shrink-0 gap-1.5 group">
- <Code className="h-3 w-3 text-cyan-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
+ <Code className="h-3 w-3 text-accent-foreground transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
  JSON
  </TabsTrigger>
  </TabsList>
@@ -1942,14 +2413,14 @@ export default function ExtractoPage() {
  variant="outline"onClick={() => downloadHistoryResult("md")}
  disabled={!selectedHistoryJob}
  className="group">
- <Download className="h-4 w-4 mr-1.5 text-emerald-400 transition-transform duration-200 group-hover:-translate-y-0.5"/>
+ <Download className="h-4 w-4 mr-1.5 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:-translate-y-0.5"/>
  {t("Scarica MD","Download MD","Télécharger MD","Descargar MD","MD herunterladen")}
  </Button>
  <Button
  variant="outline"onClick={() => downloadHistoryResult("json")}
  disabled={!selectedHistoryJob}
  className="group">
- <Download className="h-4 w-4 mr-1.5 text-cyan-400 transition-transform duration-200 group-hover:-translate-y-0.5"/>
+ <Download className="h-4 w-4 mr-1.5 text-accent-foreground transition-transform duration-200 group-hover:-translate-y-0.5"/>
  {t("Scarica JSON","Download JSON","Télécharger JSON","Descargar JSON","JSON herunterladen")}
  </Button>
  <Button
@@ -2019,7 +2490,7 @@ export default function ExtractoPage() {
  {/* File List Header */}
  <div className="flex items-center justify-between p-3">
  <div className="flex items-center gap-2">
- <FileText className="h-4 w-4 text-indigo-400"/>
+ <FileText className="h-4 w-4 text-primary"/>
  <span className="text-sm font-medium">
  {files.length} {t(files.length !== 1 ?"file":"file", files.length !== 1 ?"files":"file")}
  </span>
@@ -2096,8 +2567,8 @@ export default function ExtractoPage() {
  )}
  {file.status ==="paused"? (
  <div className="flex items-center gap-1">
- <PauseCircle className="h-3 w-3 text-amber-500"/>
- <span className="text-xs text-amber-600">{t("in pausa","paused","en pause","en pausa","pausiert")}</span>
+ <PauseCircle className="h-3 w-3 text-accent-foreground"/>
+ <span className="text-xs text-accent-foreground">{t("in pausa","paused","en pause","en pausa","pausiert")}</span>
  </div>
  ) : null}
  </div>
@@ -2106,7 +2577,7 @@ export default function ExtractoPage() {
  <Progress value={file.progress} className="h-1 mt-1"/>
  <div className="flex items-center justify-between mt-1">
  <span className="text-[11px] text-muted-foreground truncate max-w-[150px]">
- {file.stageMessage || (file.status ==="paused"? t("In pausa","Paused","En pause","En pausa","Pausiert") : t("In lavorazione","Working","En cours","Trabajando","In Arbeit"))}
+ {translatePipelineMessage(file.stageMessage, uiLanguage) || (file.status ==="paused"? t("In pausa","Paused","En pause","En pausa","Pausiert") : t("In lavorazione","Working","En cours","Trabajando","In Arbeit"))}
  </span>
  <span className="text-[11px] text-muted-foreground">
  {t("ETA","ETA","ETA","ETA","ETA")} {formatEta(file.etaSeconds)}
@@ -2124,14 +2595,14 @@ export default function ExtractoPage() {
  animate={{ scale: 1 }}
  transition={{ type:"spring", stiffness: 400 }}
  >
- <CheckCircle2 className="h-4 w-4 text-emerald-500"/>
+ <CheckCircle2 className="h-4 w-4 text-[oklch(0.55_0.13_150)]"/>
  </motion.div>
  )}
  {file.status ==="error"&& (
  <AlertCircle className="h-4 w-4 text-destructive"/>
  )}
  {file.status ==="paused"&& (
- <PauseCircle className="h-4 w-4 text-amber-500"/>
+ <PauseCircle className="h-4 w-4 text-accent-foreground"/>
  )}
  {file.status ==="pending"&& (
  <Button
@@ -2163,236 +2634,61 @@ export default function ExtractoPage() {
  </div>
  )}
 
- {/* Process Button */}
  <div className="p-3 space-y-2 bg-card">
+ {activeProcessingFile ? (
+ <Button
+ variant="destructive"className="w-full group"onClick={() => stopProcessingFile(activeProcessingFile)}
+ >
+ <PauseCircle className="h-4 w-4 mr-2 transition-transform duration-200 group-hover:scale-110"/>
+ {t("Ferma OCR corrente","Stop current OCR","Arrêter l'OCR en cours","Detener OCR actual","Aktuelle OCR stoppen")}
+ </Button>
+ ) : (
  <Button
  className="w-full group"onClick={processFiles}
- disabled={
- isProcessing ||
- pendingCount === 0 ||
- !selectedModel.trim() ||
- !isRunReady ||
- activeProcessingFile !== null
- }
+ disabled={isProcessing || pendingCount === 0 || !selectedModel.trim() || !isRunReady}
  >
  {isProcessing ? (
  <>
  <Loader2 className="h-4 w-4 mr-2 animate-spin"/>
- {t("Elaborazione...","Processing...","Traitement...","Procesando...","Verarbeitung läuft...")}
+ {t("Avvio in corso...","Starting...","Démarrage...","Iniciando...","Wird gestartet...")}
  </>
  ) : (
  <>
- <Zap className="h-4 w-4 mr-2 text-amber-300 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6"/>
- {t(`Avvia OCR (${pendingCount} in attesa)`, `Run OCR (${pendingCount} pending)`)}
+ <Zap className="h-4 w-4 mr-2 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6"/>
+ {t(`Avvia OCR (${pendingCount} in attesa)`, `Run OCR (${pendingCount} pending)`,`Lancer OCR (${pendingCount} en attente)`,`Iniciar OCR (${pendingCount} pendientes)`,`OCR starten (${pendingCount} ausstehend)`)}
  </>
  )}
  </Button>
- {activeProcessingFile ? (
- <Button
- variant="outline"className="w-full group"onClick={() => stopProcessingFile(activeProcessingFile)}
- >
- <PauseCircle className="h-4 w-4 mr-2 text-amber-500 transition-transform duration-200 group-hover:scale-110"/>
- {t("Ferma OCR corrente","Stop Current OCR","Arrêter l'OCR en cours","Detener OCR actual","Aktuelle OCR stoppen")}
- </Button>
- ) : null}
- {resumableSelectedFile ? (
+ )}
+ {resumableSelectedFile && !activeProcessingFile ? (
  <Button
  variant="secondary"className="w-full group"onClick={() => resumeProcessingFile(resumableSelectedFile)}
  >
- <PlayCircle className="h-4 w-4 mr-2 text-emerald-400 transition-transform duration-200 group-hover:scale-110"/>
- {t("Riprendi dal checkpoint","Resume From Checkpoint","Reprendre depuis le checkpoint","Reanudar desde checkpoint","Vom Checkpoint fortsetzen")}
+ <PlayCircle className="h-4 w-4 mr-2 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:scale-110"/>
+ {t("Riprendi dal checkpoint","Resume from checkpoint","Reprendre depuis le checkpoint","Reanudar desde checkpoint","Vom Checkpoint fortsetzen")}
  </Button>
  ) : null}
+ <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-muted-foreground">
+ <span className="truncate">
+ <span className="text-muted-foreground/70">{t("Modello","Model","Modèle","Modelo","Modell")}: </span>
+ <span className="text-foreground/90 font-medium tabular">{models.find((m) => m.id === selectedModel)?.name || selectedModel || "—"}</span>
+ </span>
+ {canExportZip ? (
+ <Tooltip>
+ <TooltipTrigger asChild>
+ <button type="button"onClick={exportAllAsZip} className="inline-flex items-center gap-1 text-foreground/70 hover:text-primary transition-colors">
+ <FileArchive className="h-3 w-3"/>
+ <span>ZIP</span>
+ </button>
+ </TooltipTrigger>
+ <TooltipContent>{t("Esporta tutti i risultati","Export all results","Exporter tous les résultats","Exportar todos los resultados","Alle Ergebnisse exportieren")}</TooltipContent>
+ </Tooltip>
+ ) : null}
+ </div>
  </div>
  </CardContent>
  </Card>
 
- {/* Advanced Settings */}
- <Collapsible open={advancedSettingsOpen} onOpenChange={setAdvancedSettingsOpen}>
- <Card>
- <CollapsibleTrigger asChild>
- <CardHeader className="p-3 cursor-pointer hover:bg-muted/50 transition-colors">
- <div className="flex items-center justify-between">
- <CardTitle className="text-sm font-medium flex items-center gap-2">
- <Settings2 className="h-4 w-4 text-amber-400"/>
- {t("Impostazioni avanzate","Advanced Settings","Paramètres avancés","Configuración avanzada","Erweiterte Einstellungen")}
- </CardTitle>
- <motion.div
- animate={{ rotate: advancedSettingsOpen ? 180 : 0 }}
- transition={{ duration: 0.2 }}
- >
- <ChevronDown className="h-4 w-4 text-muted-foreground"/>
- </motion.div>
- </div>
- </CardHeader>
- </CollapsibleTrigger>
- <CollapsibleContent>
- <CardContent className="pt-0 px-3 pb-3 space-y-4">
- {/* Language Selection */}
- <div className="space-y-2">
- <Label className="text-xs flex items-center gap-1.5">
- <Languages className="h-3 w-3"/>
- {t("Lingua documento","Document Language","Langue du document","Idioma del documento","Dokumentsprache")}
- </Label>
- <Select
- value={settings.language}
- onValueChange={(v) => setSettings((s) => ({ ...s, language: v }))}
- >
- <SelectTrigger className="h-8 text-xs">
- <SelectValue />
- </SelectTrigger>
- <SelectContent>
- {LANGUAGES.map((lang) => (
- <SelectItem key={lang.code} value={lang.code} className="text-xs">
- {lang.names[uiLanguage] ?? lang.names.en}
- </SelectItem>
- ))}
- </SelectContent>
- </Select>
- </div>
-
- {/* Toggle Settings */}
- <div className="space-y-3">
- <div className="flex items-center justify-between">
- <Label className="text-xs">{t("Rilevamento tabelle","Table Detection","Détection des tableaux","Detección de tablas","Tabellenerkennung")}</Label>
- <Switch
- checked={settings.tableDetection}
- onCheckedChange={(v) => setSettings((s) => ({ ...s, tableDetection: v }))}
- className="data-[state=checked]:bg-primary"/>
- </div>
- <div className="flex items-center justify-between">
- <Label className="text-xs">{t("Riconoscimento scrittura a mano","Handwriting Recognition","Reconnaissance d'écriture","Reconocimiento de escritura","Handschrifterkennung")}</Label>
- <Switch
- checked={settings.handwritingRecognition}
- onCheckedChange={(v) => setSettings((s) => ({ ...s, handwritingRecognition: v }))}
- className="data-[state=checked]:bg-primary"/>
- </div>
- <div className="flex items-center justify-between">
- <Label className="text-xs">{t("Mantieni formattazione","Preserve Formatting","Conserver la mise en forme","Conservar formato","Formatierung beibehalten")}</Label>
- <Switch
- checked={settings.preserveFormatting}
- onCheckedChange={(v) => setSettings((s) => ({ ...s, preserveFormatting: v }))}
- className="data-[state=checked]:bg-primary"/>
- </div>
- </div>
-
- {/* Quality Slider */}
- <div className="space-y-2">
- <div className="flex items-center justify-between">
- <Label className="text-xs">{t("Qualità output","Output Quality","Qualité de sortie","Calidad de salida","Ausgabequalität")}</Label>
- <span className="text-xs text-muted-foreground">{settings.quality}%</span>
- </div>
- <Slider
- value={[settings.quality]}
- onValueChange={([v]) => setSettings((s) => ({ ...s, quality: v }))}
- min={50}
- max={100}
- step={10}
- className="py-2"/>
- </div>
-
- {/* Custom Prompt */}
- <div className="space-y-2">
- <Label className="text-xs">{t("Istruzioni personalizzate","Custom Instructions","Instructions personnalisées","Instrucciones personalizadas","Eigene Anweisungen")}</Label>
- <Textarea
- placeholder={t("Aggiungi istruzioni OCR personalizzate...","Add custom OCR instructions...","Ajoutez des instructions OCR personnalisées...","Añade instrucciones OCR personalizadas...","Eigene OCR-Anweisungen hinzufügen...")}
- value={settings.customPrompt}
- onChange={(e) => setSettings((s) => ({ ...s, customPrompt: e.target.value }))}
- className="h-16 text-xs resize-none"/>
- </div>
-
- <Separator />
-
- <div className="space-y-3">
- <div className="flex items-center justify-between">
- <div className="space-y-1">
- <Label className="text-xs">{t("Post-processing","Post-processing","Post-traitement","Post-procesamiento","Nachverarbeitung")}</Label>
- <p className="text-[11px] text-muted-foreground">
- {t("Applica un passaggio modello aggiuntivo dopo l'estrazione OCR.","Apply an extra model step after OCR extraction.","Appliquer une étape modèle supplémentaire après l'extraction OCR.","Aplica un paso de modelo adicional tras la extracción OCR.","Zusätzlichen Modell-Schritt nach der OCR-Extraktion anwenden.")}
- </p>
- </div>
- <Switch
- checked={postProcessing.enabled}
- onCheckedChange={(enabled) =>
- setPostProcessing((prev) => ({ ...prev, enabled }))
- }
- className="data-[state=checked]:bg-primary"/>
- </div>
-
- {postProcessing.enabled ? (
- <div className="space-y-3 rounded-md bg-muted/20 p-3">
- <div className="space-y-2">
- <Label className="text-xs">{t("Istruzione","Instruction","Instruction","Instrucción","Anweisung")}</Label>
- <Textarea
- placeholder={t("Esempio: estrai numero fattura, scadenza e totali da ogni pagina e restituisci una tabella normalizzata.","Example: Extract invoice number, due date, and totals from each page, then return one normalized table.","Exemple : extraire le numéro de facture, l'échéance et les totaux de chaque page, puis renvoyer un tableau normalisé.","Ejemplo: extrae número de factura, fecha de vencimiento y totales de cada página, luego devuelve una tabla normalizada.","Beispiel: Rechnungsnummer, Fälligkeit und Summen pro Seite extrahieren und als normalisierte Tabelle zurückgeben.")}
- value={postProcessing.instruction}
- onChange={(event) =>
- setPostProcessing((prev) => ({
- ...prev,
- instruction: event.target.value,
- }))
- }
- className="h-24 text-xs resize-none"/>
- </div>
- <div className="space-y-2">
- <Label className="text-xs">{t("Modello post-processing","Post-processing model","Modèle de post-traitement","Modelo de post-procesamiento","Nachverarbeitungs-Modell")}</Label>
- <Select
- value={postProcessModelValue}
- onValueChange={(value) =>
- setPostProcessing((prev) => ({
- ...prev,
- model: value ==="__same__"?"": value,
- }))
- }
- >
- <SelectTrigger className="h-8 text-xs">
- <SelectValue />
- </SelectTrigger>
- <SelectContent>
- <SelectItem value="__same__"className="text-xs">
- {t(`Uguale al modello OCR (${selectedModel})`, `Same as OCR model (${selectedModel})`)}
- </SelectItem>
- {!selectedPostProcessModelExists && postProcessing.model ? (
- <SelectItem value={postProcessing.model} className="text-xs">
- {postProcessing.model}
- </SelectItem>
- ) : null}
- {models.map((model) => (
- <SelectItem key={`post-model-${model.id}`} value={model.id} className="text-xs">
- {model.name}
- </SelectItem>
- ))}
- </SelectContent>
- </Select>
- </div>
- <div className="space-y-2">
- <Label className="text-xs">{t("Formato output","Output format","Format de sortie","Formato de salida","Ausgabeformat")}</Label>
- <Select
- value={postProcessing.outputFormat}
- onValueChange={(value: PostProcessOutputFormat) =>
- setPostProcessing((prev) => ({ ...prev, outputFormat: value }))
- }
- >
- <SelectTrigger className="h-8 text-xs">
- <SelectValue />
- </SelectTrigger>
- <SelectContent>
- <SelectItem value="markdown"className="text-xs">
- Markdown
- </SelectItem>
- <SelectItem value="json"className="text-xs">
- {t("JSON strutturato","Structured JSON","JSON structuré","JSON estructurado","Strukturiertes JSON")}
- </SelectItem>
- </SelectContent>
- </Select>
- </div>
- </div>
- ) : null}
- </div>
- </CardContent>
- </CollapsibleContent>
- </Card>
- </Collapsible>
  </motion.div>
 
  {/* Right Panel - Preview */}
@@ -2412,13 +2708,13 @@ export default function ExtractoPage() {
  </span>
  {selectedFile.status ==="completed"&& (
  <Badge variant="outline"className="text-xs">
- <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-500"/>
+ <CheckCircle2 className="h-3 w-3 mr-1 text-[oklch(0.55_0.13_150)]"/>
  {t("Completato","Completed","Terminé","Completado","Abgeschlossen")}
  </Badge>
  )}
  {selectedFile.status ==="paused"&& (
  <Badge variant="outline"className="text-xs">
- <PauseCircle className="h-3 w-3 mr-1 text-amber-500"/>
+ <PauseCircle className="h-3 w-3 mr-1 text-accent-foreground"/>
  {t("In pausa","Paused","En pause","En pausa","Pausiert")}
  </Badge>
  )}
@@ -2431,35 +2727,57 @@ export default function ExtractoPage() {
  variant={viewMode ==="preview"?"secondary":"ghost"}
  size="sm"className="h-7 px-2 group"onClick={() => setViewMode("preview")}
  >
- <Eye className="h-3.5 w-3.5 text-sky-400 transition-transform duration-200 group-hover:scale-110"/>
+ <Eye className="h-3.5 w-3.5 text-accent-foreground transition-transform duration-200 group-hover:scale-110"/>
  </Button>
  <Button
  variant={viewMode ==="split"?"secondary":"ghost"}
  size="sm"className="h-7 px-2 group"onClick={() => setViewMode("split")}
  >
- <Columns className="h-3.5 w-3.5 text-violet-400 transition-transform duration-200 group-hover:scale-110"/>
+ <Columns className="h-3.5 w-3.5 text-primary transition-transform duration-200 group-hover:scale-110"/>
  </Button>
  <Button
  variant={viewMode ==="result"?"secondary":"ghost"}
  size="sm"className="h-7 px-2 group"onClick={() => setViewMode("result")}
  >
- <FileText className="h-3.5 w-3.5 text-emerald-400 transition-transform duration-200 group-hover:scale-110"/>
+ <FileText className="h-3.5 w-3.5 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:scale-110"/>
  </Button>
  <Separator orientation="vertical"className="h-5 mx-1"/>
  <Button
  variant="ghost"size="sm"className="h-7 group"onClick={() => copyToClipboard("md")}
  >
  {copied ==="md"? (
- <Check className="h-3.5 w-3.5 text-emerald-500"/>
+ <Check className="h-3.5 w-3.5 text-[oklch(0.55_0.13_150)]"/>
  ) : (
- <Copy className="h-3.5 w-3.5 text-cyan-400 transition-transform duration-200 group-hover:scale-110"/>
+ <Copy className="h-3.5 w-3.5 text-accent-foreground transition-transform duration-200 group-hover:scale-110"/>
  )}
  </Button>
  <Button
  variant="ghost"size="sm"className="h-7 group"onClick={() => downloadResult("md")}
  >
- <Download className="h-3.5 w-3.5 text-emerald-400 transition-transform duration-200 group-hover:-translate-y-0.5"/>
+ <Download className="h-3.5 w-3.5 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:-translate-y-0.5"/>
  </Button>
+ {selectedFile?.status ==="completed"&& selectedFile.jobId ? (
+ <Button
+ variant="ghost"size="sm"className="h-7 group"onClick={() => exportFileToKb(selectedFile)}
+ disabled={selectedFile.kbExport?.status ==="pending"}
+ title={
+ selectedFile.kbExport?.status ==="success"
+ ? t(
+ `Riesporta nel KB (ultima: ${selectedFile.kbExport.collectionName ??""})`,
+ `Re-export to KB (last: ${selectedFile.kbExport.collectionName ??""})`,
+ )
+ : t("Invia al vector store","Send to vector store","Envoyer au vector store","Enviar al vector store","An Vektor-Store senden")
+ }
+ >
+ {selectedFile.kbExport?.status ==="pending"? (
+ <Loader2 className="h-3.5 w-3.5 animate-spin text-primary"/>
+ ) : selectedFile.kbExport?.status ==="success"? (
+ <Database className="h-3.5 w-3.5 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:scale-110"/>
+ ) : (
+ <DatabaseBackup className="h-3.5 w-3.5 text-primary transition-transform duration-200 group-hover:scale-110"/>
+ )}
+ </Button>
+ ) : null}
  </>
  )}
  </div>
@@ -2510,7 +2828,7 @@ export default function ExtractoPage() {
  <div className="px-3 pt-2">
  <TabsList className="h-8 w-full justify-start overflow-x-auto">
  <TabsTrigger value="markdown"className="text-xs gap-1.5 h-6 shrink-0 group">
- <FileText className="h-3 w-3 text-emerald-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
+ <FileText className="h-3 w-3 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
  Markdown
  </TabsTrigger>
  <TabsTrigger value="markdown-raw"className="text-xs gap-1.5 h-6 shrink-0 group">
@@ -2518,7 +2836,7 @@ export default function ExtractoPage() {
  {t("Markdown grezzo","Markdown raw","Markdown brut","Markdown sin procesar","Roh-Markdown")}
  </TabsTrigger>
  <TabsTrigger value="json"className="text-xs gap-1.5 h-6 shrink-0 group">
- <Code className="h-3 w-3 text-cyan-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
+ <Code className="h-3 w-3 text-accent-foreground transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
  JSON
  </TabsTrigger>
  </TabsList>
@@ -2560,7 +2878,7 @@ export default function ExtractoPage() {
  {selectedFile.status ==="paused"? t("OCR in pausa","OCR Paused","OCR en Pause","OCR en Pausa","OCR Pausiert") : t("OCR in elaborazione","Processing OCR","OCR en cours de traitement","Procesando OCR","OCR wird verarbeitet")}
  </p>
  <p className="text-xs text-muted-foreground">
- {selectedFile.stageMessage || t("Esecuzione pipeline di estrazione","Running extraction pipeline","Pipeline d'extraction en cours","Ejecutando pipeline de extracción","Extraktions-Pipeline läuft")}
+ {translatePipelineMessage(selectedFile.stageMessage, uiLanguage) || t("Esecuzione pipeline di estrazione","Running extraction pipeline","Pipeline d'extraction en cours","Ejecutando pipeline de extracción","Extraktions-Pipeline läuft")}
  </p>
  </div>
  <Badge variant={selectedFile.status ==="paused"?"outline":"secondary"}>
@@ -2637,7 +2955,7 @@ export default function ExtractoPage() {
  {event.stage ||"stage"}
  </p>
  <p className="text-[11px] text-muted-foreground">
- {event.message ||""}
+ {translatePipelineMessage(event.message, uiLanguage)}
  </p>
  <p className="text-[10px] text-muted-foreground">
  {event.at ? formatTimestamp(event.at) :""}
@@ -2741,7 +3059,50 @@ export default function ExtractoPage() {
  );
 }
 
-// ChevronDown icon component
+function SettingsSection({ title, hint, right, children }: { title: React.ReactNode; hint?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }) {
+ return (
+ <div className="space-y-2">
+ <div className="flex items-baseline justify-between gap-3">
+ <div>
+ <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
+ {hint ? <p className="text-[12px] text-muted-foreground/90 leading-relaxed mt-0.5">{hint}</p> : null}
+ </div>
+ {right ? <div className="shrink-0">{right}</div> : null}
+ </div>
+ <div>{children}</div>
+ </div>
+ );
+}
+
+function ToggleRow({ label, hint, checked, onCheckedChange }: { label: string; hint?: string; checked: boolean; onCheckedChange: (v: boolean) => void }) {
+ return (
+ <div className="flex items-center justify-between gap-4 surface-soft rounded-xl px-3.5 py-2.5">
+ <div className="min-w-0">
+ <Label className="text-sm font-medium">
+ <span className="inline-flex items-center gap-1.5">
+ {label}
+ {hint ? <HintInfo text={hint} /> : null}
+ </span>
+ </Label>
+ </div>
+ <Switch checked={checked} onCheckedChange={onCheckedChange} />
+ </div>
+ );
+}
+
+function HintInfo({ text }: { text: string }) {
+ return (
+ <Tooltip>
+ <TooltipTrigger asChild>
+ <button type="button"className="text-muted-foreground/60 hover:text-foreground transition-colors"aria-label="info">
+ <Info className="h-3 w-3"/>
+ </button>
+ </TooltipTrigger>
+ <TooltipContent>{text}</TooltipContent>
+ </Tooltip>
+ );
+}
+
 function ChevronDown({ className }: { className?: string }) {
  return (
  <svg

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Fraunces } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PwaRegister } from "@/components/pwa-register";
 
@@ -15,6 +16,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
+});
+
 export const metadata: Metadata = {
   title: "Extracto - AI-Powered Document OCR",
   description: "Extract text from documents with AI. Batch processing, real-time progress, and multiple output formats.",
@@ -22,7 +30,7 @@ export const metadata: Metadata = {
   authors: [{ name: "Extracto Team" }],
   applicationName: "Extracto",
   manifest: "/manifest.webmanifest",
-  themeColor: "#0f172a",
+  themeColor: "#1d1813",
   appleWebApp: {
     capable: true,
     title: "Extracto",
@@ -39,7 +47,7 @@ export const metadata: Metadata = {
       {
         rel: "mask-icon",
         url: "/extracto-maskable.svg",
-        color: "#0f172a",
+        color: "#1d1813",
       },
     ],
   },
@@ -53,7 +61,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} antialiased bg-background text-foreground`}
       >
         <ThemeProvider
           attribute="class"
@@ -61,9 +69,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
-          <PwaRegister />
-          <Toaster />
+          <TooltipProvider>
+            {children}
+            <PwaRegister />
+            <Toaster />
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>
