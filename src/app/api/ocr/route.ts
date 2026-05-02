@@ -5,6 +5,13 @@ import { createHash } from "node:crypto";
 import { ApiProviderSettings, FALLBACK_OLLAMA_HOST, getApiSettings } from "@/lib/settings-store";
 import { normalizeMistralEndpoint as normalizeMistralEndpointBase } from "@/lib/ocr/provider-normalization";
 import { getStringField, parsePreviewImageData, parseServiceError } from "@/lib/ocr/error-parsing";
+import {
+  appendPageMarkdown,
+  coerceMarkdownText,
+  extractStructuredPageEntryMarkdown,
+  getPageMarkdownForRouting,
+  parseJsonCandidate,
+} from "@/lib/ocr/markdown-routing";
 import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
 import {
   maybeUploadResultJson,
@@ -471,61 +478,8 @@ function buildPostProcessingPrompt(
   };
 }
 
-function extractStructuredPageEntryMarkdown(
-  structured: Record<string, unknown>,
-  pageNumber: number
-): string {
-  const rawPages = Array.isArray(structured.pages) ? structured.pages : [];
-  if (!rawPages.length) {
-    return "";
-  }
-
-  const matching = rawPages
-    .map((entry) => {
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-        return "";
-      }
-      const typed = entry as Record<string, unknown>;
-      const indexValue = typeof typed.index === "number"
-        ? Math.floor(typed.index)
-        : typeof typed.pageNumber === "number"
-          ? Math.floor(typed.pageNumber)
-          : typeof typed.page === "number"
-            ? Math.floor(typed.page)
-            : null;
-      if (
-        indexValue !== null &&
-        indexValue !== pageNumber &&
-        indexValue !== pageNumber - 1
-      ) {
-        return "";
-      }
-      return coerceMarkdownText(
-        typed.markdown ?? typed.text ?? typed.content ?? typed.html,
-        ""
-      );
-    })
-    .filter(Boolean);
-
-  return matching.join("\n\n").trim();
-}
-
-function getPageMarkdownForRouting(page: {
-  pageNumber: number;
-  text: string;
-  structured: Record<string, unknown>;
-}): string {
-  const directMarkdown = coerceMarkdownText(
-    page.structured.markdown ??
-      page.structured.text ??
-      page.structured.content ??
-      page.structured.extractedText,
-    ""
-  );
-  const pageEntryMarkdown = extractStructuredPageEntryMarkdown(page.structured, page.pageNumber);
-  const fallback = page.text.trim();
-  return coerceMarkdownText(directMarkdown || pageEntryMarkdown || fallback, fallback);
-}
+// extractStructuredPageEntryMarkdown + getPageMarkdownForRouting moved to
+// src/lib/ocr/markdown-routing.ts (imported above) for unit testability.
 
 
 function formatPageScopedText(
@@ -579,71 +533,9 @@ function extractChatContentText(content: unknown): string {
   return "";
 }
 
-function parseJsonCandidate(rawText: string): unknown | null {
-  const trimmed = rawText.trim();
-  if (!trimmed) {
-    return null;
-  }
+// parseJsonCandidate moved to src/lib/ocr/markdown-routing.ts.
 
-  const directCandidates = [
-    trimmed,
-    trimmed.replace(/^json\s*/iu, "").trim(),
-    trimmed.replace(/^['"]+|['"]+$/g, "").trim(),
-  ];
-
-  const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
-  if (fencedMatch?.[1]) {
-    directCandidates.unshift(fencedMatch[1].trim());
-  }
-
-  for (const candidate of directCandidates) {
-    if (!candidate) continue;
-    try {
-      return JSON.parse(candidate);
-    } catch {
-      // keep trying fallbacks
-    }
-  }
-
-  const bracketCandidate = extractFirstBalancedJsonObject(trimmed);
-  if (bracketCandidate) {
-    try {
-      return JSON.parse(bracketCandidate);
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-}
-
-function coerceMarkdownText(value: unknown, fallbackMarkdown: string): string {
-  const fallback = fallbackMarkdown.trim();
-  if (typeof value !== "string") {
-    return fallback;
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return fallback;
-  }
-
-  const parsed = parseJsonCandidate(trimmed);
-  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    const objectValue = parsed as Record<string, unknown>;
-    const nestedValue = objectValue.markdown ?? objectValue.text ?? objectValue.content;
-    if (typeof nestedValue === "string" && nestedValue.trim()) {
-      return nestedValue.trim();
-    }
-  }
-
-  const extractedFromPseudoJson = extractMarkdownFromJsonLikeText(trimmed);
-  if (extractedFromPseudoJson) {
-    return extractedFromPseudoJson;
-  }
-
-  return trimmed;
-}
+// coerceMarkdownText moved to src/lib/ocr/markdown-routing.ts.
 
 function normalizeStructuredMarkdownPayload(
   raw: unknown,
@@ -1933,28 +1825,6 @@ function toPageResultPayload(page: ProcessedPageOutput) {
     structured: page.structured,
     ...page.metadata,
   };
-}
-
-/**
- * Append a page's routing markdown to the running extracted text, with the
- * "\n\n---\n\n" separator between chunks. Returns the new text + chunk count.
- * Empty/whitespace-only pages are skipped (returned state is unchanged).
- */
-function appendPageMarkdown(
-  currentText: string,
-  currentChunks: number,
-  page: { pageNumber: number; text: string; structured: Record<string, unknown> },
-): { text: string; chunks: number } {
-  const pageMarkdown = getPageMarkdownForRouting({
-    pageNumber: page.pageNumber,
-    text: page.text,
-    structured: page.structured,
-  }).trim();
-  if (!pageMarkdown) {
-    return { text: currentText, chunks: currentChunks };
-  }
-  const separator = currentChunks > 0 ? "\n\n---\n\n" : "";
-  return { text: currentText + separator + pageMarkdown, chunks: currentChunks + 1 };
 }
 
 async function unloadAllOllamaModels(apiEndpoint: string, models: Set<string>): Promise<void> {
