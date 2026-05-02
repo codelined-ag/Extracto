@@ -1,3 +1,5 @@
+// Edge-runtime-safe subset — no Node:crypto. Import from api-key.ts in Node-only contexts.
+// middleware.ts uses this file directly because Edge runtime forbids Node built-ins.
 export const API_KEY_PREFIX = "extr_";
 
 export function extractBearerToken(headerValue: string | null | undefined): string | null {

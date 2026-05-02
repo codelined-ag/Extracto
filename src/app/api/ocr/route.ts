@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus, Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
 
-import { ApiProviderSettings, getApiSettings } from "@/lib/settings-store";
+import { ApiProviderSettings, getApiSettings, normalizeMistralEndpoint } from "@/lib/settings-store";
 import { authenticateMutation, authenticateRequest, authHasScope, requireScope } from "@/lib/auth/request";
 import {
   maybeUploadResultJson,
@@ -318,7 +318,7 @@ function normalizePreviewForHistory(preview: string): string | null {
 function normalizeProviderEndpoint(provider: ProviderKind, rawEndpoint: string): string {
   if (provider === "mistral") {
     return enforceProviderEndpointPolicy("mistral",
-      normalizeMistralOcrEndpoint(rawEndpoint || DEFAULT_MISTRAL_API_URL),
+      normalizeMistralEndpoint(rawEndpoint || DEFAULT_MISTRAL_API_URL),
       DEFAULT_MISTRAL_API_URL);
   }
   if (provider === "openrouter") {
@@ -401,56 +401,8 @@ function normalizeOllamaEndpoint(rawEndpoint: string): string {
     .replace(/\/v1\/?$/i, "");
 }
 
-function normalizeMistralOcrEndpoint(rawEndpoint: string): string {
-  const fallback = DEFAULT_MISTRAL_API_URL;
-  const trimmed = rawEndpoint.trim();
-  if (!trimmed) {
-    return fallback;
-  }
-
-  const normalized = normalizeHostEndpoint(trimmed, fallback);
-  try {
-    const url = new URL(normalized);
-    url.search = "";
-    url.hash = "";
-
-    const pathname = url.pathname.replace(/\/+$/u, "");
-    if (pathname.endsWith("/v1/ocr")) {
-      url.pathname = pathname;
-      return url.toString();
-    }
-    if (pathname.endsWith("/v1/models")) {
-      url.pathname = `${pathname.slice(0, -10)}/v1/ocr`;
-      return url.toString();
-    }
-    if (pathname.endsWith("/models")) {
-      const base = pathname.slice(0, -7);
-      url.pathname = base.endsWith("/v1") ? `${base}/ocr` : `${base}/v1/ocr`;
-      return url.toString();
-    }
-    if (pathname.endsWith("/ocr")) {
-      const base = pathname.slice(0, -4);
-      url.pathname = base.endsWith("/v1") ? `${base}/ocr` : `${base}/v1/ocr`;
-      return url.toString();
-    }
-    if (pathname.endsWith("/v1")) {
-      url.pathname = `${pathname}/ocr`;
-      return url.toString();
-    }
-    if (!pathname || pathname === "/") {
-      url.pathname = "/v1/ocr";
-      return url.toString();
-    }
-
-    url.pathname = `${pathname}/v1/ocr`;
-    return url.toString();
-  } catch {
-    return fallback;
-  }
-}
-
 function buildMistralOcrEndpointCandidates(rawEndpoint: string): string[] {
-  const baseEndpoint = normalizeMistralOcrEndpoint(rawEndpoint);
+  const baseEndpoint = normalizeMistralEndpoint(rawEndpoint);
   const withoutProcess = baseEndpoint.replace(/\/process$/iu, "");
   const withProcess = withoutProcess.endsWith("/ocr")
     ? `${withoutProcess}/process`
@@ -1528,7 +1480,7 @@ async function runMistralOcr(
   const endpointCandidates = buildMistralOcrEndpointCandidates(
     apiEndpoint || DEFAULT_MISTRAL_API_URL
   );
-  let endpointUsed = endpointCandidates[0] || normalizeMistralOcrEndpoint(DEFAULT_MISTRAL_API_URL);
+  let endpointUsed = endpointCandidates[0] || normalizeMistralEndpoint(DEFAULT_MISTRAL_API_URL);
   let payload: unknown = null;
   let response: Response | null = null;
   let lastError: ApiRouteError | null = null;

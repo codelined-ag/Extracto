@@ -41,7 +41,7 @@ const DATA_ROOT = (() => {
 })();
 
 
-function normalizeMistralEndpoint(rawEndpoint?: string): string {
+export function normalizeMistralEndpoint(rawEndpoint?: string): string {
   const normalized = normalizeHostEndpoint(rawEndpoint || "", DEFAULT_MISTRAL_OCR_ENDPOINT);
 
   try {

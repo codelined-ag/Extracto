@@ -1,39 +1,7 @@
 #!/usr/bin/env bun
-import { createHmac, randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { ALL_SCOPES, WILDCARD_SCOPE } from "@/lib/auth/scopes";
-
-const KEY_PREFIX = "extr_";
-const RAW_KEY_BYTES = 32;
-const PREFIX_DISPLAY_LENGTH = 6;
-
-function getAuthSecret(): string {
-  const configured = process.env.AUTH_SECRET?.trim();
-  if (!configured) {
-    console.error("ERROR: AUTH_SECRET is required");
-    process.exit(1);
-  }
-  if (configured.length < 32) {
-    console.error("ERROR: AUTH_SECRET must be at least 32 characters");
-    process.exit(1);
-  }
-  return configured;
-}
-
-function base64UrlEncode(bytes: Buffer): string {
-  return bytes.toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-}
-
-function hashApiKey(plaintext: string): string {
-  return createHmac("sha256", getAuthSecret()).update(plaintext, "utf8").digest("hex");
-}
-
-function generateApiKey() {
-  const random = randomBytes(RAW_KEY_BYTES);
-  const plaintext = `${KEY_PREFIX}${base64UrlEncode(random)}`;
-  const prefix = plaintext.slice(0, KEY_PREFIX.length + PREFIX_DISPLAY_LENGTH);
-  return { plaintext, prefix, keyHash: hashApiKey(plaintext) };
-}
+import { generateApiKey } from "@/lib/auth/api-key";
 
 function usage(code = 0): never {
   console.log(`Usage:
