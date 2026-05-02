@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus } from "@prisma/client";
 
-import { handleApiError } from "@/lib/api-error";
 import { authenticateMutation, authHasScope } from "@/lib/auth/request";
 import { buildOcrForwardHeaders, resolveInternalOcrEndpoint } from "@/lib/ocr/forward";
 import { db } from "@/lib/db";
@@ -200,6 +199,15 @@ export async function POST(request: NextRequest) {
     { status: 504 }
   );
   } catch (error) {
-    return handleApiError(error);
+    // Wrap in OpenAI's nested-error envelope so the entire route surface
+    // (success + every failure path) speaks the same shape.
+    const message = error instanceof Error ? error.message : "Internal server error";
+    const status = error instanceof Error && "status" in error && typeof (error as { status?: unknown }).status === "number"
+      ? (error as { status: number }).status
+      : 500;
+    return NextResponse.json(
+      { error: { message, type: "internal_error" } },
+      { status },
+    );
   }
 }

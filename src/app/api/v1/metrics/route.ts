@@ -48,7 +48,8 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" },
     });
-  } catch {
+  } catch (error) {
+    console.error("metrics route failure:", error);
     return new Response("Internal server error", { status: 500 });
   }
 }

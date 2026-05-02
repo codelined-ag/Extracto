@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { handleApiError } from "@/lib/api-error";
-import { authenticateMutation, requireScope } from "@/lib/auth/request";
+import { ApiRouteError } from "@/lib/api-error";
+import { withMutationAuth } from "@/lib/auth/request";
 import { buildOcrForwardHeaders, resolveInternalOcrEndpoint } from "@/lib/ocr/forward";
 
 const MAX_BATCH_SIZE = 50;
@@ -57,19 +57,11 @@ function parseBatchBody(raw: unknown): BatchFile[] | { error: string } {
   return parsed;
 }
 
-export async function POST(request: NextRequest) {
-  try {
-  const result = await authenticateMutation(request);
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
-  }
-  const scopeError = requireScope(result.auth, "ocr:submit");
-  if (scopeError) return scopeError;
-
+export const POST = withMutationAuth("ocr:submit", async (request: NextRequest) => {
   const raw = await request.json().catch(() => null);
   const parsed = parseBatchBody(raw);
   if (!Array.isArray(parsed)) {
-    return NextResponse.json({ error: parsed.error }, { status: 400 });
+    throw new ApiRouteError(parsed.error, 400);
   }
 
   const batchId = `batch_${randomBytes(8).toString("hex")}`;
@@ -117,7 +109,4 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ batchId, submissions });
-  } catch (error) {
-    return handleApiError(error);
-  }
-}
+});
