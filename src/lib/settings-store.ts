@@ -217,8 +217,7 @@ export async function getApiSettings(userId: string): Promise<ApiProviderSetting
   const settingsPath = getSettingsPath(safeUserId);
   try {
     const stored = await readFile(settingsPath, "utf8");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let parsed: any;
+    let parsed: any = null;
     let parseOk = false;
     try {
       parsed = JSON.parse(stored);
@@ -241,7 +240,6 @@ export async function getApiSettings(userId: string): Promise<ApiProviderSetting
       console.error(`[settings-store] Failed to read settings for user ${safeUserId}:`, readErr);
     }
   }
-  await ensureSettingsDirectory();
   const normalized = normalizeSettings(DEFAULT_API_SETTINGS);
   settingsCache.set(safeUserId, normalized);
   return { ...normalized };

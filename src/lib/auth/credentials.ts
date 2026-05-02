@@ -9,7 +9,7 @@ interface AuthUserRecord {
   name: string | null;
 }
 
-function normalizeEmail(value: string): string {
+export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 

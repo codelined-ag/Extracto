@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export function normalizeEmail(value: string): string {
-  return value.trim().toLowerCase();
-}
+export { normalizeEmail } from "@/lib/auth/credentials";
 
 export function badRequest(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
