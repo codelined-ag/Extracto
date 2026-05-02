@@ -8,6 +8,10 @@ export type Translator = (
 
 export type SettingsTab = "model" | "provider" | "kb" | "general" | "account";
 
+export type ResultViewMode = "preview" | "split" | "result";
+
+export type ResultFormat = "md" | "json";
+
 export type UiLanguage = "it" | "en" | "fr" | "es" | "de";
 
 export interface OcrPageCheckpointView {

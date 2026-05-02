@@ -9,22 +9,16 @@ import {
  AlertCircle,
  ScanLine,
  ImageOff,
- Columns,
- MoreHorizontal,
 } from"lucide-react";
 
 import { ArchiveIcon } from"@/components/ui/archive";
 import { ArrowRightIcon } from"@/components/ui/arrow-right";
-import { CheckIcon } from"@/components/ui/check";
 import { ChevronDownIcon } from"@/components/ui/chevron-down";
 import { CircleCheckIcon } from"@/components/ui/circle-check";
 import { ClipboardCheckIcon } from"@/components/ui/clipboard-check";
 import { ClockIcon } from"@/components/ui/clock";
-import { CopyIcon } from"@/components/ui/copy";
 import { DatabaseBackupIcon } from"@/components/ui/database-backup";
 import { DeleteIcon } from"@/components/ui/delete";
-import { DownloadIcon } from"@/components/ui/download";
-import { EyeIcon } from"@/components/ui/eye";
 import { FileTextIcon } from"@/components/ui/file-text";
 import { HistoryIcon } from"@/components/ui/history";
 import { LanguagesIcon } from"@/components/ui/languages";
@@ -74,14 +68,6 @@ import {
  TooltipContent,
  TooltipTrigger,
 } from"@/components/ui/tooltip";
-import {
- DropdownMenu,
- DropdownMenuContent,
- DropdownMenuItem,
- DropdownMenuLabel,
- DropdownMenuSeparator,
- DropdownMenuTrigger,
-} from"@/components/ui/dropdown-menu";
 import { Combobox } from"@/components/ui/combobox";
 import { useToast } from"@/hooks/use-toast";
 import { ToastAction } from"@/components/ui/toast";
@@ -104,6 +90,7 @@ import { FileListItem } from "@/app/page-components/file-list-item";
 import { Footer } from "@/app/page-components/footer";
 import { HeaderBar } from "@/app/page-components/header-bar";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
+import { PreviewHeader } from "@/app/page-components/preview-header";
 import type {
   OcrPageCheckpointView,
   OcrProgressEventView,
@@ -2696,106 +2683,16 @@ export default function ExtractoPage() {
  {selectedFile ? (
  <Card className="flex-1 flex flex-col min-h-0">
  <CardContent className="flex-1 flex flex-col p-0 min-h-0">
- {/* Preview Header */}
- <div className="flex items-center justify-between p-3">
- <div className="flex items-center gap-2">
- <span className="text-sm font-medium truncate max-w-[180px]">
- {selectedFile.name}
- </span>
- {selectedFile.status ==="completed"&& (
- <Badge variant="outline"className="text-xs">
- <CircleCheckIcon size={12} className="inline-flex items-center justify-center mr-1 text-[oklch(0.55_0.13_150)]"/>
- {t("Completato","Completed","Terminé","Completado","Abgeschlossen")}
- </Badge>
- )}
- {selectedFile.status ==="paused"&& (
- <Badge variant="outline"className="text-xs">
- <PauseIcon size={12} className="inline-flex items-center justify-center mr-1 text-accent-foreground"/>
- {t("In pausa","Paused","En pause","En pausa","Pausiert")}
- </Badge>
- )}
- </div>
- <div className="flex items-center gap-1">
- {selectedFile.result && (
- <>
- <div className="surface-soft rounded-xl p-0.5 flex items-center gap-0.5">
- <Tooltip>
- <TooltipTrigger asChild>
- <button type="button"onClick={() => setViewMode("preview")} className={cn("inline-flex items-center justify-center size-7 rounded-lg transition-colors", viewMode ==="preview"?"bg-card text-foreground shadow-[var(--shadow-soft)]":"text-muted-foreground/80 hover:text-foreground")}>
- <EyeIcon size={14} className="inline-flex items-center justify-center"/>
- </button>
- </TooltipTrigger>
- <TooltipContent>{t("Anteprima","Preview","Aperçu","Vista previa","Vorschau")}</TooltipContent>
- </Tooltip>
- <Tooltip>
- <TooltipTrigger asChild>
- <button type="button"onClick={() => setViewMode("split")} className={cn("inline-flex items-center justify-center size-7 rounded-lg transition-colors", viewMode ==="split"?"bg-card text-foreground shadow-[var(--shadow-soft)]":"text-muted-foreground/80 hover:text-foreground")}>
- <Columns className="h-3.5 w-3.5"/>
- </button>
- </TooltipTrigger>
- <TooltipContent>{t("Doppia colonna","Split view","Vue partagée","Vista dividida","Geteilte Ansicht")}</TooltipContent>
- </Tooltip>
- <Tooltip>
- <TooltipTrigger asChild>
- <button type="button"onClick={() => setViewMode("result")} className={cn("inline-flex items-center justify-center size-7 rounded-lg transition-colors", viewMode ==="result"?"bg-card text-foreground shadow-[var(--shadow-soft)]":"text-muted-foreground/80 hover:text-foreground")}>
- <FileTextIcon size={14} className="inline-flex items-center justify-center"/>
- </button>
- </TooltipTrigger>
- <TooltipContent>{t("Risultato","Result only","Résultat","Resultado","Ergebnis")}</TooltipContent>
- </Tooltip>
- </div>
-
- <DropdownMenu>
- <DropdownMenuTrigger asChild>
- <Button variant="ghost"size="sm"className="h-7 gap-1 group">
- <span className="text-xs">{t("Azioni","Actions","Actions","Acciones","Aktionen")}</span>
- <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/80 transition-transform duration-200 group-hover:scale-110"/>
- </Button>
- </DropdownMenuTrigger>
- <DropdownMenuContent align="end"className="min-w-[14rem]">
- <DropdownMenuLabel>{t("Copia","Copy","Copier","Copiar","Kopieren")}</DropdownMenuLabel>
- <DropdownMenuItem onSelect={() => copyToClipboard("md")}>
- {copied ==="md"? <CheckIcon size={16} className="inline-flex text-primary"/> : <CopyIcon size={16} className="inline-flex"/>}
- <span>{t("Copia Markdown","Copy Markdown","Copier Markdown","Copiar Markdown","Markdown kopieren")}</span>
- </DropdownMenuItem>
- <DropdownMenuItem onSelect={() => copyToClipboard("json")}>
- {copied ==="json"? <CheckIcon size={16} className="inline-flex text-primary"/> : <CopyIcon size={16} className="inline-flex"/>}
- <span>{t("Copia JSON","Copy JSON","Copier JSON","Copiar JSON","JSON kopieren")}</span>
- </DropdownMenuItem>
- <DropdownMenuSeparator />
- <DropdownMenuLabel>{t("Scarica","Download","Télécharger","Descargar","Herunterladen")}</DropdownMenuLabel>
- <DropdownMenuItem onSelect={() => downloadResult("md")}>
- <DownloadIcon size={16} className="inline-flex"/>
- <span>{t("Scarica Markdown","Download Markdown","Télécharger Markdown","Descargar Markdown","Markdown herunterladen")}</span>
- </DropdownMenuItem>
- <DropdownMenuItem onSelect={() => downloadResult("json")}>
- <DownloadIcon size={16} className="inline-flex"/>
- <span>{t("Scarica JSON","Download JSON","Télécharger JSON","Descargar JSON","JSON herunterladen")}</span>
- </DropdownMenuItem>
- {selectedFile.status ==="completed"&& selectedFile.jobId ? (
- <>
- <DropdownMenuSeparator />
- <DropdownMenuItem
- onSelect={() => exportFileToKb(selectedFile)}
- disabled={selectedFile.kbExport?.status ==="pending"}
- >
- {selectedFile.kbExport?.status ==="pending"? <LoaderCircleIcon size={16} className="inline-flex animate-spin text-primary"/>
- : selectedFile.kbExport?.status ==="success"? <DatabaseBackupIcon size={16} className="inline-flex text-primary"/>
- : <DatabaseBackupIcon size={16} className="inline-flex"/>}
- <span>
- {selectedFile.kbExport?.status ==="success"
- ? t("Riesporta verso KB","Re-export to KB","Réexporter vers KB","Reexportar a KB","Erneut in KB exportieren")
- : t("Invia al vector store","Send to vector store","Envoyer au vector store","Enviar al vector store","An Vektor-Store senden")}
- </span>
- </DropdownMenuItem>
- </>
- ) : null}
- </DropdownMenuContent>
- </DropdownMenu>
- </>
- )}
- </div>
- </div>
+                  <PreviewHeader
+                    selectedFile={selectedFile}
+                    viewMode={viewMode}
+                    onViewModeChange={setViewMode}
+                    copied={copied}
+                    onCopy={copyToClipboard}
+                    onDownload={downloadResult}
+                    onExportToKb={exportFileToKb}
+                    t={t}
+                  />
 
  {/* Content Area */}
  {selectedFile.status ==="completed"&& selectedFile.result ? (
