@@ -1,5 +1,5 @@
 import * as React from "react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "motion/react";
 import { AlertCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";

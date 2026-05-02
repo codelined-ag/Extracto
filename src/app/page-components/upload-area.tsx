@@ -1,5 +1,5 @@
 import * as React from "react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { FileUp, Upload } from "lucide-react";
 
 import { cn } from "@/lib/utils";

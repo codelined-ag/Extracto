@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { ScanLine } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
