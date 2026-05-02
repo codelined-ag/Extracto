@@ -3,39 +3,41 @@
 import * as React from"react";
 import { motion, AnimatePresence } from"framer-motion";
 import {
- FileText,
  Upload,
- X,
  FileUp,
- Sparkles,
  Code,
- CheckCircle2,
  AlertCircle,
- Loader2,
- Trash2,
- Download,
- Copy,
- Check,
  ScanLine,
- Zap,
- Settings2,
- Languages,
  ImageOff,
- FileArchive,
- Eye,
  Columns,
- LogOut,
- History,
- PauseCircle,
- PlayCircle,
- Clock3,
- ListChecks,
- Database,
- DatabaseBackup,
  Info,
  MoreHorizontal,
- Github,
 } from"lucide-react";
+
+import { ArchiveIcon } from"@/components/ui/archive";
+import { ArrowRightIcon } from"@/components/ui/arrow-right";
+import { CheckIcon } from"@/components/ui/check";
+import { CircleCheckIcon } from"@/components/ui/circle-check";
+import { ClipboardCheckIcon } from"@/components/ui/clipboard-check";
+import { ClockIcon } from"@/components/ui/clock";
+import { CopyIcon } from"@/components/ui/copy";
+import { DatabaseBackupIcon } from"@/components/ui/database-backup";
+import { DeleteIcon } from"@/components/ui/delete";
+import { DownloadIcon } from"@/components/ui/download";
+import { EyeIcon } from"@/components/ui/eye";
+import { FileTextIcon } from"@/components/ui/file-text";
+import { GithubIcon } from"@/components/ui/github";
+import { HistoryIcon } from"@/components/ui/history";
+import { LanguagesIcon } from"@/components/ui/languages";
+import { LoaderCircleIcon } from"@/components/ui/loader-circle";
+import { LogoutIcon } from"@/components/ui/logout";
+import { PauseIcon } from"@/components/ui/pause";
+import { PlayIcon } from"@/components/ui/play";
+import { SettingsIcon } from"@/components/ui/settings";
+import { SparklesIcon } from"@/components/ui/sparkles";
+import { XIcon } from"@/components/ui/x";
+import { SearchIcon } from"@/components/ui/search";
+import { ZapIcon } from"@/components/ui/zap";
 import { useRouter } from"next/navigation";
 
 import { cn } from"@/lib/utils";
@@ -551,6 +553,8 @@ export default function ExtractoPage() {
  const [isLoadingHistory, setIsLoadingHistory] = React.useState(false);
  const [isLoadingHistoryDetail, setIsLoadingHistoryDetail] = React.useState(false);
  const [isDeletingHistory, setIsDeletingHistory] = React.useState(false);
+ const [historySearch, setHistorySearch] = React.useState("");
+ const [historyFilter, setHistoryFilter] = React.useState<"all"|"completed"|"failed"|"running"|"paused">("all");
 
  // Advanced settings state
  const ocrSettingsLoadedRef = React.useRef(false);
@@ -1810,7 +1814,7 @@ export default function ExtractoPage() {
  className="absolute -top-1 -right-1"animate={{ scale: [1, 1.18, 1], rotate: [0, 8, 0] }}
  transition={{ duration: 2.4, repeat: Infinity, ease:"easeInOut"}}
  >
- <Sparkles className="h-3 w-3 text-accent-foreground"/>
+ <SparklesIcon size={12} className="inline-flex items-center justify-center text-accent-foreground"/>
  </motion.div>
  </div>
  <div className="flex items-baseline gap-1">
@@ -1835,7 +1839,7 @@ export default function ExtractoPage() {
  }}
  aria-label={t("Impostazioni","Settings","Paramètres","Configuración","Einstellungen")}
  >
- <Settings2 className="h-4 w-4 text-foreground/80 transition-transform duration-300 group-hover:rotate-90 group-hover:text-primary"/>
+ <SettingsIcon size={16} className="inline-flex items-center justify-center text-foreground/80 transition-transform duration-300 group-hover:rotate-90 group-hover:text-primary"/>
  </Button>
  </motion.div>
  </TooltipTrigger>
@@ -1884,12 +1888,12 @@ export default function ExtractoPage() {
  <Tabs value={settingsTab} onValueChange={(v) => setSettingsTab(v as typeof settingsTab)} className="flex-1 min-h-0 flex flex-col gap-0">
  <div className="px-6">
  <TabsList className="w-full justify-start overflow-x-auto">
- <TabsTrigger value="model"className="gap-1.5"><Sparkles className="h-3.5 w-3.5"/>{t("Modello","Model","Modèle","Modelo","Modell")}</TabsTrigger>
+ <TabsTrigger value="model"className="gap-1.5"><SparklesIcon size={14} className="inline-flex items-center justify-center"/>{t("Modello","Model","Modèle","Modelo","Modell")}</TabsTrigger>
  <TabsTrigger value="ocr"className="gap-1.5"><ScanLine className="h-3.5 w-3.5"/>{t("OCR","OCR","OCR","OCR","OCR")}</TabsTrigger>
- <TabsTrigger value="kb"className="gap-1.5"><Database className="h-3.5 w-3.5"/>{t("Knowledge base","Knowledge base","Base de connaissances","Base de conocimiento","Wissensdatenbank")}</TabsTrigger>
- <TabsTrigger value="provider"className="gap-1.5"><Settings2 className="h-3.5 w-3.5"/>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</TabsTrigger>
- <TabsTrigger value="general"className="gap-1.5"><Languages className="h-3.5 w-3.5"/>{t("Generale","General","Général","General","Allgemein")}</TabsTrigger>
- <TabsTrigger value="account"className="gap-1.5"><LogOut className="h-3.5 w-3.5"/>{t("Account","Account","Compte","Cuenta","Konto")}</TabsTrigger>
+ <TabsTrigger value="kb"className="gap-1.5"><DatabaseBackupIcon size={14} className="inline-flex items-center justify-center"/>{t("Knowledge base","Knowledge base","Base de connaissances","Base de conocimiento","Wissensdatenbank")}</TabsTrigger>
+ <TabsTrigger value="provider"className="gap-1.5"><SettingsIcon size={14} className="inline-flex items-center justify-center"/>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</TabsTrigger>
+ <TabsTrigger value="general"className="gap-1.5"><LanguagesIcon size={14} className="inline-flex items-center justify-center"/>{t("Generale","General","Général","General","Allgemein")}</TabsTrigger>
+ <TabsTrigger value="account"className="gap-1.5"><LogoutIcon size={14} className="inline-flex items-center justify-center"/>{t("Account","Account","Compte","Cuenta","Konto")}</TabsTrigger>
  </TabsList>
  </div>
 
@@ -2161,7 +2165,7 @@ export default function ExtractoPage() {
 
  <div className="flex justify-end pt-2">
  <Button onClick={saveKbDefaults} disabled={isSavingKbDefaults}>
- {isSavingKbDefaults ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin"/> : null}
+ {isSavingKbDefaults ? <LoaderCircleIcon size={16} className="inline-flex items-center justify-center mr-1.5 animate-spin"/> : null}
  {t("Salva knowledge base","Save knowledge base","Enregistrer KB","Guardar KB","KB speichern")}
  </Button>
  </div>
@@ -2198,7 +2202,7 @@ export default function ExtractoPage() {
 
  <div className="flex justify-end pt-2">
  <Button onClick={saveApiSettings} disabled={isSavingApiSettings}>
- {isSavingApiSettings ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin"/> : null}
+ {isSavingApiSettings ? <LoaderCircleIcon size={16} className="inline-flex items-center justify-center mr-1.5 animate-spin"/> : null}
  {t("Salva provider","Save provider","Enregistrer le fournisseur","Guardar proveedor","Provider speichern")}
  </Button>
  </div>
@@ -2230,7 +2234,7 @@ export default function ExtractoPage() {
 
  <SettingsSection title={t("Esecuzioni passate","Past runs","Exécutions passées","Ejecuciones pasadas","Frühere Läufe")} hint={t("Sfoglia, scarica ed elimina lavori OCR precedenti.","Browse, download, and delete previous OCR runs.","Parcourez, téléchargez et supprimez les exécutions passées.","Explora, descarga y elimina ejecuciones anteriores.","Frühere OCR-Läufe durchsuchen, herunterladen oder löschen.")}>
  <Button variant="secondary"className="w-full justify-start group"onClick={() => { setApiSettingsOpen(false); openHistoryModal(); }}>
- <History className="h-4 w-4 mr-2 text-primary transition-transform duration-200 group-hover:-rotate-6"/>
+ <HistoryIcon size={16} className="inline-flex items-center justify-center mr-2 text-primary transition-transform duration-200 group-hover:-rotate-6"/>
  {t("Apri cronologia","Open history","Ouvrir l'historique","Abrir historial","Verlauf öffnen")}
  </Button>
  </SettingsSection>
@@ -2239,7 +2243,7 @@ export default function ExtractoPage() {
  <TabsContent value="account"className="space-y-5 mt-4">
  <SettingsSection title={t("Account","Account","Compte","Cuenta","Konto")}>
  <Button variant="outline"className="w-full justify-start group"onClick={signOut} disabled={isSigningOut}>
- {isSigningOut ? <Loader2 className="h-4 w-4 mr-2 animate-spin"/> : <LogOut className="h-4 w-4 mr-2 text-destructive transition-transform duration-200 group-hover:translate-x-0.5"/>}
+ {isSigningOut ? <LoaderCircleIcon size={16} className="inline-flex items-center justify-center mr-2 animate-spin"/> : <LogoutIcon size={16} className="inline-flex items-center justify-center mr-2 text-destructive transition-transform duration-200 group-hover:translate-x-0.5"/>}
  {t("Esci","Sign out","Se déconnecter","Cerrar sesión","Abmelden")}
  </Button>
  </SettingsSection>
@@ -2262,185 +2266,291 @@ export default function ExtractoPage() {
  if (!open) {
  setSelectedHistoryId(null);
  setSelectedHistoryJob(null);
+ setHistorySearch("");
+ setHistoryFilter("all");
  }
  }}
  >
- <DialogContent className="w-[96vw] !max-w-[96vw] h-[92vh] flex flex-col overflow-hidden p-4 sm:w-[94vw] sm:!max-w-[94vw] sm:h-[90vh] sm:p-5">
- <DialogHeader>
- <DialogTitle>{t("Esecuzioni OCR passate","Past OCR Runs","Exécutions OCR précédentes","Ejecuciones OCR anteriores","Frühere OCR-Läufe")}</DialogTitle>
- <DialogDescription>
- {t("Sfoglia le esecuzioni precedenti, visualizza output, scarica o elimina.","Browse previous OCR runs, inspect output, download, or delete saved runs.","Parcourez les exécutions précédentes, inspectez la sortie, téléchargez ou supprimez.","Explora ejecuciones anteriores, inspecciona la salida, descarga o elimina.","Frühere OCR-Läufe durchsuchen, Ausgaben prüfen, herunterladen oder löschen.")}
- </DialogDescription>
- </DialogHeader>
-
- <div className="grid lg:grid-cols-[320px_minmax(0,1fr)] gap-4 flex-1 min-h-0 min-w-0 overflow-y-auto lg:overflow-hidden">
- <Card className="min-h-0 min-w-0 flex flex-col">
- <CardHeader className="py-3 px-4">
- <CardTitle className="text-sm">{t("Cronologia","History","Historique","Historial","Verlauf")}</CardTitle>
- </CardHeader>
- <CardContent className="p-0 flex-1 min-h-0">
- {isLoadingHistory ? (
- <div className="h-full flex items-center justify-center">
- <Loader2 className="h-5 w-5 animate-spin text-muted-foreground"/>
- </div>
- ) : historyJobs.length === 0 ? (
- <div className="h-full flex items-center justify-center p-4 text-center">
- <p className="text-sm text-muted-foreground">{t("Nessuna esecuzione OCR salvata.","No OCR runs saved yet.","Aucune exécution OCR enregistrée.","Aún no hay ejecuciones OCR guardadas.","Noch keine OCR-Läufe gespeichert.")}</p>
- </div>
- ) : (
- <ScrollArea className="h-full">
- <div className="p-2 space-y-1">
- {historyJobs.map((job) => (
- <motion.button
- key={job.id}
- type="button"onClick={() => setSelectedHistoryId(job.id)}
- whileHover={{ x: 2, scale: 1.01 }}
- whileTap={{ scale: 0.99 }}
- transition={{ duration: 0.15 }}
- className={cn(
-"w-full text-left p-2 rounded-md transition-colors",
- selectedHistoryId === job.id
- ?"bg-primary/10":"hover:bg-muted")}
- >
- <div className="flex items-center justify-between gap-2">
- <p className="text-xs font-medium truncate">{job.fileName}</p>
- <Badge
- variant={
- job.status ==="FAILED"?"destructive": job.status ==="COMPLETED"?"secondary":"outline"}
- className="text-[10px]">
- {job.status ==="FAILED"? t("fallito","failed","échoué","fallido","fehlgeschlagen")
- : job.status ==="COMPLETED"? t("completato","completed","terminé","completado","abgeschlossen")
- : t("in corso","running","en cours","en curso","läuft")}
- </Badge>
- </div>
- <p className="text-[11px] text-muted-foreground truncate">{job.model}</p>
- <p className="text-[10px] text-muted-foreground">
- {formatTimestamp(job.createdAt)}
+ <DialogContent className="w-[96vw] !max-w-6xl h-[92vh] flex flex-col overflow-hidden p-0">
+ {(() => {
+ const counts = {
+ all: historyJobs.length,
+ completed: historyJobs.filter((j) => j.status ==="COMPLETED").length,
+ failed: historyJobs.filter((j) => j.status ==="FAILED").length,
+ running: historyJobs.filter((j) => j.status ==="PROCESSING"|| j.status ==="QUEUED").length,
+ paused: historyJobs.filter((j) => j.status === ("PAUSED"as HistoryJobSummary["status"])).length,
+ };
+ const search = historySearch.trim().toLowerCase();
+ const filtered = historyJobs.filter((j) => {
+ const matchesText = !search || j.fileName.toLowerCase().includes(search) || (j.model ||"").toLowerCase().includes(search);
+ const matchesFilter = historyFilter ==="all"
+ || (historyFilter ==="completed"&& j.status ==="COMPLETED")
+ || (historyFilter ==="failed"&& j.status ==="FAILED")
+ || (historyFilter ==="running"&& (j.status ==="PROCESSING"|| j.status ==="QUEUED"))
+ || (historyFilter ==="paused"&& (j.status as string) ==="PAUSED");
+ return matchesText && matchesFilter;
+ });
+ return (
+ <>
+ <header className="px-7 pt-7 pb-5 space-y-4">
+ <div className="space-y-1">
+ <h2 className="font-display text-3xl font-semibold tracking-tight">
+ {t("Cronologia","History","Historique","Historial","Verlauf")}
+ </h2>
+ <p className="text-sm text-muted-foreground">
+ {counts.all === 0
+ ? t("Nessuna estrazione ancora.","No extractions yet.","Aucune extraction pour l'instant.","Aún no hay extracciones.","Noch keine Extraktionen.")
+ : t(
+ `${counts.all} esecuzioni · ${counts.completed} completate · ${counts.failed} fallite`,
+ `${counts.all} runs · ${counts.completed} completed · ${counts.failed} failed`,
+ `${counts.all} exécutions · ${counts.completed} terminées · ${counts.failed} échouées`,
+ `${counts.all} ejecuciones · ${counts.completed} completadas · ${counts.failed} fallidas`,
+ `${counts.all} Läufe · ${counts.completed} abgeschlossen · ${counts.failed} fehlgeschlagen`,
+ )}
  </p>
- </motion.button>
+ </div>
+ {counts.all > 0 ? (
+ <div className="flex flex-wrap items-center gap-3">
+ <div className="relative flex-1 min-w-[14rem]">
+ <SearchIcon size={14} className="inline-flex items-center justify-center absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/70 pointer-events-none"/>
+ <Input
+ value={historySearch}
+ onChange={(e) => setHistorySearch(e.target.value)}
+ placeholder={t("Cerca per nome o modello","Search by file or model","Rechercher par fichier ou modèle","Buscar por archivo o modelo","Suche nach Datei oder Modell")}
+ className="pl-9"
+ />
+ </div>
+ <div className="surface-soft rounded-xl p-1 flex items-center gap-0.5">
+ {([
+ ["all", t("Tutto","All","Tout","Todo","Alle")],
+ ["completed", t("Completate","Completed","Terminées","Completadas","Abgeschlossen")],
+ ["failed", t("Fallite","Failed","Échouées","Fallidas","Fehlgeschlagen")],
+ ["running", t("In corso","Running","En cours","En curso","Läuft")],
+ ] as const).map(([key, label]) => (
+ <button
+ key={key}
+ type="button"
+ onClick={() => setHistoryFilter(key)}
+ className={cn(
+"px-3 py-1 rounded-lg text-xs font-medium transition-colors",
+ historyFilter === key
+ ?"bg-card text-foreground shadow-[var(--shadow-soft)]"
+ :"text-muted-foreground/80 hover:text-foreground",
+ )}
+ >
+ {label}
+ <span className="ml-1.5 text-[10px] tabular text-muted-foreground/70">{counts[key]}</span>
+ </button>
  ))}
  </div>
- </ScrollArea>
- )}
- </CardContent>
- </Card>
-
- <Card className="min-h-0 min-w-0 flex flex-col">
- <CardHeader className="py-3 px-4">
- <CardTitle className="text-sm">{t("Dettagli esecuzione","Run Details","Détails de l'exécution","Detalles de la ejecución","Lauf-Details")}</CardTitle>
- </CardHeader>
- <CardContent className="p-0 flex-1 min-h-0">
- {isLoadingHistoryDetail ? (
- <div className="h-full flex items-center justify-center">
- <Loader2 className="h-5 w-5 animate-spin text-muted-foreground"/>
  </div>
- ) : !selectedHistoryJob ? (
- <div className="h-full flex items-center justify-center p-4 text-center">
- <p className="text-sm text-muted-foreground">{t("Seleziona un'esecuzione per vedere i dettagli.","Select a run to view details.","Sélectionnez une exécution pour voir les détails.","Selecciona una ejecución para ver los detalles.","Lauf auswählen, um Details zu sehen.")}</p>
+ ) : null}
+ </header>
+
+ <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] flex-1 min-h-0 min-w-0 overflow-hidden hairline-t">
+ <aside className="min-h-0 min-w-0 lg:hairline-b-0 surface-soft/50 border-r border-transparent">
+ <ScrollArea className="h-full">
+ {isLoadingHistory ? (
+ <div className="h-32 flex items-center justify-center">
+ <LoaderCircleIcon size={18} className="inline-flex items-center justify-center text-muted-foreground"/>
+ </div>
+ ) : filtered.length === 0 ? (
+ <div className="px-5 py-12 text-center text-sm text-muted-foreground">
+ {counts.all === 0
+ ? t("Nessuna esecuzione salvata","Nothing saved yet","Rien enregistré","Nada guardado","Noch nichts")
+ : t("Nessun risultato","No matches","Aucun résultat","Sin resultados","Keine Treffer")}
  </div>
  ) : (
- <div className="h-full flex flex-col min-h-0 min-w-0">
- <div className="p-4 space-y-2">
- <div className="flex items-center justify-between gap-3">
- <p className="text-sm font-medium truncate">{selectedHistoryJob.fileName}</p>
- <Badge
- variant={
- selectedHistoryJob.status ==="FAILED"?"destructive": selectedHistoryJob.status ==="COMPLETED"?"secondary":"outline"}
+ <div className="px-3 py-3 space-y-1">
+ {filtered.map((job) => {
+ const active = selectedHistoryId === job.id;
+ const statusTone = job.status ==="FAILED"
+ ? "text-destructive"
+ : job.status ==="COMPLETED"
+ ? "text-[oklch(0.55_0.13_150)]"
+ : "text-accent-foreground";
+ const statusLabel = job.status ==="FAILED"? t("fallito","failed","échoué","fallido","fehlgeschlagen")
+ : job.status ==="COMPLETED"? t("completato","completed","terminé","completado","abgeschlossen")
+ : t("in corso","running","en cours","en curso","läuft");
+ return (
+ <button
+ key={job.id}
+ type="button"
+ onClick={() => setSelectedHistoryId(job.id)}
+ className={cn(
+"group relative w-full text-left rounded-xl px-3 py-3 transition-[background-color,transform] duration-200 ease-[cubic-bezier(0.2,0.7,0.2,1)]",
+ active ?"bg-card shadow-[var(--shadow-soft)]":"hover:bg-card/60 hover:translate-x-0.5",
+ )}
  >
+ {active ? <span className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-primary"/> : null}
+ <div className="flex items-start justify-between gap-2">
+ <p className={cn("text-sm font-medium truncate", active ?"text-foreground":"text-foreground/85")}>
+ {job.fileName}
+ </p>
+ </div>
+ <div className="mt-1 flex items-center gap-2 text-[11px]">
+ <span className={cn("inline-flex items-center gap-1 font-medium", statusTone)}>
+ <span className="status-dot"/>
+ {statusLabel}
+ </span>
+ <span className="text-muted-foreground/50">·</span>
+ <span className="font-mono text-[10px] text-muted-foreground/80 truncate">{job.model}</span>
+ </div>
+ <p className="mt-0.5 text-[11px] text-muted-foreground/70 tabular">
+ {formatTimestamp(job.createdAt)}
+ </p>
+ </button>
+ );
+ })}
+ </div>
+ )}
+ </ScrollArea>
+ </aside>
+
+ <section className="min-h-0 min-w-0 flex flex-col overflow-hidden">
+ {isLoadingHistoryDetail ? (
+ <div className="flex-1 flex items-center justify-center">
+ <LoaderCircleIcon size={22} className="inline-flex items-center justify-center text-muted-foreground"/>
+ </div>
+ ) : !selectedHistoryJob ? (
+ <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
+ <div className="size-14 rounded-2xl surface-soft grid place-items-center mb-4">
+ <HistoryIcon size={22} className="inline-flex items-center justify-center text-muted-foreground"/>
+ </div>
+ <p className="font-display text-xl font-semibold tracking-tight">
+ {t("Seleziona un'esecuzione","Pick a run","Choisissez une exécution","Selecciona una ejecución","Lauf auswählen")}
+ </p>
+ <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+ {t("Apri qualsiasi voce a sinistra per vedere il risultato e scaricarlo.","Open any item on the left to see its output and download it.","Ouvrez un élément à gauche pour voir sa sortie et la télécharger.","Abre cualquier elemento de la izquierda para ver su salida y descargarla.","Wähle links einen Eintrag, um Ausgabe und Download zu sehen.")}
+ </p>
+ </div>
+ ) : (
+ <div className="flex-1 flex flex-col min-h-0 min-w-0">
+ <div className="px-7 pt-6 pb-4 space-y-3">
+ <div className="space-y-1">
+ <h3 className="font-display text-2xl font-semibold tracking-tight truncate">{selectedHistoryJob.fileName}</h3>
+ <div className="flex flex-wrap items-center gap-2 text-xs">
+ <span className={cn(
+"inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium",
+ selectedHistoryJob.status ==="FAILED"?"bg-destructive/12 text-destructive"
+ : selectedHistoryJob.status ==="COMPLETED"?"bg-[oklch(0.55_0.13_150)]/12 text-[oklch(0.55_0.13_150)]"
+ :"bg-accent text-accent-foreground",
+ )}>
+ <span className="status-dot"/>
  {selectedHistoryJob.status ==="FAILED"? t("fallito","failed","échoué","fallido","fehlgeschlagen")
  : selectedHistoryJob.status ==="COMPLETED"? t("completato","completed","terminé","completado","abgeschlossen")
  : t("in corso","running","en cours","en curso","läuft")}
- </Badge>
+ </span>
+ <span className="text-muted-foreground">·</span>
+ <span className="font-mono text-[11px] text-muted-foreground">{selectedHistoryJob.model}</span>
+ <span className="text-muted-foreground">·</span>
+ <span className="text-muted-foreground tabular">{formatTimestamp(selectedHistoryJob.createdAt)}</span>
+ {selectedHistoryJob.processingMs ? (
+ <>
+ <span className="text-muted-foreground">·</span>
+ <span className="text-muted-foreground tabular">{(selectedHistoryJob.processingMs / 1000).toFixed(1)}s</span>
+ </>
+ ) : null}
  </div>
- <p className="text-xs text-muted-foreground">{t("Modello","Model","Modèle","Modelo","Modell")}: {selectedHistoryJob.model}</p>
- <p className="text-xs text-muted-foreground">
- {t("Creato","Created","Créé","Creado","Erstellt")}: {formatTimestamp(selectedHistoryJob.createdAt)}
- </p>
  </div>
-
- <div className="grid xl:grid-cols-[240px_minmax(0,1fr)] flex-1 min-h-0 min-w-0">
- <div className="p-3 flex items-center justify-center bg-muted/20">
  {selectedHistoryJob.sourcePreview ? (
+ <div className="surface-soft rounded-2xl p-3">
  <img
  src={selectedHistoryJob.sourcePreview}
  alt={selectedHistoryJob.fileName}
- className="max-h-[220px] max-w-full object-contain rounded-md"/>
- ) : (
- <div className="text-center text-muted-foreground">
- <ImageOff className="h-8 w-8 mx-auto mb-2"/>
- <p className="text-xs">{t("Anteprima non disponibile","No preview saved","Aucun aperçu enregistré","Vista previa no guardada","Keine Vorschau gespeichert")}</p>
+ className="max-h-[180px] mx-auto object-contain rounded-xl"
+ />
  </div>
- )}
+ ) : null}
  </div>
- <Tabs defaultValue="markdown"className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
- <div className="px-3 pt-2">
- <TabsList className="h-8 w-full justify-start overflow-x-auto">
- <TabsTrigger value="markdown"className="text-xs h-6 shrink-0 gap-1.5 group">
- <FileText className="h-3 w-3 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
+
+ <Tabs defaultValue="markdown"className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden gap-0">
+ <div className="px-7 pb-2">
+ <TabsList>
+ <TabsTrigger value="markdown"className="gap-1.5">
+ <FileTextIcon size={14} className="inline-flex items-center justify-center"/>
  Markdown
  </TabsTrigger>
- <TabsTrigger value="markdown-raw"className="text-xs h-6 shrink-0 gap-1.5 group">
- <FileText className="h-3 w-3 text-lime-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
- {t("Markdown grezzo","Markdown raw","Markdown brut","Markdown sin procesar","Roh-Markdown")}
+ <TabsTrigger value="markdown-raw"className="gap-1.5">
+ <FileTextIcon size={14} className="inline-flex items-center justify-center"/>
+ {t("Grezzo","Raw","Brut","Sin procesar","Roh")}
  </TabsTrigger>
- <TabsTrigger value="json"className="text-xs h-6 shrink-0 gap-1.5 group">
- <Code className="h-3 w-3 text-accent-foreground transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
+ <TabsTrigger value="json"className="gap-1.5">
+ <Code className="size-3.5"/>
  JSON
  </TabsTrigger>
  </TabsList>
  </div>
- <TabsContent value="markdown"className="flex-1 m-0 min-h-0 min-w-0">
- <ScrollArea className="h-full w-full">
- <div className="prose prose-sm dark:prose-invert max-w-none p-4 break-words [overflow-wrap:anywhere] [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:[overflow-wrap:anywhere] [&_code]:break-words">
+ <div className="flex-1 min-h-0 min-w-0">
+ <TabsContent value="markdown"className="h-full m-0">
+ <ScrollArea className="h-full">
+ <div className="prose prose-sm dark:prose-invert max-w-none px-7 py-4 break-words [overflow-wrap:anywhere] [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:[overflow-wrap:anywhere] [&_code]:break-words">
  <ReactMarkdown>{selectedHistoryMarkdown}</ReactMarkdown>
  </div>
  </ScrollArea>
  </TabsContent>
- <TabsContent value="markdown-raw"className="flex-1 m-0 min-h-0 min-w-0">
- <ScrollArea className="h-full w-full">
- <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+ <TabsContent value="markdown-raw"className="h-full m-0">
+ <ScrollArea className="h-full">
+ <pre className="px-7 py-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-foreground/90">
  {selectedHistoryMarkdown}
  </pre>
  </ScrollArea>
  </TabsContent>
- <TabsContent value="json"className="flex-1 m-0 min-h-0 min-w-0">
- <ScrollArea className="h-full w-full">
- <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+ <TabsContent value="json"className="h-full m-0">
+ <ScrollArea className="h-full">
+ <pre className="px-7 py-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-foreground/90">
  {JSON.stringify(selectedHistoryStructuredJson, null, 2)}
  </pre>
  </ScrollArea>
  </TabsContent>
+ </div>
  </Tabs>
  </div>
- </div>
  )}
- </CardContent>
- </Card>
+ </section>
  </div>
 
- <DialogFooter>
- <Button
- variant="outline"onClick={() => downloadHistoryResult("md")}
- disabled={!selectedHistoryJob}
- className="group">
- <Download className="h-4 w-4 mr-1.5 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:-translate-y-0.5"/>
- {t("Scarica MD","Download MD","Télécharger MD","Descargar MD","MD herunterladen")}
+ <DialogFooter className="px-7 py-4 hairline-t flex items-center justify-between gap-2">
+ <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+ {selectedHistoryJob ? <span className="font-mono truncate max-w-[20rem]">{selectedHistoryJob.id}</span> : null}
+ </div>
+ <div className="flex items-center gap-2">
+ {selectedHistoryJob ? (
+ <DropdownMenu>
+ <DropdownMenuTrigger asChild>
+ <Button variant="outline"size="sm">
+ <DownloadIcon size={14} className="inline-flex items-center justify-center mr-1.5"/>
+ {t("Scarica","Download","Télécharger","Descargar","Herunterladen")}
  </Button>
+ </DropdownMenuTrigger>
+ <DropdownMenuContent align="end">
+ <DropdownMenuItem onSelect={() => downloadHistoryResult("md")}>
+ <DownloadIcon size={16} className="inline-flex"/>
+ <span>Markdown</span>
+ </DropdownMenuItem>
+ <DropdownMenuItem onSelect={() => downloadHistoryResult("json")}>
+ <DownloadIcon size={16} className="inline-flex"/>
+ <span>JSON</span>
+ </DropdownMenuItem>
+ </DropdownMenuContent>
+ </DropdownMenu>
+ ) : null}
  <Button
- variant="outline"onClick={() => downloadHistoryResult("json")}
- disabled={!selectedHistoryJob}
- className="group">
- <Download className="h-4 w-4 mr-1.5 text-accent-foreground transition-transform duration-200 group-hover:-translate-y-0.5"/>
- {t("Scarica JSON","Download JSON","Télécharger JSON","Descargar JSON","JSON herunterladen")}
- </Button>
- <Button
- variant="destructive"onClick={deleteHistoryJob}
+ variant="destructive"
+ size="sm"
+ onClick={deleteHistoryJob}
  disabled={!selectedHistoryId || isDeletingHistory}
- className="group">
- {isDeletingHistory ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin"/> : <Trash2 className="h-4 w-4 mr-1.5 transition-transform duration-200 group-hover:scale-110"/>}
- {t("Elimina esecuzione","Delete Run","Supprimer l'exécution","Eliminar ejecución","Lauf löschen")}
+ >
+ {isDeletingHistory
+ ? <LoaderCircleIcon size={14} className="inline-flex items-center justify-center mr-1.5"/>
+ : <DeleteIcon size={14} className="inline-flex items-center justify-center mr-1.5"/>}
+ {t("Elimina","Delete","Supprimer","Eliminar","Löschen")}
  </Button>
+ </div>
  </DialogFooter>
+ </>
+ );
+ })()}
  </DialogContent>
  </Dialog>
 
@@ -2500,13 +2610,13 @@ export default function ExtractoPage() {
  {/* File List Header */}
  <div className="flex items-center justify-between p-3">
  <div className="flex items-center gap-2">
- <FileText className="h-4 w-4 text-primary"/>
+ <FileTextIcon size={16} className="inline-flex items-center justify-center text-primary"/>
  <span className="text-sm font-medium">
  {files.length} {t(files.length !== 1 ?"file":"file", files.length !== 1 ?"files":"file")}
  </span>
  {completedCount > 0 && (
  <Badge variant="secondary"className="text-xs">
- <CheckCircle2 className="h-3 w-3 mr-1"/>
+ <CircleCheckIcon size={12} className="inline-flex items-center justify-center mr-1"/>
  {t(`${completedCount} completati`, `${completedCount} done`)}
  </Badge>
  )}
@@ -2521,7 +2631,7 @@ export default function ExtractoPage() {
  <Button
  variant="ghost"size="sm"className="h-7 text-xs text-muted-foreground hover:text-destructive group"onClick={clearAllFiles}
  >
- <Trash2 className="h-3 w-3 mr-1 transition-transform duration-200 group-hover:scale-110"/>
+ <DeleteIcon size={12} className="inline-flex items-center justify-center mr-1 transition-transform duration-200 group-hover:scale-110"/>
  {t("Pulisci","Clear","Effacer","Limpiar","Leeren")}
  </Button>
  )}
@@ -2553,7 +2663,7 @@ export default function ExtractoPage() {
  alt={file.name}
  className="w-full h-full object-cover"/>
  ) : (
- <FileText className="h-5 w-5 text-muted-foreground"/>
+ <FileTextIcon size={20} className="inline-flex items-center justify-center text-muted-foreground"/>
  )}
  </div>
 
@@ -2571,13 +2681,13 @@ export default function ExtractoPage() {
  ) : null}
  {file.status ==="processing"&& (
  <div className="flex items-center gap-1">
- <Loader2 className="h-3 w-3 animate-spin text-primary"/>
+ <LoaderCircleIcon size={12} className="inline-flex items-center justify-center animate-spin text-primary"/>
  <span className="text-xs text-primary">{file.progress}%</span>
  </div>
  )}
  {file.status ==="paused"? (
  <div className="flex items-center gap-1">
- <PauseCircle className="h-3 w-3 text-accent-foreground"/>
+ <PauseIcon size={12} className="inline-flex items-center justify-center text-accent-foreground"/>
  <span className="text-xs text-accent-foreground">{t("in pausa","paused","en pause","en pausa","pausiert")}</span>
  </div>
  ) : null}
@@ -2605,14 +2715,14 @@ export default function ExtractoPage() {
  animate={{ scale: 1 }}
  transition={{ type:"spring", stiffness: 400 }}
  >
- <CheckCircle2 className="h-4 w-4 text-[oklch(0.55_0.13_150)]"/>
+ <CircleCheckIcon size={16} className="inline-flex items-center justify-center text-[oklch(0.55_0.13_150)]"/>
  </motion.div>
  )}
  {file.status ==="error"&& (
  <AlertCircle className="h-4 w-4 text-destructive"/>
  )}
  {file.status ==="paused"&& (
- <PauseCircle className="h-4 w-4 text-accent-foreground"/>
+ <PauseIcon size={16} className="inline-flex items-center justify-center text-accent-foreground"/>
  )}
  {file.status ==="pending"&& (
  <Button
@@ -2621,7 +2731,7 @@ export default function ExtractoPage() {
  removeFile(file.id);
  }}
  >
- <X className="h-3 w-3"/>
+ <XIcon size={12} className="inline-flex items-center justify-center"/>
  </Button>
  )}
  </div>
@@ -2634,7 +2744,7 @@ export default function ExtractoPage() {
  <div className="flex items-center justify-center py-8 min-h-[120px]">
  <div className="text-center">
  <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
- <FileText className="h-6 w-6 text-muted-foreground"/>
+ <FileTextIcon size={24} className="inline-flex items-center justify-center text-muted-foreground"/>
  </div>
  <p className="text-sm font-medium">{t("Nessun file","No files yet","Aucun fichier","Sin archivos aún","Noch keine Dateien")}</p>
  <p className="text-xs text-muted-foreground">
@@ -2649,7 +2759,7 @@ export default function ExtractoPage() {
  <Button
  variant="destructive"className="w-full group"onClick={() => stopProcessingFile(activeProcessingFile)}
  >
- <PauseCircle className="h-4 w-4 mr-2 transition-transform duration-200 group-hover:scale-110"/>
+ <PauseIcon size={16} className="inline-flex items-center justify-center mr-2 transition-transform duration-200 group-hover:scale-110"/>
  {t("Ferma OCR corrente","Stop current OCR","Arrêter l'OCR en cours","Detener OCR actual","Aktuelle OCR stoppen")}
  </Button>
  ) : (
@@ -2659,12 +2769,12 @@ export default function ExtractoPage() {
  >
  {isProcessing ? (
  <>
- <Loader2 className="h-4 w-4 mr-2 animate-spin"/>
+ <LoaderCircleIcon size={16} className="inline-flex items-center justify-center mr-2 animate-spin"/>
  {t("Avvio in corso...","Starting...","Démarrage...","Iniciando...","Wird gestartet...")}
  </>
  ) : (
  <>
- <Zap className="h-4 w-4 mr-2 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6"/>
+ <ZapIcon size={16} className="inline-flex items-center justify-center mr-2 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6"/>
  {t(`Avvia OCR (${pendingCount} in attesa)`, `Run OCR (${pendingCount} pending)`,`Lancer OCR (${pendingCount} en attente)`,`Iniciar OCR (${pendingCount} pendientes)`,`OCR starten (${pendingCount} ausstehend)`)}
  </>
  )}
@@ -2674,7 +2784,7 @@ export default function ExtractoPage() {
  <Button
  variant="secondary"className="w-full group"onClick={() => resumeProcessingFile(resumableSelectedFile)}
  >
- <PlayCircle className="h-4 w-4 mr-2 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:scale-110"/>
+ <PlayIcon size={16} className="inline-flex items-center justify-center mr-2 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:scale-110"/>
  {t("Riprendi dal checkpoint","Resume from checkpoint","Reprendre depuis le checkpoint","Reanudar desde checkpoint","Vom Checkpoint fortsetzen")}
  </Button>
  ) : null}
@@ -2687,7 +2797,7 @@ export default function ExtractoPage() {
  <Tooltip>
  <TooltipTrigger asChild>
  <button type="button"onClick={exportAllAsZip} className="inline-flex items-center gap-1 text-foreground/70 hover:text-primary transition-colors">
- <FileArchive className="h-3 w-3"/>
+ <ArchiveIcon size={12} className="inline-flex items-center justify-center"/>
  <span>ZIP</span>
  </button>
  </TooltipTrigger>
@@ -2718,13 +2828,13 @@ export default function ExtractoPage() {
  </span>
  {selectedFile.status ==="completed"&& (
  <Badge variant="outline"className="text-xs">
- <CheckCircle2 className="h-3 w-3 mr-1 text-[oklch(0.55_0.13_150)]"/>
+ <CircleCheckIcon size={12} className="inline-flex items-center justify-center mr-1 text-[oklch(0.55_0.13_150)]"/>
  {t("Completato","Completed","Terminé","Completado","Abgeschlossen")}
  </Badge>
  )}
  {selectedFile.status ==="paused"&& (
  <Badge variant="outline"className="text-xs">
- <PauseCircle className="h-3 w-3 mr-1 text-accent-foreground"/>
+ <PauseIcon size={12} className="inline-flex items-center justify-center mr-1 text-accent-foreground"/>
  {t("In pausa","Paused","En pause","En pausa","Pausiert")}
  </Badge>
  )}
@@ -2736,7 +2846,7 @@ export default function ExtractoPage() {
  <Tooltip>
  <TooltipTrigger asChild>
  <button type="button"onClick={() => setViewMode("preview")} className={cn("inline-flex items-center justify-center size-7 rounded-lg transition-colors", viewMode ==="preview"?"bg-card text-foreground shadow-[var(--shadow-soft)]":"text-muted-foreground/80 hover:text-foreground")}>
- <Eye className="h-3.5 w-3.5"/>
+ <EyeIcon size={14} className="inline-flex items-center justify-center"/>
  </button>
  </TooltipTrigger>
  <TooltipContent>{t("Anteprima","Preview","Aperçu","Vista previa","Vorschau")}</TooltipContent>
@@ -2752,7 +2862,7 @@ export default function ExtractoPage() {
  <Tooltip>
  <TooltipTrigger asChild>
  <button type="button"onClick={() => setViewMode("result")} className={cn("inline-flex items-center justify-center size-7 rounded-lg transition-colors", viewMode ==="result"?"bg-card text-foreground shadow-[var(--shadow-soft)]":"text-muted-foreground/80 hover:text-foreground")}>
- <FileText className="h-3.5 w-3.5"/>
+ <FileTextIcon size={14} className="inline-flex items-center justify-center"/>
  </button>
  </TooltipTrigger>
  <TooltipContent>{t("Risultato","Result only","Résultat","Resultado","Ergebnis")}</TooltipContent>
@@ -2769,21 +2879,21 @@ export default function ExtractoPage() {
  <DropdownMenuContent align="end"className="min-w-[14rem]">
  <DropdownMenuLabel>{t("Copia","Copy","Copier","Copiar","Kopieren")}</DropdownMenuLabel>
  <DropdownMenuItem onSelect={() => copyToClipboard("md")}>
- {copied ==="md"? <Check className="text-primary"/> : <Copy />}
+ {copied ==="md"? <CheckIcon size={16} className="inline-flex text-primary"/> : <CopyIcon size={16} className="inline-flex"/>}
  <span>{t("Copia Markdown","Copy Markdown","Copier Markdown","Copiar Markdown","Markdown kopieren")}</span>
  </DropdownMenuItem>
  <DropdownMenuItem onSelect={() => copyToClipboard("json")}>
- {copied ==="json"? <Check className="text-primary"/> : <Copy />}
+ {copied ==="json"? <CheckIcon size={16} className="inline-flex text-primary"/> : <CopyIcon size={16} className="inline-flex"/>}
  <span>{t("Copia JSON","Copy JSON","Copier JSON","Copiar JSON","JSON kopieren")}</span>
  </DropdownMenuItem>
  <DropdownMenuSeparator />
  <DropdownMenuLabel>{t("Scarica","Download","Télécharger","Descargar","Herunterladen")}</DropdownMenuLabel>
  <DropdownMenuItem onSelect={() => downloadResult("md")}>
- <Download />
+ <DownloadIcon size={16} className="inline-flex"/>
  <span>{t("Scarica Markdown","Download Markdown","Télécharger Markdown","Descargar Markdown","Markdown herunterladen")}</span>
  </DropdownMenuItem>
  <DropdownMenuItem onSelect={() => downloadResult("json")}>
- <Download />
+ <DownloadIcon size={16} className="inline-flex"/>
  <span>{t("Scarica JSON","Download JSON","Télécharger JSON","Descargar JSON","JSON herunterladen")}</span>
  </DropdownMenuItem>
  {selectedFile.status ==="completed"&& selectedFile.jobId ? (
@@ -2793,9 +2903,9 @@ export default function ExtractoPage() {
  onSelect={() => exportFileToKb(selectedFile)}
  disabled={selectedFile.kbExport?.status ==="pending"}
  >
- {selectedFile.kbExport?.status ==="pending"? <Loader2 className="animate-spin text-primary"/>
- : selectedFile.kbExport?.status ==="success"? <Database className="text-primary"/>
- : <DatabaseBackup />}
+ {selectedFile.kbExport?.status ==="pending"? <LoaderCircleIcon size={16} className="inline-flex animate-spin text-primary"/>
+ : selectedFile.kbExport?.status ==="success"? <DatabaseBackupIcon size={16} className="inline-flex text-primary"/>
+ : <DatabaseBackupIcon size={16} className="inline-flex"/>}
  <span>
  {selectedFile.kbExport?.status ==="success"
  ? t("Riesporta verso KB","Re-export to KB","Réexporter vers KB","Reexportar a KB","Erneut in KB exportieren")
@@ -2856,11 +2966,11 @@ export default function ExtractoPage() {
  <div className="px-3 pt-2">
  <TabsList className="h-8 w-full justify-start overflow-x-auto">
  <TabsTrigger value="markdown"className="text-xs gap-1.5 h-6 shrink-0 group">
- <FileText className="h-3 w-3 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
+ <FileTextIcon size={12} className="inline-flex items-center justify-center text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
  Markdown
  </TabsTrigger>
  <TabsTrigger value="markdown-raw"className="text-xs gap-1.5 h-6 shrink-0 group">
- <FileText className="h-3 w-3 text-lime-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
+ <FileTextIcon size={12} className="inline-flex items-center justify-center text-lime-400 transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
  {t("Markdown grezzo","Markdown raw","Markdown brut","Markdown sin procesar","Roh-Markdown")}
  </TabsTrigger>
  <TabsTrigger value="json"className="text-xs gap-1.5 h-6 shrink-0 group">
@@ -2916,13 +3026,13 @@ export default function ExtractoPage() {
  <Progress value={selectedFile.progress} className="w-full"/>
  <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
  <div className="flex items-center gap-1.5">
- <ListChecks className="h-3.5 w-3.5"/>
+ <ClipboardCheckIcon size={14} className="inline-flex items-center justify-center"/>
  <span>
  {selectedFile.processedPages || 0}/{selectedFile.pageCount || 0} {t("pagine","pages","pages","páginas","Seiten")}
  </span>
  </div>
  <div className="flex items-center gap-1.5">
- <Clock3 className="h-3.5 w-3.5"/>
+ <ClockIcon size={14} className="inline-flex items-center justify-center"/>
  <span>{t("ETA","ETA","ETA","ETA","ETA")} {formatEta(selectedFile.etaSeconds)}</span>
  </div>
  <div className="truncate">
@@ -3057,7 +3167,7 @@ export default function ExtractoPage() {
  transition={{ delay: 0.4 }}
  >
  <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
- <Sparkles className="h-10 w-10 text-primary"/>
+ <SparklesIcon size={40} className="inline-flex items-center justify-center text-primary"/>
  </div>
  <h3 className="text-lg font-semibold mb-2">{t("Seleziona un documento","Select a document","Choisir un document","Selecciona un documento","Dokument wählen")}</h3>
  <p className="text-sm text-muted-foreground max-w-xs mx-auto">
@@ -3089,7 +3199,7 @@ export default function ExtractoPage() {
  className="inline-flex items-center gap-1 text-foreground/80 hover:text-primary transition-colors group"
  >
  <span className="font-medium">codelined</span>
- <Github className="h-3 w-3 transition-transform duration-200 group-hover:rotate-6 group-hover:scale-110"/>
+ <GithubIcon size={12} className="inline-flex items-center justify-center transition-transform duration-200 group-hover:rotate-6 group-hover:scale-110"/>
  </a>
  </p>
  <a
