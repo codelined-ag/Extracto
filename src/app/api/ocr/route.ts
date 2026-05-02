@@ -6,6 +6,42 @@ import { ApiProviderSettings, FALLBACK_OLLAMA_HOST, getApiSettings } from "@/lib
 import { normalizeMistralEndpoint as normalizeMistralEndpointBase } from "@/lib/ocr/provider-normalization";
 import { getStringField, parsePreviewImageData, parseServiceError } from "@/lib/ocr/error-parsing";
 import {
+  extractChatContentText,
+  fetchWithTimeout,
+  normalizeStructuredMarkdownPayload,
+  OcrStopRequestedError,
+  parseResponseText,
+  REQUEST_TIMEOUT_MS,
+  type OcrRunResult,
+  type PostProcessResult,
+} from "@/lib/ocr/providers/shared";
+import {
+  buildMistralChatEndpoint,
+  buildMistralOcrEndpointCandidates,
+  isLikelyMistralOcrModel,
+  listMistralModels,
+  resolveMistralOcrModel,
+  runMistralOcr,
+  runMistralPostProcessing,
+} from "@/lib/ocr/providers/mistral";
+import {
+  buildCompatEndpoint,
+  type CompatProviderConfig,
+  discoverCompatModels,
+  normalizeOpenAICompatApiBase,
+  normalizeOpenRouterApiBase,
+  OPENAI_COMPAT_CONFIG,
+  OPENROUTER_CONFIG,
+  runCompatOcr,
+  runCompatPostProcessing,
+} from "@/lib/ocr/providers/compat";
+import {
+  runOllamaOcr as runOllamaOcrIter,
+  runOllamaPostProcessing as runOllamaPostProcessingIter,
+  unloadOllamaModel as unloadOllamaModelIter,
+  warmupOllamaModel as warmupOllamaModelIter,
+} from "@/lib/ocr/providers/ollama";
+import {
   appendPageMarkdown,
   coerceMarkdownText,
   extractStructuredPageEntryMarkdown,
@@ -164,19 +200,8 @@ interface OcrProgressMetadata {
 
 
 
-class OcrStopRequestedError extends Error {
-  constructor(message = "OCR stop requested") {
-    super(message);
-    this.name = "OcrStopRequestedError";
-  }
-}
-
 const APP_NETWORK_MODE = (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase();
-const OPENROUTER_MODEL_CACHE_TTL_MS = 5 * 60_000;
-const OPENAI_COMPAT_MODEL_CACHE_TTL_MS = 5 * 60_000;
-const OPENAI_COMPAT_MODEL_CACHE_MAX_ENTRIES = 256;
 
-const REQUEST_TIMEOUT_MS = 60_000;
 const OLLAMA_MODEL_CACHE_TTL_MS = 60_000;
 const MAX_STORED_PREVIEW_LENGTH = 1_500_000;
 const MAX_POST_PROCESS_INSTRUCTION_LENGTH = 6000;
@@ -194,17 +219,6 @@ let ollamaModelCache: {
   expiresAt: 0,
   host: "",
 };
-
-const OPENROUTER_MODEL_CACHE_MAX_ENTRIES = 256;
-const openRouterModelCache = new Map<
-  string,
-  { values: string[]; expiresAt: number }
->();
-
-const openAICompatModelCache = new Map<
-  string,
-  { values: string[]; expiresAt: number }
->();
 
 interface OllamaModelCatalogResult {
   models: string[];
@@ -308,54 +322,8 @@ function normalizeAndValidateApiSettings(raw: ApiProviderSettings): ApiProviderS
   };
 }
 
-// Runtime normalization (vs settings-store.ts which normalizes for persistence):
-// strips /chat/completions and /models suffixes the user may have pasted — not done
-// at save-time because those paths are valid endpoint components in other contexts.
-function normalizeOpenAICompatApiBase(rawEndpoint: string): string {
-  // BYO endpoint: respect operator-supplied base path verbatim. We only
-  // normalize scheme, drop trailing slash and any chat/completions or
-  // models suffix the user might have pasted.
-  const trimmed = rawEndpoint.trim();
-  if (!trimmed) {
-    return DEFAULT_OPENAI_COMPAT_API_URL;
-  }
-  try {
-    const url = new URL(/^https?:\/\//iu.test(trimmed) ? trimmed : `https://${trimmed}`);
-    url.search = "";
-    url.hash = "";
-    const pathname = url.pathname
-      .replace(/\/+$/u, "")
-      .replace(/\/(chat\/completions|models)$/u, "");
-    url.pathname = pathname;
-    return url.toString().replace(/\/+$/u, "");
-  } catch {
-    return DEFAULT_OPENAI_COMPAT_API_URL;
-  }
-}
-
-function normalizeOpenRouterApiBase(rawEndpoint: string): string {
-  const trimmed = rawEndpoint.trim();
-  if (!trimmed) {
-    return DEFAULT_OPENROUTER_API_URL;
-  }
-
-  try {
-    const url = new URL(/^https?:\/\//iu.test(trimmed) ? trimmed : `https://${trimmed}`);
-    url.search = "";
-    url.hash = "";
-    let pathname = url.pathname.replace(/\/+$/u, "");
-    if (!pathname || pathname === "/") {
-      pathname = "/api/v1";
-    } else if (pathname.endsWith("/api")) {
-      pathname = `${pathname}/v1`;
-    }
-    pathname = pathname.replace(/\/(chat\/completions|models)$/u, "");
-    url.pathname = pathname;
-    return url.toString().replace(/\/+$/u, "");
-  } catch {
-    return DEFAULT_OPENROUTER_API_URL;
-  }
-}
+// Runtime normalization for OpenAI-compatible / OpenRouter base URLs lives in
+// src/lib/ocr/providers/compat.ts (imported above) so the runners can be unit-tested.
 
 function resolveOllamaRuntimeEndpoint(rawEndpoint: string): string {
   const resolvedHost = resolveOllamaHostEndpoint(
@@ -367,23 +335,7 @@ function resolveOllamaRuntimeEndpoint(rawEndpoint: string): string {
     .replace(/\/v1\/?$/i, "");
 }
 
-function buildMistralOcrEndpointCandidates(rawEndpoint: string): string[] {
-  const baseEndpoint = normalizeMistralEndpoint(rawEndpoint);
-  const withoutProcess = baseEndpoint.replace(/\/process$/iu, "");
-  const withProcess = withoutProcess.endsWith("/ocr")
-    ? `${withoutProcess}/process`
-    : `${withoutProcess}/ocr/process`;
-  const candidates = Array.from(new Set([withoutProcess, withProcess]));
-  return candidates
-    .map((candidate) => {
-      try {
-        return enforceProviderEndpointPolicy("mistral", candidate, DEFAULT_MISTRAL_API_URL);
-      } catch {
-        return "";
-      }
-    })
-    .filter(Boolean);
-}
+// buildMistralOcrEndpointCandidates moved to src/lib/ocr/providers/mistral.ts.
 
 function sanitizePostProcessing(
   raw: Partial<PostProcessingSettings> | undefined
@@ -401,14 +353,7 @@ function sanitizePostProcessing(
   };
 }
 
-function isLikelyMistralOcrModel(model: string): boolean {
-  const normalized = model.trim().toLowerCase();
-  return normalized.includes("ocr");
-}
-
-function resolveMistralOcrModel(selectedModel: string): string {
-  return isLikelyMistralOcrModel(selectedModel) ? selectedModel : DEFAULT_MISTRAL_OCR_MODEL;
-}
+// isLikelyMistralOcrModel + resolveMistralOcrModel moved to src/lib/ocr/providers/mistral.ts.
 
 // parsePreviewImageData, getStringField, parseServiceError moved to
 // src/lib/ocr/error-parsing.ts (imported above) for unit testability.
@@ -507,75 +452,8 @@ function computeTextStats(text: string) {
   };
 }
 
-function extractChatContentText(content: unknown): string {
-  if (typeof content === "string") {
-    return content.trim();
-  }
-
-  if (Array.isArray(content)) {
-    return content
-      .map((entry) => {
-        if (typeof entry === "string") {
-          return entry.trim();
-        }
-
-        if (!entry || typeof entry !== "object") {
-          return "";
-        }
-
-        const typedEntry = entry as { type?: unknown; text?: unknown };
-        if (typedEntry.type === "text" && typeof typedEntry.text === "string") {
-          return typedEntry.text.trim();
-        }
-
-        return "";
-      })
-      .filter(Boolean)
-      .join("\n")
-      .trim();
-  }
-
-  return "";
-}
-
-// parseJsonCandidate moved to src/lib/ocr/markdown-routing.ts.
-
-// coerceMarkdownText moved to src/lib/ocr/markdown-routing.ts.
-
-function normalizeStructuredMarkdownPayload(
-  raw: unknown,
-  fallbackMarkdown: string
-): {
-  markdown: string;
-  structured: Record<string, unknown>;
-  parseMode: "json" | "markdown";
-} {
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    const objectValue = raw as Record<string, unknown>;
-    const markdown = coerceMarkdownText(
-      objectValue.markdown ?? objectValue.text ?? objectValue.content,
-      fallbackMarkdown
-    );
-
-    return {
-      markdown,
-      structured: {
-        ...objectValue,
-        markdown,
-      },
-      parseMode: "json",
-    };
-  }
-
-  const markdown = fallbackMarkdown.trim();
-  return {
-    markdown,
-    structured: {
-      markdown,
-    },
-    parseMode: "markdown",
-  };
-}
+// extractChatContentText + normalizeStructuredMarkdownPayload moved to src/lib/ocr/providers/shared.ts.
+// parseJsonCandidate + coerceMarkdownText moved to src/lib/ocr/markdown-routing.ts.
 
 function normalizePostProcessedText(
   text: string,
@@ -674,70 +552,9 @@ function buildJsonResult(
   };
 }
 
-async function parseResponseText(response: Response): Promise<unknown> {
-  const rawText = await response.text();
-  if (!rawText.trim()) {
-    return {};
-  }
-  try {
-    return JSON.parse(rawText);
-  } catch {
-    return { message: rawText };
-  }
-}
-
+// parseResponseText + fetchWithTimeout + OcrStopRequestedError moved to
+// src/lib/ocr/providers/shared.ts.
 // getStringField + parseServiceError moved to src/lib/ocr/error-parsing.ts.
-
-async function fetchWithTimeout(
-  input: string,
-  init: RequestInit = {},
-  timeoutMs = REQUEST_TIMEOUT_MS,
-  externalSignal?: AbortSignal
-): Promise<Response> {
-  const controller = new AbortController();
-  let abortedByExternalSignal = false;
-  let timeoutTriggered = false;
-  const onExternalAbort = () => {
-    abortedByExternalSignal = true;
-    controller.abort();
-  };
-
-  if (externalSignal) {
-    if (externalSignal.aborted) {
-      abortedByExternalSignal = true;
-      controller.abort();
-    } else {
-      externalSignal.addEventListener("abort", onExternalAbort, { once: true });
-    }
-  }
-
-  const timeout = setTimeout(() => {
-    timeoutTriggered = true;
-    controller.abort();
-  }, timeoutMs);
-  try {
-    return await fetch(input, { ...init, signal: controller.signal });
-  } catch (error) {
-    if (abortedByExternalSignal) {
-      throw new OcrStopRequestedError();
-    }
-
-    if (
-      timeoutTriggered &&
-      error instanceof Error &&
-      (error.name === "AbortError" || /abort/iu.test(error.message))
-    ) {
-      throw new ApiRouteError(`Request timeout after ${timeoutMs}ms`, 504);
-    }
-
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-    if (externalSignal) {
-      externalSignal.removeEventListener("abort", onExternalAbort);
-    }
-  }
-}
 
 async function getOllamaModels(
   endpoint: string,
@@ -819,9 +636,7 @@ function resolveProvider(model: string, settings: ApiProviderSettings): Provider
   return normalizeProvider(settings.provider);
 }
 
-type OcrRunResult = { text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> };
-
-type PostProcessResult = { text: string; metadata: Record<string, unknown> };
+// OcrRunResult + PostProcessResult moved to src/lib/ocr/providers/shared.ts.
 
 interface ProviderHandler {
   envKey: string;
@@ -841,6 +656,55 @@ interface ProviderHandler {
     apiKey: string,
     outputFormat: PostProcessOutputFormat,
   ) => Promise<PostProcessResult>;
+}
+
+// Wrap the pure host-iterating Ollama runners with route-level concerns:
+// (a) resolve raw user endpoint into the actual candidate base URLs, and
+// (b) on failure, augment the error with a "last reachable host" hint plus
+// the network-mode hint string from provider-config.
+async function runOllamaOcr(
+  endpoint: string,
+  model: string,
+  prompt: string,
+  preview: string,
+  signal?: AbortSignal,
+): Promise<OcrRunResult> {
+  const hosts = getOllamaCandidatesForOcr(endpoint);
+  try {
+    return await runOllamaOcrIter(hosts, model, prompt, preview, signal);
+  } catch (error) {
+    if (error instanceof OcrStopRequestedError) throw error;
+    if (error instanceof ApiRouteError) {
+      let resolvedHost: string | null = null;
+      try {
+        resolvedHost = (await getOllamaModels(endpoint)).host;
+      } catch {
+        // keep fallback message context
+      }
+      const hint = resolvedHost
+        ? `Last reachable host was ${resolvedHost}.`
+        : "No reachable Ollama endpoint found.";
+      throw new ApiRouteError(`${hint} ${error.message}. ${OLLAMA_NETWORK_HINT}`, error.status);
+    }
+    throw error;
+  }
+}
+
+async function runOllamaPostProcessing(
+  endpoint: string,
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<PostProcessResult> {
+  return runOllamaPostProcessingIter(getOllamaCandidatesForOcr(endpoint), model, systemPrompt, userPrompt);
+}
+
+async function unloadOllamaModel(endpoint: string, model: string): Promise<void> {
+  return unloadOllamaModelIter(getOllamaCandidatesForOcr(endpoint), model);
+}
+
+async function warmupOllamaModel(endpoint: string, model: string): Promise<void> {
+  return warmupOllamaModelIter(getOllamaCandidatesForOcr(endpoint), model);
 }
 
 // Single registry of per-provider OCR + post-processing handlers. TypeScript
@@ -912,805 +776,6 @@ async function runProviderPostProcessing(
   );
 }
 
-
-async function runOllamaOcr(
-  endpoint: string,
-  model: string,
-  prompt: string,
-  preview: string,
-  signal?: AbortSignal
-): Promise<OcrRunResult> {
-  const imageData = parsePreviewImageData(preview);
-  if (!imageData.base64) {
-    throw new ApiRouteError("Invalid image data for Ollama OCR", 400);
-  }
-
-  const errors: string[] = [];
-  const candidates = getOllamaCandidatesForOcr(endpoint);
-  const chatEndpoints = ["/api/chat", "/v1/chat/completions"];
-
-  for (const rawCandidate of candidates) {
-    const host = normalizeOllamaApiBase(rawCandidate);
-    for (const chatPath of chatEndpoints) {
-      try {
-        const response = await fetchWithTimeout(`${host}${chatPath}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(
-            chatPath === "/api/chat"
-              ? {
-                  model,
-                  messages: [
-                    {
-                      role: "user",
-                      content: prompt,
-                      images: [imageData.base64],
-                    },
-                  ],
-                  stream: false,
-                }
-              : {
-                  model,
-                  messages: [
-                    {
-                      role: "user",
-                      content: [
-                        {
-                          type: "text",
-                          text: prompt,
-                        },
-                        {
-                          type: "image_url",
-                          image_url: {
-                            url: imageData.dataUrl,
-                          },
-                        },
-                      ],
-                    },
-                  ],
-                  temperature: 0,
-                  stream: false,
-                }
-          ),
-        }, REQUEST_TIMEOUT_MS, signal);
-
-        const payload = await parseResponseText(response);
-        if (!response.ok) {
-          errors.push(
-            `${host}${chatPath}: ${response.status} ${parseServiceError(response, payload)}`
-          );
-          continue;
-        }
-
-        if (!payload || typeof payload !== "object") {
-          errors.push(`${host}${chatPath}: invalid OCR response payload`);
-          continue;
-        }
-
-        const openAiChoices = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices;
-        const message = chatPath === "/api/chat"
-          ? (payload as { message?: { content?: unknown } }).message
-          : Array.isArray(openAiChoices)
-            ? openAiChoices[0]?.message
-            : undefined;
-        const payloadWithMetrics = payload as {
-          done?: unknown;
-          eval_count?: unknown;
-          total_duration?: unknown;
-        };
-
-        const text = extractChatContentText(message?.content);
-        if (!text) {
-          errors.push(`${host}${chatPath}: OCR response had no text`);
-          continue;
-        }
-
-        const parsedPayload = parseJsonCandidate(text);
-        const normalizedPayload = normalizeStructuredMarkdownPayload(parsedPayload, text);
-        if (!normalizedPayload.markdown) {
-          errors.push(`${host}${chatPath}: OCR response markdown was empty`);
-          continue;
-        }
-
-        return {
-          text: normalizedPayload.markdown,
-          structured: normalizedPayload.structured,
-          metadata: {
-            responseDone: typeof payloadWithMetrics.done === "boolean" ? payloadWithMetrics.done : undefined,
-            evalCount: typeof payloadWithMetrics.eval_count === "number"
-              ? payloadWithMetrics.eval_count
-              : undefined,
-            totalDurationMs:
-              typeof payloadWithMetrics.total_duration === "number"
-                ? payloadWithMetrics.total_duration
-                : undefined,
-            outputFormat: normalizedPayload.parseMode,
-          },
-        };
-      } catch (error) {
-        if (error instanceof OcrStopRequestedError) {
-          throw error;
-        }
-        errors.push(
-          `${host}${chatPath}: ${error instanceof Error ? error.message : "Request failed"}`
-        );
-      }
-    }
-  }
-
-  let resolvedHost: string | null = null;
-  try {
-    resolvedHost = (await getOllamaModels(endpoint)).host;
-  } catch {
-    // keep fallback message context
-  }
-  const hint = resolvedHost
-    ? `Last reachable host was ${resolvedHost}.`
-    : "No reachable Ollama endpoint found.";
-  throw new ApiRouteError(`${hint} ${errors.join(" | ")}. ${OLLAMA_NETWORK_HINT}`, 502);
-}
-
-async function runOllamaPostProcessing(
-  endpoint: string,
-  model: string,
-  systemPrompt: string,
-  userPrompt: string
-): Promise<PostProcessResult> {
-  const errors: string[] = [];
-  const candidates = getOllamaCandidatesForOcr(endpoint);
-  const chatEndpoints = ["/api/chat", "/v1/chat/completions"] as const;
-
-  for (const rawCandidate of candidates) {
-    const host = normalizeOllamaApiBase(rawCandidate);
-    for (const chatPath of chatEndpoints) {
-      try {
-        const response = await fetchWithTimeout(`${host}${chatPath}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-            stream: false,
-            temperature: 0,
-          }),
-        });
-
-        const payload = await parseResponseText(response);
-        if (!response.ok) {
-          errors.push(
-            `${host}${chatPath}: ${response.status} ${parseServiceError(response, payload)}`
-          );
-          continue;
-        }
-
-        if (!payload || typeof payload !== "object") {
-          errors.push(`${host}${chatPath}: invalid post-processing response payload`);
-          continue;
-        }
-
-        const openAiChoices = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices;
-        const message = chatPath === "/api/chat"
-          ? (payload as { message?: { content?: unknown } }).message
-          : Array.isArray(openAiChoices)
-            ? openAiChoices[0]?.message
-            : undefined;
-        const text = extractChatContentText(message?.content);
-        if (!text) {
-          errors.push(`${host}${chatPath}: post-processing response had no text`);
-          continue;
-        }
-
-        return {
-          text,
-          metadata: {
-            endpoint: `${host}${chatPath}`,
-          },
-        };
-      } catch (error) {
-        errors.push(
-          `${host}${chatPath}: ${error instanceof Error ? error.message : "Request failed"}`
-        );
-      }
-    }
-  }
-
-  throw new ApiRouteError(`Post-processing failed on Ollama: ${errors.join(" | ")}`, 502);
-}
-
-async function unloadOllamaModel(endpoint: string, model: string): Promise<void> {
-  const candidates = getOllamaCandidatesForOcr(endpoint);
-  for (const rawCandidate of candidates) {
-    const host = normalizeOllamaApiBase(rawCandidate);
-    try {
-      await fetchWithTimeout(`${host}/api/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          prompt: "",
-          stream: false,
-          keep_alive: 0,
-        }),
-      }, 10_000);
-      return;
-    } catch {
-      // try next host candidate
-    }
-  }
-}
-
-async function warmupOllamaModel(endpoint: string, model: string): Promise<void> {
-  const candidates = getOllamaCandidatesForOcr(endpoint);
-  for (const rawCandidate of candidates) {
-    const host = normalizeOllamaApiBase(rawCandidate);
-    try {
-      await fetchWithTimeout(`${host}/api/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          prompt: "Warmup",
-          stream: false,
-          options: { num_predict: 1 },
-          keep_alive: "10m",
-        }),
-      }, 15_000);
-      return;
-    } catch {
-      // try next host candidate
-    }
-  }
-}
-
-function buildMistralChatEndpoint(rawEndpoint: string): string {
-  const fallback = "https://api.mistral.ai/v1/chat/completions";
-  const trimmed = rawEndpoint.trim();
-  if (!trimmed || !/^https?:\/\//i.test(trimmed)) {
-    return fallback;
-  }
-
-  try {
-    const url = new URL(trimmed);
-    url.search = "";
-    url.hash = "";
-    const pathname = url.pathname.replace(/\/+$/u, "");
-
-    if (pathname.endsWith("/chat/completions")) {
-      return url.toString();
-    }
-    if (pathname.endsWith("/v1/ocr")) {
-      url.pathname = `${pathname.slice(0, -4)}/chat/completions`;
-      return url.toString();
-    }
-    if (pathname.endsWith("/ocr")) {
-      url.pathname = `${pathname.slice(0, -4)}/v1/chat/completions`;
-      return url.toString();
-    }
-    if (pathname.endsWith("/v1")) {
-      url.pathname = `${pathname}/chat/completions`;
-      return url.toString();
-    }
-
-    url.pathname = pathname ? `${pathname}/v1/chat/completions` : "/v1/chat/completions";
-    return url.toString();
-  } catch {
-    return fallback;
-  }
-}
-
-async function runMistralOcr(
-  apiEndpoint: string,
-  model: string,
-  apiKey: string,
-  preview: string,
-  signal?: AbortSignal
-): Promise<OcrRunResult> {
-  if (!apiKey) {
-    throw new ApiRouteError("MISTRAL_API_KEY is not configured", 500);
-  }
-
-  const endpointCandidates = buildMistralOcrEndpointCandidates(
-    apiEndpoint || DEFAULT_MISTRAL_API_URL
-  );
-  let endpointUsed = endpointCandidates[0] || normalizeMistralEndpoint(DEFAULT_MISTRAL_API_URL);
-  let payload: unknown = null;
-  let response: Response | null = null;
-  let lastError: ApiRouteError | null = null;
-
-  for (let index = 0; index < endpointCandidates.length; index++) {
-    const candidateEndpoint = endpointCandidates[index];
-    endpointUsed = candidateEndpoint;
-    let candidateResponse: Response;
-    try {
-      candidateResponse = await fetchWithTimeout(candidateEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          document: {
-            type: "image_url",
-            image_url: preview,
-          },
-          table_format: "markdown",
-        }),
-      }, REQUEST_TIMEOUT_MS, signal);
-    } catch (error) {
-      if (error instanceof OcrStopRequestedError) {
-        throw error;
-      }
-      throw error instanceof ApiRouteError
-        ? error
-        : new ApiRouteError(error instanceof Error ? error.message : "Mistral OCR request failed", 502);
-    }
-
-    const candidatePayload = await parseResponseText(candidateResponse);
-    if (!candidateResponse.ok) {
-      const isLastEndpoint = index === endpointCandidates.length - 1;
-      const isNotFound = candidateResponse.status === 404;
-      if (!isLastEndpoint && isNotFound) {
-        continue;
-      }
-
-      lastError = new ApiRouteError(
-        `Mistral OCR failed (${candidateResponse.status}): ${parseServiceError(
-          candidateResponse,
-          candidatePayload
-        )}`,
-        candidateResponse.status
-      );
-      break;
-    }
-
-    response = candidateResponse;
-    payload = candidatePayload;
-    break;
-  }
-
-  if (lastError) {
-    throw lastError;
-  }
-
-  if (!response || !payload || typeof payload !== "object") {
-    throw new ApiRouteError("Invalid OCR response from Mistral", 502);
-  }
-
-  const payloadObject = payload as {
-    pages?: OcrPage[];
-    text?: string;
-    markdown?: string;
-    document_annotation?: string | Record<string, unknown>;
-    usage_info?: Record<string, unknown>;
-  };
-  const pageTexts = Array.isArray(payloadObject.pages)
-    ? payloadObject.pages
-        .map((page) => {
-          if (typeof page.markdown === "string" && page.markdown.trim()) {
-            return page.markdown.trim();
-          }
-          if (typeof page.text === "string" && page.text.trim()) {
-            return page.text.trim();
-          }
-          if (typeof page.html === "string" && page.html.trim()) {
-            return page.html.trim();
-          }
-          return "";
-        })
-        .filter(Boolean)
-    : [];
-
-  const text = (
-    pageTexts.join("\n\n") ||
-    (typeof payloadObject.text === "string" ? payloadObject.text : "") ||
-    (typeof payloadObject.markdown === "string" ? payloadObject.markdown : "")
-  ).trim();
-
-  if (!text) {
-    throw new ApiRouteError("Mistral returned no OCR text", 502);
-  }
-
-  const pagePayload = Array.isArray(payloadObject.pages)
-    ? payloadObject.pages.map((page) => ({
-        index: typeof page.index === "number" ? page.index : undefined,
-        markdown: typeof page.markdown === "string" ? page.markdown : undefined,
-        text: typeof page.text === "string" ? page.text : undefined,
-        html: typeof page.html === "string" ? page.html : undefined,
-      }))
-    : [];
-  const structured = {
-    markdown: text,
-    pages: pagePayload,
-    document_annotation: payloadObject.document_annotation ?? null,
-    usage_info: payloadObject.usage_info ?? null,
-  };
-
-  return {
-    text,
-    structured,
-    metadata: {
-      responsePages: Array.isArray(payloadObject.pages) ? payloadObject.pages.length : 0,
-      documentAnnotation:
-        typeof payloadObject.document_annotation === "string"
-          ? payloadObject.document_annotation
-          : payloadObject.document_annotation
-            ? JSON.stringify(payloadObject.document_annotation)
-            : undefined,
-      usageInfo: payloadObject.usage_info,
-      pages:
-        Array.isArray(payloadObject.pages) && payloadObject.pages.length
-          ? payloadObject.pages
-              .map((page) => page.index)
-              .filter((index): index is number => typeof index === "number")
-          : undefined,
-      endpoint: endpointUsed,
-    },
-  };
-}
-
-async function runMistralPostProcessing(
-  apiEndpoint: string,
-  model: string,
-  apiKey: string,
-  systemPrompt: string,
-  userPrompt: string,
-  outputFormat: PostProcessOutputFormat
-): Promise<PostProcessResult> {
-  if (!apiKey) {
-    throw new ApiRouteError("MISTRAL_API_KEY is not configured", 500);
-  }
-
-  const endpoint = enforceProviderEndpointPolicy(
-    "mistral",
-    buildMistralChatEndpoint(apiEndpoint.trim() || DEFAULT_MISTRAL_API_URL),
-    DEFAULT_MISTRAL_API_URL
-  );
-  const response = await fetchWithTimeout(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
-        {
-          role: "user",
-          content: userPrompt,
-        },
-      ],
-      ...(outputFormat === "json"
-        ? {
-            response_format: {
-              type: "json_object",
-            },
-          }
-        : {}),
-      temperature: 0,
-      stream: false,
-    }),
-  });
-
-  const payload = await parseResponseText(response);
-  if (!response.ok) {
-    throw new ApiRouteError(
-      `Mistral post-processing failed (${response.status}): ${parseServiceError(response, payload)}`,
-      response.status
-    );
-  }
-
-  if (!payload || typeof payload !== "object") {
-    throw new ApiRouteError("Invalid post-processing response from Mistral", 502);
-  }
-
-  const firstChoice = Array.isArray((payload as { choices?: unknown[] }).choices)
-    ? ((payload as { choices: Array<{ message?: { content?: unknown } }> }).choices[0]?.message)
-    : undefined;
-  const text = extractChatContentText(firstChoice?.content);
-
-  if (!text) {
-    throw new ApiRouteError("Mistral post-processing returned empty output", 502);
-  }
-
-  return {
-    text,
-    metadata: {
-      endpoint,
-    },
-  };
-}
-
-function normalizeMistralModels(): string[] {
-  return [...new Set(DEFAULT_MISTRAL_MODELS)];
-}
-
-interface CompatProviderConfig {
-  provider: Extract<ProviderKind, "openrouter" | "openai_compat">;
-  label: string;
-  defaultUrl: string;
-  normalizeBase: (raw: string) => string;
-  buildHeaders: (apiKey: string) => Record<string, string>;
-  buildDiscoveryHeaders: (apiKey: string) => Record<string, string>;
-  modelCache: Map<string, { values: string[]; expiresAt: number }>;
-  cacheTtlMs: number;
-  cacheMaxEntries: number;
-}
-
-const OPENROUTER_CONFIG: CompatProviderConfig = {
-  provider: "openrouter",
-  label: "OpenRouter",
-  defaultUrl: DEFAULT_OPENROUTER_API_URL,
-  normalizeBase: normalizeOpenRouterApiBase,
-  buildHeaders: (apiKey) => {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      "X-Title": OPENROUTER_TITLE,
-    };
-    if (OPENROUTER_REFERER) headers["HTTP-Referer"] = OPENROUTER_REFERER;
-    return headers;
-  },
-  buildDiscoveryHeaders: (apiKey) => {
-    const headers: Record<string, string> = {
-      Accept: "application/json",
-      "X-Title": OPENROUTER_TITLE,
-    };
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    if (OPENROUTER_REFERER) headers["HTTP-Referer"] = OPENROUTER_REFERER;
-    return headers;
-  },
-  modelCache: openRouterModelCache,
-  cacheTtlMs: OPENROUTER_MODEL_CACHE_TTL_MS,
-  cacheMaxEntries: OPENROUTER_MODEL_CACHE_MAX_ENTRIES,
-};
-
-const OPENAI_COMPAT_CONFIG: CompatProviderConfig = {
-  provider: "openai_compat",
-  label: "OpenAI-compatible",
-  defaultUrl: DEFAULT_OPENAI_COMPAT_API_URL,
-  normalizeBase: normalizeOpenAICompatApiBase,
-  // Vanilla OpenAI shape: just Bearer auth + JSON. No X-Title, no HTTP-Referer
-  // (those are OpenRouter-specific and confuse strict OpenAI servers).
-  buildHeaders: (apiKey) => ({
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${apiKey}`,
-  }),
-  buildDiscoveryHeaders: (apiKey) => {
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    return headers;
-  },
-  modelCache: openAICompatModelCache,
-  cacheTtlMs: OPENAI_COMPAT_MODEL_CACHE_TTL_MS,
-  cacheMaxEntries: OPENAI_COMPAT_MODEL_CACHE_MAX_ENTRIES,
-};
-
-function buildCompatEndpoint(
-  cfg: CompatProviderConfig,
-  rawEndpoint: string,
-  suffix: "/chat/completions" | "/models"
-): string {
-  const base = cfg.normalizeBase(rawEndpoint || cfg.defaultUrl);
-  return enforceProviderEndpointPolicy(cfg.provider, `${base}${suffix}`, `${cfg.defaultUrl}${suffix}`);
-}
-
-function buildCompatCacheKey(endpoint: string, apiKey: string): string {
-  if (!apiKey) return `${endpoint}|anonymous`;
-  const digest = createHash("sha256")
-    .update(endpoint, "utf8")
-    .update("|", "utf8")
-    .update(apiKey, "utf8")
-    .digest("hex");
-  return `${endpoint}|${digest}`;
-}
-
-function pruneCompatModelCache(cfg: CompatProviderConfig): void {
-  const now = Date.now();
-  for (const [key, entry] of cfg.modelCache) {
-    if (entry.expiresAt <= now) cfg.modelCache.delete(key);
-  }
-  while (cfg.modelCache.size > cfg.cacheMaxEntries) {
-    const oldestKey = cfg.modelCache.keys().next().value;
-    if (oldestKey === undefined) break;
-    cfg.modelCache.delete(oldestKey);
-  }
-}
-
-function getCachedCompatModels(cfg: CompatProviderConfig, endpoint: string, apiKey: string): string[] | null {
-  const key = buildCompatCacheKey(endpoint, apiKey);
-  const entry = cfg.modelCache.get(key);
-  if (!entry) return null;
-  if (entry.expiresAt <= Date.now()) {
-    cfg.modelCache.delete(key);
-    return null;
-  }
-  cfg.modelCache.delete(key);
-  cfg.modelCache.set(key, entry);
-  return entry.values.length > 0 ? entry.values : null;
-}
-
-function setCompatModelCache(cfg: CompatProviderConfig, endpoint: string, apiKey: string, values: string[]): void {
-  cfg.modelCache.set(buildCompatCacheKey(endpoint, apiKey), { values, expiresAt: Date.now() + cfg.cacheTtlMs });
-  pruneCompatModelCache(cfg);
-}
-
-async function discoverCompatModels(cfg: CompatProviderConfig, apiEndpoint: string, apiKey: string): Promise<string[]> {
-  const endpoint = buildCompatEndpoint(cfg, apiEndpoint, "/models");
-  const cached = getCachedCompatModels(cfg, endpoint, apiKey);
-  if (cached) return cached;
-
-  const response = await fetchWithTimeout(endpoint, { headers: cfg.buildDiscoveryHeaders(apiKey) });
-  const payload = await parseResponseText(response);
-  if (!response.ok) {
-    throw new ApiRouteError(
-      `${cfg.label} model discovery failed (${response.status}): ${parseServiceError(response, payload)}`,
-      response.status
-    );
-  }
-
-  if (!payload || typeof payload !== "object") {
-    throw new ApiRouteError(`Invalid ${cfg.label} model response`, 502);
-  }
-
-  const data = (payload as { data?: unknown }).data;
-  if (!Array.isArray(data)) return [];
-
-  const models = data
-    .map((entry) => {
-      if (!entry || typeof entry !== "object") return "";
-      const id = (entry as { id?: unknown }).id;
-      return typeof id === "string" ? id.trim() : "";
-    })
-    .filter(Boolean);
-
-  const unique = Array.from(new Set(models));
-  setCompatModelCache(cfg, endpoint, apiKey, unique);
-  return unique;
-}
-
-async function runCompatOcr(
-  cfg: CompatProviderConfig,
-  apiEndpoint: string,
-  model: string,
-  apiKey: string,
-  prompt: string,
-  preview: string,
-  signal?: AbortSignal
-): Promise<OcrRunResult> {
-  if (!apiKey) {
-    throw new ApiRouteError(`${cfg.label} API key is not configured`, 500);
-  }
-
-  const imageData = parsePreviewImageData(preview);
-  if (!imageData.dataUrl) {
-    throw new ApiRouteError(`Invalid image data for ${cfg.label} OCR`, 400);
-  }
-
-  const endpoint = buildCompatEndpoint(cfg, apiEndpoint, "/chat/completions");
-  const response = await fetchWithTimeout(
-    endpoint,
-    {
-      method: "POST",
-      headers: cfg.buildHeaders(apiKey),
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: imageData.dataUrl } },
-            ],
-          },
-        ],
-        temperature: 0,
-        stream: false,
-      }),
-    },
-    REQUEST_TIMEOUT_MS,
-    signal
-  );
-
-  const payload = await parseResponseText(response);
-  if (!response.ok) {
-    throw new ApiRouteError(
-      `${cfg.label} OCR failed (${response.status}): ${parseServiceError(response, payload)}`,
-      response.status
-    );
-  }
-
-  if (!payload || typeof payload !== "object") {
-    throw new ApiRouteError(`Invalid OCR response from ${cfg.label}`, 502);
-  }
-
-  const choices = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices;
-  const message = Array.isArray(choices) ? choices[0]?.message : undefined;
-  const text = extractChatContentText(message?.content);
-  if (!text) {
-    throw new ApiRouteError(`${cfg.label} OCR response had no text`, 502);
-  }
-
-  const parsed = parseJsonCandidate(text);
-  const normalized = normalizeStructuredMarkdownPayload(parsed, text);
-  if (!normalized.markdown) {
-    throw new ApiRouteError(`${cfg.label} OCR response markdown was empty`, 502);
-  }
-
-  const usage = (payload as { usage?: Record<string, unknown> }).usage;
-  return {
-    text: normalized.markdown,
-    structured: normalized.structured,
-    metadata: { endpoint, outputFormat: normalized.parseMode, usage },
-  };
-}
-
-async function runCompatPostProcessing(
-  cfg: CompatProviderConfig,
-  apiEndpoint: string,
-  model: string,
-  apiKey: string,
-  systemPrompt: string,
-  userPrompt: string,
-  outputFormat: PostProcessOutputFormat
-): Promise<PostProcessResult> {
-  if (!apiKey) {
-    throw new ApiRouteError(`${cfg.label} API key is not configured`, 500);
-  }
-
-  const endpoint = buildCompatEndpoint(cfg, apiEndpoint, "/chat/completions");
-  const response = await fetchWithTimeout(endpoint, {
-    method: "POST",
-    headers: cfg.buildHeaders(apiKey),
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      ...(outputFormat === "json" ? { response_format: { type: "json_object" } } : {}),
-      temperature: 0,
-      stream: false,
-    }),
-  });
-
-  const payload = await parseResponseText(response);
-  if (!response.ok) {
-    throw new ApiRouteError(
-      `${cfg.label} post-processing failed (${response.status}): ${parseServiceError(response, payload)}`,
-      response.status
-    );
-  }
-
-  if (!payload || typeof payload !== "object") {
-    throw new ApiRouteError(`Invalid post-processing response from ${cfg.label}`, 502);
-  }
-
-  const choices = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices;
-  const message = Array.isArray(choices) ? choices[0]?.message : undefined;
-  const text = extractChatContentText(message?.content);
-  if (!text) {
-    throw new ApiRouteError(`${cfg.label} post-processing returned empty output`, 502);
-  }
-
-  return { text, metadata: { endpoint } };
-}
-
 async function tryDiscover(discover: () => Promise<string[]>, label: string): Promise<string[]> {
   try {
     return await discover();
@@ -1721,7 +786,7 @@ async function tryDiscover(discover: () => Promise<string[]>, label: string): Pr
 }
 
 async function getModelCatalog(settings: ApiProviderSettings): Promise<ModelCatalog> {
-  const mistralModels = normalizeMistralModels();
+  const mistralModels = listMistralModels();
 
   const ollamaModels = await tryDiscover(
     () => getOllamaModels(settings.apiEndpoint).then((r) => r.models),
