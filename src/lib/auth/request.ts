@@ -8,7 +8,7 @@ import {
   hashApiKey,
   isLikelyApiKey,
 } from "@/lib/auth/api-key";
-import { parseScopeList, scopeListGrants, type Scope, WILDCARD_SCOPE } from "@/lib/auth/scopes";
+import { parseScopeList, scopeListGrants, type Scope, type ScopeEntry, WILDCARD_SCOPE } from "@/lib/auth/scopes";
 import { getAuthCookieName, verifySessionToken } from "@/lib/auth/token";
 import { db } from "@/lib/db";
 import { isTrustedMutationRequest } from "@/lib/request-security";
@@ -19,14 +19,14 @@ export interface AuthContext {
   userId: string;
   method: AuthMethod;
   apiKeyId: string | null;
-  scopes: string[];
+  scopes: ScopeEntry[];
   rateLimitPerMinute: number | null;
 }
 
 interface ApiKeyVerifyResult {
   userId: string;
   apiKeyId: string;
-  scopes: string[];
+  scopes: ScopeEntry[];
   rateLimitPerMinute: number | null;
 }
 

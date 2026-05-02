@@ -15,19 +15,21 @@ export type Scope = (typeof ALL_SCOPES)[number];
 
 export const WILDCARD_SCOPE = "*";
 
-export function parseScopeList(raw: unknown): string[] {
+export type ScopeEntry = Scope | typeof WILDCARD_SCOPE;
+
+export function parseScopeList(raw: unknown): ScopeEntry[] {
   if (typeof raw === "string") {
     try {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.filter((value): value is string => typeof value === "string");
+        return parsed.filter((value): value is ScopeEntry => typeof value === "string") as ScopeEntry[];
       }
     } catch {
       return [];
     }
   }
   if (Array.isArray(raw)) {
-    return raw.filter((value): value is string => typeof value === "string");
+    return raw.filter((value): value is ScopeEntry => typeof value === "string") as ScopeEntry[];
   }
   return [];
 }

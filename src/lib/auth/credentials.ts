@@ -76,7 +76,7 @@ export async function createUser(input: {
   });
 }
 
-export function toSafeUser(user: AuthUserRecord) {
+export function toSafeUser(user: AuthUserRecord): { id: string; email: string; name: string | null } {
   return {
     id: user.id,
     email: user.email,
