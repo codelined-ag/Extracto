@@ -68,8 +68,7 @@ import {
 } from"@/components/ui/dialog";
 import { ThemeToggle } from"@/components/theme-toggle";
 import { useToast } from"@/hooks/use-toast";
-import { normalizeProvider, type ProviderKind } from"@/lib/endpoint-policy";
-import { type ClientApiSettings } from"@/lib/settings-store";
+import { normalizeProvider, type ProviderKind, type ClientApiSettings } from"@/lib/api-types";
 import { type AdvancedSettings, type PostProcessingSettings, type PostProcessOutputFormat } from"@/lib/ocr/settings";
 import { extractFirstBalancedJsonObject, extractMarkdownFromJsonLikeText } from"@/lib/ocr/text-extract";
 import ReactMarkdown from"react-markdown";

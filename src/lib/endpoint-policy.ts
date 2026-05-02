@@ -1,14 +1,8 @@
 import { normalizeHostEndpoint } from "@/lib/host-normalization";
+import { type ProviderKind } from "@/lib/api-types";
 
-export type ProviderKind = "ollama" | "mistral" | "openrouter" | "openai_compat";
-
-export function normalizeProvider(raw?: string): ProviderKind {
-  const v = raw?.trim().toLowerCase().split(":")[0];
-  if (v === "mistral") return "mistral";
-  if (v === "openrouter") return "openrouter";
-  if (v === "openai_compat") return "openai_compat";
-  return "ollama";
-}
+export type { ProviderKind } from "@/lib/api-types";
+export { normalizeProvider } from "@/lib/api-types";
 
 const DEFAULT_OLLAMA_HOST_PATTERNS = [
   "localhost",
