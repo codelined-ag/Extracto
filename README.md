@@ -2,332 +2,149 @@
   <img src="extracto-banner.png" alt="Extracto" width="100%">
 </p>
 
-# Extracto
+<p align="center">
+  <strong>Self-hosted OCR for documents.</strong><br/>
+  Pick your model, drop in a PDF or photo, get clean text out.
+</p>
 
-Extracto is a self-hosted OCR web app with a proper backend, persistent settings, authentication, OCR history, and Docker-first operations.
+<p align="center">
+  <a href="#install-in-2-minutes">Install</a> ·
+  <a href="#what-it-does">What it does</a> ·
+  <a href="#run-it-as-an-api">API mode</a> ·
+  <a href="#use-it-from-an-agent">Agents &amp; CLI</a> ·
+  <a href="#configuration">Configuration</a>
+</p>
 
-It supports four model providers — Ollama on your host machine, the Mistral OCR API, OpenRouter, and any **OpenAI-compatible endpoint** (api.openai.com itself, plus self-hosted vLLM / LocalAI / llama.cpp server, Groq, Together, Fireworks, etc.) — plus multi-page PDF extraction and optional AI post-processing.
+---
 
-## Why Extracto
+## What it does
 
-- OCR with local-first or API-first model providers.
-- Free signup and auth-gated workspace.
-- Per-user OCR history with preview, view, download, and delete.
-- Persistent provider settings and API keys.
-- Full Docker Compose deployment.
-- One-command lifecycle via `extracto on`, `extracto off`, `extracto uninstall`.
+You give Extracto a PDF, an image, or a folder of them. It runs OCR with the model of your choice and gives you back clean text. That's the whole pitch.
 
-## Core Features
+What's actually in the box:
 
-- OCR providers:
-  - Ollama (`/api/chat` and `/v1/chat/completions` compatible paths).
-  - Mistral OCR API.
-  - OpenRouter (OpenAI-compatible chat completions with vision; any model in
-    the OpenRouter catalog that accepts image inputs).
-  - **OpenAI-compatible** — any endpoint that speaks the OpenAI Chat
-    Completions wire format with vision content blocks. Works with
-    `api.openai.com`, self-hosted vLLM / LocalAI / llama.cpp server, Groq,
-    Together, Fireworks, Anyscale, and similar.
-- Dynamic model discovery from each configured provider — including live
-  OpenRouter and OpenAI-compatible `/models` lookup using the user's saved key.
-- Per-user persisted provider settings: provider, endpoint, API key.
-- PDF pipeline:
-  - Every page is rendered to image first.
-  - Each image page is processed via OCR.
-  - Output is merged into one final response.
-  - No fixed hard page cap in app logic.
-- Optional post-processing stage:
-  - Custom instruction input.
-  - Output mode: `Markdown` or structured `JSON`.
-  - Runs after OCR extraction.
-- Past OCR runs modal:
-  - Run list with status.
-  - Detail view.
-  - Download markdown/json.
-  - Delete previous runs.
+- **OCR with four provider families:** Ollama on your own machine (fully offline, no key needed), Mistral OCR API, OpenRouter (any vision model in their catalog), or any OpenAI-compatible endpoint (the real OpenAI, vLLM, LocalAI, llama.cpp server, Groq, Together, Fireworks, etc.).
+- **Multi-page PDFs out of the box.** Each page is rendered to an image, OCR'd, and merged. No hard cap on page count.
+- **Resumable jobs.** Stop a long run, come back later, hit Resume, and it picks up from the last completed page.
+- **Optional post-processing pass.** After OCR, send the text through any model with your own instruction (extract invoice line items, normalize tables, return JSON, etc.).
+- **Searchable history** with file preview, Markdown / Raw / JSON tabs, per-run download or delete.
+- **Three vector stores for knowledge bases:** Chroma, Qdrant, Weaviate. Chunk + embed + push in one click, configurable per user.
+- **Watched folders** for fire-and-forget ingestion.
+- **Per-user accounts**, per-user provider settings, per-user API keys with scopes and rate limits.
+- **Two surfaces:** a polished editorial web UI for humans, and a stable bearer-auth HTTP API under `/api/v1/*` for everything else.
+- **Five UI languages:** English (default), Italian, French, Spanish, German.
 
-## Tech Stack
+The whole stack runs in a single Docker container. SQLite for the database, Bun for the runtime, Next.js 16 for the app.
 
-- Next.js 16 (App Router)
-- TypeScript
-- Prisma + SQLite
-- Bun runtime (containerized build/runtime)
-- Tailwind + shadcn/ui
-- Docker + Docker Compose
+---
 
-## Quick Start
+## Install in 2 minutes
 
-Extracto runs in a single Docker container, so it works the same on Linux, macOS, and Windows. Pick your platform:
+You need Docker. That's it.
 
 ### Linux
 
 ```bash
-./install-extracto.sh         # installs Docker + Ollama + 'extracto' command
-extracto on                   # build + start
-extracto off                  # stop
-extracto uninstall            # full teardown
+git clone https://github.com/codelined-ag/extracto
+cd extracto
+./install-extracto.sh
+extracto on
 ```
 
-`install-extracto.sh` installs Docker if missing, installs Ollama if missing, drops the `extracto` launcher in `~/.local/bin/extracto`, and patches `~/.bashrc` / `~/.zshrc`.
+`install-extracto.sh` installs Docker if missing, installs Ollama if missing, drops the `extracto` launcher in `~/.local/bin`, and patches your shell rc. After that:
+
+```bash
+extracto on            # build + start
+extracto off           # stop
+extracto status        # docker compose ps
+extracto logs          # tail container logs
+extracto uninstall     # full teardown
+```
+
+Open <http://localhost:3000>, sign up, you're in.
 
 ### macOS
 
-Prerequisites: install [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/) (and optionally [Ollama for Mac](https://ollama.com/download/mac) if you want local OCR providers). Then the same Bash launcher works:
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and (optionally for local OCR) [Ollama](https://ollama.com/download/mac). Then:
 
 ```bash
-./scripts/extracto.sh on
-./scripts/extracto.sh off
-```
-
-To install the `extracto` shortcut on your `$PATH`, the simplest one-liner:
-
-```bash
+git clone https://github.com/codelined-ag/extracto
+cd extracto
 mkdir -p "$HOME/.local/bin"
 ln -sf "$PWD/scripts/extracto.sh" "$HOME/.local/bin/extracto"
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
-```
-
-After opening a new shell:
-
-```bash
+exec zsh
 extracto on
-extracto off
-extracto uninstall
 ```
 
 ### Windows
 
-Prerequisites: install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) (with WSL2 backend) and optionally [Ollama for Windows](https://ollama.com/download/windows). Then run from PowerShell:
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (WSL2 backend) and (optionally) [Ollama for Windows](https://ollama.com/download/windows). From PowerShell:
 
 ```powershell
+git clone https://github.com/codelined-ag/extracto
+cd extracto
 .\scripts\extracto.ps1 install      # adds 'extracto' to your user PATH
-extracto on                          # build + start
-extracto off                         # stop
-extracto logs                        # follow container logs
-extracto status                      # docker compose ps
-extracto update                      # pull + rebuild
-extracto uninstall                   # full teardown (removes data volume)
+extracto on
 ```
 
-If PowerShell blocks the script, run once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+If PowerShell blocks the script: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
-### Manual Docker Compose (any OS)
+### Plain Docker Compose (any OS)
 
 ```bash
+git clone https://github.com/codelined-ag/extracto
+cd extracto
 docker compose --env-file docker.env up -d --build
-docker compose ps
 docker compose logs -f app
-docker compose --env-file docker.env down
 ```
 
-## Configuration
+The container generates a strong `AUTH_SECRET` on first boot and writes it to `/app/data/.auth_secret` (or you can set your own in `docker.env`). Open <http://localhost:3000>.
 
-Primary runtime config is in `docker.env`.
+---
 
-Important variables:
+## How to use it (the UI)
 
-- `AUTH_SECRET`: required for production auth cookie signing.
-- `COOKIE_SECURE`: `false` for local HTTP, `true` behind HTTPS.
-- `APP_NETWORK_MODE`: `host` (default here) or `bridge`.
-- `OLLAMA_HOST`: Ollama base URL used by backend discovery and OCR calls.
-- `OLLAMA_HOST_FALLBACKS`: optional comma-separated fallback hosts.
-- `OPENROUTER_API_URL`: override base URL (default `https://openrouter.ai/api/v1`).
-- `OPENROUTER_API_KEY`: optional fallback key when a user has not saved one.
-- `OPENROUTER_REFERER` / `OPENROUTER_TITLE`: sent as `HTTP-Referer` / `X-Title`
-  for OpenRouter analytics.
-- `OPENROUTER_MODELS`: optional comma-separated fallback model list.
-- `OPENAI_COMPAT_API_URL`: base URL placeholder shown when "OpenAI-compatible"
-  is selected (default `https://api.openai.com/v1`). Users override per
-  account from the Settings → API dialog.
-- `OPENAI_COMPAT_API_KEY`: optional fallback API key when a user has not
-  saved one.
-- `OPENAI_COMPAT_MODELS`: optional comma-separated fallback model list shown
-  when `/models` discovery fails (e.g. for servers that don't expose it).
-- `OLLAMA_ALLOWED_HOSTS` / `MISTRAL_ALLOWED_HOSTS` / `OPENROUTER_ALLOWED_HOSTS`
-  / `OPENAI_COMPAT_ALLOWED_HOSTS`: optional comma-separated allowlists for
-  provider endpoints. User-submitted endpoints are validated against these
-  patterns; defaults cover localhost, docker gateway hosts, `*.mistral.ai`,
-  `*.openrouter.ai`, and `*.openai.com`. **Extend
-  `OPENAI_COMPAT_ALLOWED_HOSTS` to authorize self-hosted vLLM/LocalAI hosts**
-  (e.g. `api.openai.com,my-vllm.internal,groq.com,api.together.xyz`).
+Once you're signed in:
 
-## Ollama Host Connectivity
+1. **Configure a provider** (top-right gear → Provider). Pick Ollama / Mistral / OpenRouter / OpenAI-compatible, paste an endpoint and key. Hit Save.
+2. **Pick a model** (gear → Model). The picker is searchable and refreshes from the live provider catalog. For Ollama, it lists every model you've pulled. For OpenRouter, it lists every model in the catalog (including vision-capable ones).
+3. **Tweak Advanced Options** in the sidebar (language, table detection, handwriting, formatting, quality, custom prompt, optional post-processing pass).
+4. **Drag in a file** (or click the dropzone). PDFs, PNGs, JPEGs, WebPs.
+5. **Hit Run OCR.** Watch progress page-by-page in the live activity panel.
+6. **Read the result** in the right pane (Markdown / Markdown raw / JSON tabs). Use the **Actions** dropdown to copy, download, or send to your vector store.
+7. **Stop / Resume.** Long jobs can be paused; they resume from the last completed page.
+8. **Browse history** via the History tile in the sidebar. Search, filter by status, view, re-download, delete.
 
-Default in this project is host networking:
+---
 
-- `APP_NETWORK_MODE=host`
-- `OLLAMA_HOST=http://127.0.0.1:11434`
+## Run it as an API
 
-If using bridge mode, host Ollama must be reachable from container network. Typical setup:
+Extracto is a real OCR service, not just a UI. The same backend powers the browser and a stable bearer-auth HTTP API under `/api/v1/*`.
 
-- Host Ollama bind: `0.0.0.0:11434`
-- App endpoint: `http://host.docker.internal:11434`
+### 1. Mint an API key
 
-## Authentication
-
-The application is gated by `/auth` with free signup enabled. Two
-authentication methods are supported:
-
-1. **Session cookie** — used by the browser UI. Sign in at `/auth`.
-2. **API key (Bearer token)** — for headless / server-to-server use. Send as
-   `Authorization: Bearer extr_...` on any `/api/*` request.
-
-Session-based mutations are CSRF-protected via origin/referer checks. API-key
-requests skip that check (no implicit credentials in non-browser clients).
-
-Auth endpoints:
-
-- `POST /api/auth/signup`
-- `POST /api/auth/login`
-- `POST /api/auth/signout`
-- `GET /api/auth/session`
-
-## Providers
-
-Four providers are supported. Each is configured per user from the UI
-(Settings → API), and the same configuration is used by both the browser UI
-and the headless API.
-
-| Provider | Endpoint | API key required | Model discovery |
-|---|---|---|---|
-| Ollama | local or remote `http://host:11434` | no | `GET /api/tags` (or `/v1/models`) |
-| Mistral OCR API | `https://api.mistral.ai/v1/ocr` | yes | static catalog (configurable via `MISTRAL_MODELS`) |
-| OpenRouter | `https://openrouter.ai/api/v1` | yes | live `GET /models` using the saved key |
-| OpenAI-compatible | any base URL (default `https://api.openai.com/v1`) | yes | live `GET /models` using the saved key |
-
-For OpenRouter, any vision-capable model in the catalog can be used (e.g.
-`anthropic/claude-3.5-sonnet`, `openai/gpt-4o`, `google/gemini-2.0-flash-001`,
-`qwen/qwen-2-vl-72b-instruct`). The dynamic catalog refreshes every five
-minutes; if discovery fails, a configurable fallback list is shown.
-
-The **OpenAI-compatible** provider lets you point at any server that speaks
-the OpenAI Chat Completions wire format with vision content blocks: the real
-`api.openai.com`, a self-hosted [vLLM](https://github.com/vllm-project/vllm)
-or [LocalAI](https://localai.io) instance, [Groq](https://groq.com),
-[Together](https://together.ai), [Fireworks](https://fireworks.ai),
-[Anyscale](https://anyscale.com), etc. Requests use a bare
-`Authorization: Bearer <key>` (no `X-Title` / `HTTP-Referer` headers — those
-are OpenRouter-specific and trip strict OpenAI servers). The base path you
-paste into the endpoint field is preserved verbatim — `/v1`, `/openai/v1`,
-or whatever your server uses. Set `OPENAI_COMPAT_ALLOWED_HOSTS` to authorize
-self-hosted endpoints (defaults to `api.openai.com` only).
-
-## Headless API
-
-Extracto can be deployed as a headless OCR service: the same HTTP API powers
-the UI and accepts API-key Bearer auth for non-browser clients.
-
-### Provisioning an API key
-
-API keys are scoped to a single user, stored only as an HMAC-SHA256 hash
-(keyed by `AUTH_SECRET`), and shown in plaintext exactly once at creation.
-Each key carries a **scope list** and an optional **per-key rate limit**.
-
-**Headless (CLI, no UI required):**
+Either from the running container CLI:
 
 ```bash
-# Default: scope "*" (all), default rate limit (global per-user)
 extracto api-key create user@example.com "ci-runner"
+# Default: scope "*" (everything), default rate limit
+```
 
-# Restricted: only OCR submit + read, 30 req/min
+Or scoped:
+
+```bash
 extracto api-key create user@example.com "batch-runner" \
   --scopes=ocr:submit,ocr:read --rate-limit=30
-
-extracto api-key list   user@example.com
-extracto api-key revoke <key-id>
 ```
 
-The CLI runs inside the running container via `docker compose exec`, so the
-container must be up. The user must already exist (sign up via the UI once,
-or insert an `AuthUser` row directly).
+Or from an authenticated browser session via `POST /api/v1/keys`. The key is shown plaintext exactly once — copy it then.
 
-**From an authenticated browser session:**
+**Available scopes:** `*`, `ocr:submit`, `ocr:read`, `ocr:control`, `settings:read`, `settings:write`, `webhooks:read`, `webhooks:write`, `presets:read`, `presets:write`, `search:read`.
 
-```bash
-# Create with scopes + per-key limit
-curl -X POST http://localhost:3000/api/v1/keys \
-  -H "Content-Type: application/json" \
-  -b cookies.txt \
-  -d '{
-    "name": "ci-runner",
-    "scopes": ["ocr:submit", "ocr:read"],
-    "rateLimitPerMinute": 30
-  }'
+API keys cannot mint or revoke other keys. That path is session-only so a leaked key has bounded blast radius.
 
-# List (also returns availableScopes catalog)
-curl http://localhost:3000/api/v1/keys -b cookies.txt
-
-# Revoke
-curl -X DELETE http://localhost:3000/api/v1/keys/<id> -b cookies.txt
-```
-
-API keys cannot create or revoke other API keys — that path is session-only
-to keep the blast radius of a leaked key bounded to OCR work.
-
-**Available scopes:**
-
-| Scope | Grants |
-|---|---|
-| `*` | Everything below |
-| `ocr:submit` | `POST /api/ocr`, batch, OpenAI adapter |
-| `ocr:read` | List jobs, read job detail, model catalog, SSE stream |
-| `ocr:control` | Delete jobs, stop running jobs |
-| `settings:read` / `settings:write` | Per-user provider settings + global OCR tuning |
-| `webhooks:read` / `webhooks:write` | Webhook CRUD |
-| `presets:read` / `presets:write` | Output preset CRUD |
-| `search:read` | Job-history search |
-
-### Submit an OCR job and poll
-
-```bash
-# 1. Discover available models
-curl -s http://localhost:3000/api/models \
-  -H "Authorization: Bearer $EXTRACTO_API_KEY"
-
-# 2. Submit an OCR job (PDF as base64-encoded data URL or image preview)
-curl -s -X POST http://localhost:3000/api/ocr \
-  -H "Authorization: Bearer $EXTRACTO_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "fileName": "invoice.pdf",
-    "model": "minicpm-v",
-    "preview": "data:application/pdf;base64,JVBERi0xLjQK...",
-    "mode": "ocr"
-  }'
-# → { "jobId": "...", "status": "QUEUED", ... }
-
-# 3. Poll for completion
-curl -s "http://localhost:3000/api/jobs/$JOB_ID" \
-  -H "Authorization: Bearer $EXTRACTO_API_KEY"
-# → { "job": { "status": "COMPLETED", "extractedText": "...", "result": {...} } }
-```
-
-Per-user OCR rate limit: 6 jobs per 60s window by default. API keys with a
-configured `rateLimitPerMinute` use that limit instead, keyed by the API key
-itself (not by user+IP).
-
-### Stream progress with SSE
-
-Instead of polling, open a persistent stream. Each progress update is an SSE
-event; the stream closes automatically when the job hits a terminal state.
-
-```bash
-curl -N -H "Authorization: Bearer $EXTRACTO_API_KEY" \
-  http://localhost:3000/api/jobs/$JOB_ID/stream
-
-# event: hello
-# data: {"jobId":"..."}
-#
-# event: progress
-# data: {"id":"...","status":"PROCESSING","metadata":{...},"updatedAt":"..."}
-#
-# event: done
-# data: {"id":"...","status":"COMPLETED"}
-```
-
-### Bulk import
-
-Submit up to 50 files in a single request, sharing one `batchId`:
+### 2. Submit an OCR job
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/ocr/batch \
@@ -335,20 +152,29 @@ curl -X POST http://localhost:3000/api/v1/ocr/batch \
   -H "Content-Type: application/json" \
   -d '{
     "files": [
-      {"fileName": "invoice-1.pdf", "preview": "data:...", "model": "minicpm-v"},
-      {"fileName": "invoice-2.pdf", "preview": "data:...", "model": "minicpm-v", "priority": 5}
+      {"fileName": "invoice.pdf", "preview": "data:application/pdf;base64,JVBERi0...", "model": "mistral-ocr-latest"}
     ]
   }'
-# → { "batchId": "batch_...", "submissions": [{"fileName":..., "jobId":...}, ...] }
+# → { "batchId": "batch_...", "submissions": [{ "fileName":"invoice.pdf", "jobId":"..." }] }
 ```
 
-`priority` (-10..10, default 0) controls queue order when concurrent
-submissions exceed `OCR_WORKER_CONCURRENCY`.
+### 3. Stream or poll until done
 
-### OpenAI-compatible adapter
+```bash
+# Stream
+curl -N -H "Authorization: Bearer $EXTRACTO_API_KEY" \
+  http://localhost:3000/api/jobs/$JOB_ID/stream
+# event: progress / event: done
 
-Point existing OpenAI-SDK code at Extracto for OCR by setting the base URL
-to `/api/v1/openai`:
+# Or poll
+curl -s -H "Authorization: Bearer $EXTRACTO_API_KEY" \
+  http://localhost:3000/api/jobs/$JOB_ID
+# → { "job": { "status": "COMPLETED", "extractedText": "...", "result": {...} } }
+```
+
+### 4. Drop-in OpenAI replacement
+
+If you already have OpenAI-SDK code that does vision OCR, point its base URL at Extracto:
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/openai/chat/completions \
@@ -359,273 +185,328 @@ curl -X POST http://localhost:3000/api/v1/openai/chat/completions \
     "messages": [{
       "role": "user",
       "content": [
-        {"type": "text", "text": "Extract all invoice line items as a markdown table."},
+        {"type": "text", "text": "Extract all line items as a markdown table."},
         {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
       ]
     }]
   }'
 ```
 
-The adapter blocks until the OCR job completes (up to 5 minutes), then
-returns the OpenAI Chat Completions response shape with the extracted text
-in `choices[0].message.content`.
+The adapter blocks until the OCR job completes (up to 5 minutes) and returns the standard OpenAI Chat Completions shape.
 
-### Webhooks
-
-Subscribe to `job.completed` and `job.failed` events. Each delivery is signed
-with HMAC-SHA256 in the `X-Extracto-Signature: t=<unix-ts>,v1=<hex>` header
-(Stripe-style); the signed payload is `${ts}.${body}`.
+### 5. Subscribe to events with webhooks
 
 ```bash
-# Create
 curl -X POST http://localhost:3000/api/v1/webhooks \
   -H "Authorization: Bearer $EXTRACTO_API_KEY" \
-  -H "Content-Type: application/json" \
   -d '{"url": "https://your-app.example/extracto-hook", "events": ["job.completed"]}'
-# → { "webhook": { "id":..., "secret":"whsec_..." }, "warning": "..." }
-# (the secret is shown once — store it now)
-
-# List / disable / delete
-curl http://localhost:3000/api/v1/webhooks -H "Authorization: Bearer $EXTRACTO_API_KEY"
-curl -X PATCH http://localhost:3000/api/v1/webhooks/<id> -H "..." -d '{"active": false}'
-curl -X DELETE http://localhost:3000/api/v1/webhooks/<id> -H "..."
+# → { "webhook": { "id":..., "secret":"whsec_..." } }
 ```
 
-### History search
-
-```bash
-curl "http://localhost:3000/api/v1/search?q=invoice&limit=10" \
-  -H "Authorization: Bearer $EXTRACTO_API_KEY"
-# → { "q":"invoice", "count":..., "results":[{ "id":..., "snippet":"…invoice #123…" }] }
-```
-
-LIKE-based for v1; FTS5 is a future improvement.
-
-### Output presets
-
-Save and reuse post-processing recipes (custom instruction + output format):
-
-```bash
-# Create
-curl -X POST http://localhost:3000/api/v1/presets \
-  -H "Authorization: Bearer $EXTRACTO_API_KEY" \
-  -d '{"name":"Invoice → JSON line items","instruction":"Extract line items as JSON array of {description, qty, price}","outputFormat":"json"}'
-
-# List / update / delete
-curl http://localhost:3000/api/v1/presets -H "Authorization: ..."
-curl -X PATCH http://localhost:3000/api/v1/presets/<id> -H "..." -d '{"name":"..."}'
-curl -X DELETE http://localhost:3000/api/v1/presets/<id> -H "..."
-```
+Each delivery carries an `X-Extracto-Signature: t=<unix-ts>,v1=<hex>` HMAC-SHA256 header signing `${ts}.${body}`. Webhook URLs are validated against the `WEBHOOK_ALLOWED_HOSTS` allowlist; private, loopback, link-local, and CGNAT addresses are rejected unconditionally.
 
 ### Endpoint reference
 
-| Endpoint | Methods | Auth | Required scope (api-key) |
+| Endpoint | Methods | Auth | Required scope |
 |---|---|---|---|
 | `/api/health` | GET | public | — |
 | `/api/auth/*` | POST/GET | session only | — |
 | `/api/v1/keys` | GET, POST | session only | — |
 | `/api/v1/keys/:id` | DELETE | session only | — |
+| `/api/v1/ocr/batch` | POST | session or Bearer | `ocr:submit` |
+| `/api/v1/openai/chat/completions` | POST | session or Bearer | `ocr:submit` |
 | `/api/v1/webhooks` | GET, POST | session or Bearer | `webhooks:read` / `webhooks:write` |
 | `/api/v1/webhooks/:id` | PATCH, DELETE | session or Bearer | `webhooks:write` |
 | `/api/v1/presets` | GET, POST | session or Bearer | `presets:read` / `presets:write` |
 | `/api/v1/presets/:id` | PATCH, DELETE | session or Bearer | `presets:write` |
-| `/api/v1/ocr/batch` | POST | session or Bearer | `ocr:submit` |
-| `/api/v1/openai/chat/completions` | POST | session or Bearer | `ocr:submit` |
 | `/api/v1/search` | GET | session or Bearer | `search:read` |
+| `/api/v1/export/kb` | POST | Bearer | `ocr:read` |
 | `/api/v1/metrics` | GET | `METRICS_TOKEN` | — |
-| `/api/ocr` | GET, POST | session or Bearer | `ocr:read` (GET) / `ocr:submit` (POST) |
-| `/api/models` | GET | session or Bearer | `ocr:read` |
 | `/api/jobs` | GET, DELETE | session or Bearer | `ocr:read` / `ocr:control` |
 | `/api/jobs/:id` | GET, DELETE | session or Bearer | `ocr:read` / `ocr:control` |
 | `/api/jobs/:id/stream` | GET (SSE) | session or Bearer | `ocr:read` |
 | `/api/jobs/:id/control` | POST | session or Bearer | `ocr:control` |
+| `/api/ocr` | GET, POST | session or Bearer | `ocr:read` / `ocr:submit` |
+| `/api/models` | GET | session or Bearer | `ocr:read` |
 | `/api/settings` | GET, POST | session or Bearer | `settings:read` / `settings:write` |
 | `/api/ocr/settings` | GET, PUT | session or Bearer | `settings:read` / `settings:write` |
+| `/api/kb/defaults` | GET, PUT | session or Bearer | `settings:read` / `settings:write` |
+| `/api/kb/export` | POST | session | `ocr:read` |
 
-## Service-mode operations
+`/api/*` is the browser-internal surface (no version contract). `/api/v1/*` is the stable API (semver, no breaking changes within v1).
 
-Knobs that mostly matter when Extracto runs as an unattended API service.
+---
 
-### Result storage (S3 / MinIO)
+## Use it from an agent
 
-By default, OCR results are stored inline in SQLite (`extractedText` column +
-`result` JSON). For large workloads, offload to S3-compatible object storage:
+Extracto ships with two affordances designed for LLM agents and scripted clients.
 
-```bash
-# docker.env
-RESULT_STORAGE=s3
-S3_BUCKET=extracto-results
-S3_REGION=us-east-1
-S3_ENDPOINT=https://s3.amazonaws.com         # or e.g. http://minio:9000 for MinIO
-S3_ACCESS_KEY_ID=...
-S3_SECRET_ACCESS_KEY=...
-S3_PREFIX=extracto                            # key prefix
-S3_FORCE_PATH_STYLE=false                     # set true for MinIO
-```
+### The `extracto` CLI
 
-When `RESULT_STORAGE=s3`, completed jobs upload `extractedText` and the
-result JSON to S3 and store an `s3://...` reference in the DB. Reads are
-transparent — `GET /api/jobs/:id` resolves the S3 reference and returns
-inline JSON.
-
-### Priority queue
-
-Concurrent OCR submissions are admitted by a priority semaphore.
-
-- `OCR_WORKER_CONCURRENCY` (default `2`): max simultaneous jobs.
-- Per-job `priority` body field, range `-10..10` (default `0`). Higher wins
-  when the queue is contended. Lower priorities are useful for the watched
-  folder and bulk imports so they don't crowd interactive UI users.
-
-Stop requests are durable: `POST /api/jobs/:id/control { "action": "stop" }`
-flips `OcrJob.stopRequestedAt`, the running pipeline polls for it once per
-page and pauses with a resumable checkpoint.
-
-### Job retention
+The same binary used for lifecycle (`extracto on / off`) is also a typed wrapper around the HTTP API. Set `EXTRACTO_TOKEN` (or `~/.extracto/config` with `EXTRACTO_TOKEN=...`) and you're done:
 
 ```bash
-RETAIN_JOBS_DAYS=30   # delete jobs older than 30 days; sweeps every 24h
+# Single-file OCR — submits, waits, prints the final job JSON
+extracto ocr ./invoice.pdf --model mistral-ocr-latest
+
+# Save instead of print
+extracto ocr ./invoice.pdf --model qwen2-vl-7b --out result.json
+
+# Don't wait — return as soon as queued
+extracto ocr ./big.pdf --model minicpm-v --no-wait
+
+# Job management
+extracto jobs list
+extracto jobs get <id>
+extracto jobs wait <id>
+extracto jobs cancel <id>
+extracto jobs delete <id>
+
+# Output presets (post-processing recipes)
+extracto presets list
+extracto presets create "Invoice → JSON" "Extract line items as JSON" json
+extracto presets delete <id>
+
+# Knowledge-base export
+extracto kb export <job-id> \
+  --collection my-docs \
+  --store-url http://chroma:8000 \
+  --embed-model nomic-embed-text \
+  --strategy paragraph \
+  --chunk-size 1200
+
+# Provider settings (read-only from CLI; change in the UI)
+extracto settings get
 ```
 
-`0` (default) disables retention. The sweep removes both DB rows and any
-S3 artifacts they referenced.
+`extracto ocr` accepts `.pdf`, `.png`, `.jpg`/`.jpeg`, `.webp` up to ~32 MiB. It base64-encodes and submits via `/api/v1/ocr/batch`, then polls until the job leaves `QUEUED`/`PROCESSING`. Errors print to stderr with non-zero exit codes.
+
+The CLI lives at `scripts/extracto.sh` (Bash, Linux + macOS) and `scripts/extracto.ps1` (PowerShell, Windows).
+
+### The agent skill
+
+`SKILL.md` in the repo root is a **Claude Skill** (also usable by any agent that follows the skills format). It documents:
+
+- When to invoke the skill (PDF/image OCR, job management, presets).
+- Which CLI commands map to which workflows.
+- The expected token/URL setup.
+- The output JSON shape.
+- When NOT to use it (the user wants the UI; the file is too big; etc.).
+
+Drop it into your agent's skills directory or load it directly into the agent's context. The skill assumes the container is up and an `EXTRACTO_TOKEN` is reachable in the environment.
+
+### From plain Python / Node
+
+Both surfaces are stable HTTP, so you can skip the CLI:
+
+```python
+import base64, requests, time
+
+with open("invoice.pdf", "rb") as f:
+    data_url = "data:application/pdf;base64," + base64.b64encode(f.read()).decode()
+
+r = requests.post(
+    "http://localhost:3000/api/v1/ocr/batch",
+    headers={"Authorization": f"Bearer {TOKEN}"},
+    json={"files": [{"fileName": "invoice.pdf", "preview": data_url, "model": "mistral-ocr-latest"}]},
+)
+job_id = r.json()["submissions"][0]["jobId"]
+
+while True:
+    job = requests.get(f"http://localhost:3000/api/jobs/{job_id}",
+                       headers={"Authorization": f"Bearer {TOKEN}"}).json()["job"]
+    if job["status"] in ("COMPLETED", "FAILED"):
+        print(job["extractedText"])
+        break
+    time.sleep(2)
+```
+
+---
+
+## Configuration
+
+Everything lives in `docker.env`. The defaults work out of the box; tune what you need.
+
+### Auth + sessions
+
+| Variable | Default | What it does |
+|---|---|---|
+| `AUTH_SECRET` | auto-generated | HMAC secret for session cookies and API-key hashing. **Rotating invalidates every existing API key.** |
+| `COOKIE_SECURE` | `false` | Set to `true` behind HTTPS. |
+| `ALLOW_SIGNUP` | `1` | Set to `0` for invite-only instances; UI still works, but `POST /api/auth/signup` returns 403. |
+
+### Networking
+
+| Variable | Default | What it does |
+|---|---|---|
+| `APP_NETWORK_MODE` | `host` | `host` for the simplest Ollama setup; `bridge` for isolation. Switches how loopback Ollama URLs get rewritten inside the container. |
+| `OLLAMA_HOST` | `http://127.0.0.1:11434` | Ollama base URL. With bridge mode, use `http://host.docker.internal:11434`. |
+| `OLLAMA_HOST_FALLBACKS` | — | Comma-separated extra candidates to try if the primary fails. |
+
+### Provider defaults + allowlists
+
+Per-user provider settings always win. These values are fallbacks (when no user has saved a key) and security allowlists for user-submitted endpoints.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `OPENROUTER_API_URL` | `https://openrouter.ai/api/v1` | Override OpenRouter base URL. |
+| `OPENROUTER_API_KEY` | — | Server-wide fallback OpenRouter key. **Leaks operator quota across users.** |
+| `OPENROUTER_REFERER` / `OPENROUTER_TITLE` | — | `HTTP-Referer` / `X-Title` for OpenRouter analytics. |
+| `OPENROUTER_MODELS` | — | Comma-separated fallback model list when discovery fails. |
+| `OPENAI_COMPAT_API_URL` | `https://api.openai.com/v1` | Default OpenAI-compatible base URL placeholder. |
+| `OPENAI_COMPAT_API_KEY` | — | Server-wide fallback OpenAI-compat key. Same caveat as OpenRouter. |
+| `OPENAI_COMPAT_MODELS` | — | Fallback model list when `/models` discovery fails (some servers don't expose it). |
+| `OLLAMA_ALLOWED_HOSTS` | localhost + docker gateways | Allowlist for user-submitted Ollama endpoints. Add hosts to authorize a remote Ollama instance. |
+| `MISTRAL_ALLOWED_HOSTS` | `api.mistral.ai`, `*.mistral.ai` | Allowlist for Mistral endpoints. |
+| `OPENROUTER_ALLOWED_HOSTS` | `openrouter.ai`, `*.openrouter.ai` | Allowlist for OpenRouter endpoints. |
+| `OPENAI_COMPAT_ALLOWED_HOSTS` | `api.openai.com`, `*.openai.com` | **Extend this** to authorize self-hosted vLLM / LocalAI / Groq / Together / Fireworks endpoints. Comma-separated, leading `.` for subdomain wildcards. |
+
+### Knowledge-base export
+
+| Variable | Default | What it does |
+|---|---|---|
+| `KB_EXPORT_ENABLED` | `0` | Gate on `POST /api/kb/export` and `POST /api/v1/export/kb`. Flip to `1` to enable. |
+
+### Webhooks
+
+| Variable | Default | What it does |
+|---|---|---|
+| `WEBHOOK_ALLOWED_HOSTS` | — | Comma-separated allowlist for outgoing webhook URLs. Empty = any public host (private/loopback/link-local always rejected). |
+
+### Object storage (optional)
+
+For large workloads, offload result blobs to S3 or MinIO. When set, `extractedText` and `result` JSON are uploaded to S3 and the DB stores an `s3://...` reference. Reads are transparent.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `RESULT_STORAGE` | `local` | Set to `s3` to enable. |
+| `S3_BUCKET` | — | Bucket name. |
+| `S3_REGION` | — | AWS region (or any value for MinIO). |
+| `S3_ENDPOINT` | — | `https://s3.amazonaws.com` for AWS, `http://minio:9000` for MinIO. |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | — | Credentials. |
+| `S3_PREFIX` | `extracto` | Key prefix. |
+| `S3_FORCE_PATH_STYLE` | `false` | Set `true` for MinIO. |
+
+### Service-mode operations
+
+| Variable | Default | What it does |
+|---|---|---|
+| `OCR_WORKER_CONCURRENCY` | `2` | Max simultaneous OCR jobs. |
+| `RETAIN_JOBS_DAYS` | `0` (off) | Days before a completed job is swept (DB row + S3 artifacts). |
+| `METRICS_TOKEN` | — | Bearer token for `/api/v1/metrics` (Prometheus exposition). Endpoint returns 503 if unset. |
 
 ### Watched-folder ingestion
 
-Drop PDFs/images into a host-mounted directory and have them auto-OCR'd:
+Drop files into a host-mounted directory and have them auto-OCR'd. A `.extracto.done` sidecar marks each completed file. Watched-folder jobs run at priority `-2` so interactive submissions cut ahead.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `WATCH_FOLDER` | — | Path inside the container (mount it from host). |
+| `WATCH_FOLDER_USER_EMAIL` | — | The user who owns the resulting jobs. |
+| `WATCH_FOLDER_API_KEY` | — | A real API key minted for that user. |
+| `WATCH_FOLDER_MODEL` | — | Model ID. |
+| `WATCH_FOLDER_PROVIDER` | — | Optional provider override. |
+| `WATCH_FOLDER_INTERVAL_MS` | `30000` | Poll interval (min 5000). |
+
+---
+
+## Providers
+
+Four families, all configured per user from Settings → Provider:
+
+| Provider | Endpoint | Key required | Model discovery |
+|---|---|---|---|
+| **Ollama** | local or remote `http://host:11434` | no | `GET /api/tags` (also `/v1/models`) |
+| **Mistral OCR API** | `https://api.mistral.ai/v1/ocr` | yes | static catalog (override via `MISTRAL_MODELS`) |
+| **OpenRouter** | `https://openrouter.ai/api/v1` | yes | live `GET /models` per user key |
+| **OpenAI-compatible** | any base URL | yes | live `GET /models` per user key |
+
+The OpenAI-compatible provider works with anything speaking the OpenAI Chat Completions wire format with vision content blocks: the real `api.openai.com`, [vLLM](https://github.com/vllm-project/vllm), [LocalAI](https://localai.io), [Groq](https://groq.com), [Together](https://together.ai), [Fireworks](https://fireworks.ai), Anyscale, etc. Set `OPENAI_COMPAT_ALLOWED_HOSTS` to authorize self-hosted endpoints.
+
+---
+
+## Knowledge-base export
+
+Once OCR completes, you can chunk + embed + push the text to a vector store in one click. Three stores supported: **Chroma**, **Qdrant**, **Weaviate**.
+
+Set defaults in Settings → Knowledge base:
+
+- **Embedding provider:** Ollama, OpenRouter, or OpenAI-compatible.
+- **Embedding model:** searchable picker, fetches `/api/tags` or `/v1/models` and surfaces likely embedding models first (heuristic on `embed`, `bge`, `nomic`, `minilm`, `e5`, `gte`, `mxbai`, `jina`, `arctic-embed`).
+- **Chunking:** fixed-length, per-sentence, or per-paragraph. Configurable max-size, overlap (fixed only), and minimum chunk length (sentence/paragraph).
+- **Vector store:** kind, base URL, optional API key, vector dimensions.
+- **Collection name template** with `{jobId}` and `{fileName}` substitutions.
+
+Then click **Send to vector store** on any completed job, or call `POST /api/v1/export/kb` from your scripts. Set `KB_EXPORT_ENABLED=1` in `docker.env` to enable.
+
+---
+
+## Security
+
+- **Auth.** Custom HMAC-SHA256 session cookies + bearer API keys. Cookie is `httpOnly`, `SameSite=Strict`. Mutations from the UI carry CSRF-style origin/referer checks; bearer requests skip the check (no implicit credentials in non-browser clients).
+- **API keys** are stored as HMAC-SHA256 hashes keyed by `AUTH_SECRET`. Rotating `AUTH_SECRET` invalidates every key — re-issue them after rotation. Webhook signing secrets survive rotation.
+- **Provider endpoints** submitted by users are validated against per-provider allowlists (`*_ALLOWED_HOSTS`).
+- **Webhook URLs** go through a private-range deny + DNS-rebinding check. RFC1918 (10/8, 172.16/12, 192.168/16), CGNAT (100.64/10), loopback (127/8), link-local (169.254/16), IPv6 site-local (fe80::/10, fc00::/7), multicast, IPv4-mapped IPv6 (`::ffff:*`), and 6to4-encoded private ranges all rejected. At delivery time, the URL is re-resolved via `dns.lookup` and every returned address is re-validated.
+- **Security headers** set globally: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Strict-Transport-Security`, `Permissions-Policy` (camera/mic/geolocation/payment denied).
+- **Signup gate.** `ALLOW_SIGNUP=0` disables `POST /api/auth/signup` for invite-only instances. Login keeps working.
+- **Password minimum:** 12 characters at signup.
+- **Rate limits.** Per-IP and per-email signup throttle. Per-user OCR throttle (6 req/60s default; `rateLimitPerMinute` per API key overrides).
+
+---
+
+## Local development
 
 ```bash
-# docker.env
-WATCH_FOLDER=/host-watch
-WATCH_FOLDER_USER_EMAIL=ops@example.com
-WATCH_FOLDER_API_KEY=extr_...                 # a real key minted for that user
-WATCH_FOLDER_MODEL=minicpm-v                  # or any provider model
-WATCH_FOLDER_PROVIDER=ollama                  # optional override
-WATCH_FOLDER_INTERVAL_MS=30000                # poll interval (min 5000)
+bun install            # or npm install
+bun run dev            # next dev on :3000
+
+bun run build          # production build (output: standalone)
+npm test               # 917 tests, vitest
+npm run lint           # ESLint with no-redeclare / no-unreachable / rules-of-hooks
 ```
 
-Supported extensions: `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`. A
-`.extracto.done` sidecar marks each completed file so it isn't reprocessed.
-Watched-folder jobs run at priority `-2` so interactive submissions still cut
-ahead.
+Schema changes go through `prisma db push` (the project doesn't use migrations yet). Regenerate the client with `bun run db:generate`.
 
-### Prometheus metrics
+The full architecture tour lives in [`CLAUDE.md`](./CLAUDE.md). Contribution guide in [`CONTRIBUTING.md`](./CONTRIBUTING.md). Release notes in [`CHANGELOG.md`](./CHANGELOG.md).
 
-```bash
-METRICS_TOKEN=$(openssl rand -hex 32)
-curl -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:3000/api/v1/metrics
-```
-
-Returns Prometheus exposition with job counts by status, queue depth, and
-in-process counters (provider errors, OpenRouter cache hit/miss, webhook
-delivery counts). Returns `503` if `METRICS_TOKEN` is unset.
-
-## Local Development
-
-```bash
-npm install
-npm run dev
-```
-
-Production build:
-
-```bash
-npm run build
-```
-
-## Project Structure
-
-```text
-src/
-  app/
-    api/                 # browser-UI-internal routes (cookie auth, no contract)
-      auth/              #   login/signup/signout/session
-      ocr/               #   OCR submit + GET model catalog + per-job settings
-      jobs/              #   list/get/control/stream OCR jobs
-      models/            #   thin shim over pipeline.getModelCatalog
-      settings/          #   per-user provider settings
-    api/v1/              # stable bearer-auth routes (versioned API)
-      ocr/batch/         #   bulk submit
-      openai/            #   OpenAI-compatible chat-completions adapter
-      keys/              #   API key mint/list/revoke (session-only)
-      presets/           #   output presets
-      webhooks/          #   webhook subscriptions
-      search/            #   full-text job search
-      metrics/           #   Prometheus exposition
-      export/kb/         #   chunk + embed + push to vector store
-    auth/                # auth page
-    page.tsx             # main OCR workspace UI
-  lib/
-    api-error.ts         # ApiRouteError + handleApiError + errorMessage helper
-    api-types.ts         # client-safe leaf module
-    auth/                # session tokens, API keys, scopes, route wrappers
-    background/          # webhooks delivery, retention sweep, watched folders
-    db.ts                # Prisma client
-    endpoint-policy.ts   # outbound URL allowlist
-    host-normalization.ts# Ollama host candidate generation
-    kb/                  # KB export: chunking, embeddings, vector stores
-    ocr/                 # OCR pipeline + per-provider runners
-      pipeline.ts        #   processOcrJobInBackground orchestrator
-      providers/         #   per-provider HTTP runners (ollama/mistral/compat)
-      job-control.ts     #   in-memory job registry + abort controllers
-      job-seed.ts        #   pure helpers for orchestrator state init
-      settings.ts        #   per-job advanced settings + post-processing
-      *.ts               #   error-parsing, markdown-routing, text-extract, etc.
-    rate-limit.ts        # in-memory rate-limit window
-    request-security.ts  # CSRF-style origin check + client IP
-    result-store.ts      # local + S3-compat artifact offload
-    settings-store.ts    # per-user provider config (filesystem-backed)
-prisma/
-  schema.prisma
-docker-compose.yml
-docker-entrypoint.sh
-install-extracto.sh
-scripts/extracto.sh
-```
+---
 
 ## Troubleshooting
 
-### Models are not discovered
-
-- Confirm Ollama is running:
+**Models aren't being discovered.**
 
 ```bash
-curl -fsS http://127.0.0.1:11434/api/version
+curl -fsS http://127.0.0.1:11434/api/version          # is Ollama up?
+docker compose --env-file docker.env config            # what env did the container actually receive?
+docker compose logs -f app                             # any errors during model fetch?
 ```
 
-- Confirm app effective env:
+If you're on bridge mode, make sure Ollama binds `0.0.0.0:11434` (not loopback-only) and your endpoint is `http://host.docker.internal:11434`.
 
-```bash
-docker compose --env-file docker.env config
+**Auth fails in the browser.**
+
+Set `COOKIE_SECURE=false` for plain HTTP local usage. Make sure `AUTH_SECRET` is set (the entrypoint auto-generates one if missing). Restart the container after changes.
+
+**Ollama embeddings 404.**
+
+The model probably isn't pulled. The error message tells you which one and what to run, e.g. `ollama pull nomic-embed-text`. Extracto tries `/api/embed` (modern), `/v1/embeddings` (Ollama OpenAI-compat layer), and `/api/embeddings` (legacy single-prompt) in that order.
+
+**OpenAI-compatible endpoint rejected with "host not allowed".**
+
+Add it to `OPENAI_COMPAT_ALLOWED_HOSTS` in `docker.env`:
+
+```
+OPENAI_COMPAT_ALLOWED_HOSTS=api.openai.com,my-vllm.example,api.together.xyz
 ```
 
-- If bridge mode is used, ensure host bind is not loopback-only.
+Restart the container.
 
-### App starts but auth fails in browser
+**Webhook delivery fails with "private address".**
 
-- Ensure `COOKIE_SECURE=false` for plain HTTP local usage.
-- Set a valid `AUTH_SECRET` and restart the app container.
+Working as intended. Add public hosts to `WEBHOOK_ALLOWED_HOSTS` and use a real public URL (or an ngrok tunnel). The internal-network rejection isn't configurable; it's there to stop SSRF.
 
-## Security Notes
-
-- Do not commit real API keys.
-- Rotate `AUTH_SECRET` for production. Rotating invalidates all existing API
-  keys (their stored hashes are HMAC-keyed by `AUTH_SECRET`) — re-issue keys
-  after rotation. Webhook signing secrets are NOT keyed by `AUTH_SECRET` and
-  survive rotation.
-- Use HTTPS and set `COOKIE_SECURE=true` in production.
-- Provider endpoints are validated against `OLLAMA_ALLOWED_HOSTS` /
-  `MISTRAL_ALLOWED_HOSTS` / `OPENROUTER_ALLOWED_HOSTS` allowlists.
-  User-supplied endpoints outside the allowlist are rejected.
-- API key listing/creation/revocation is session-only — even a key with the
-  `*` scope cannot mint or revoke other keys.
-- Webhook bodies are HMAC-SHA256 signed with a per-webhook secret. Verify
-  with the `X-Extracto-Signature` header (`t=<unix-ts>,v1=<hex>` over
-  `${ts}.${body}`).
-- AbortController-based cancellation is in-process; the durable
-  `stopRequestedAt` flag works across replicas, but the abort signal itself
-  reaches only the process that owns the running job.
+---
 
 ## License
 
-No license file is currently included in this repository.
+[MIT](./LICENSE) © codelined
