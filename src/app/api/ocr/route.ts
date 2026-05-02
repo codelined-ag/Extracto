@@ -1935,6 +1935,40 @@ function toPageResultPayload(page: ProcessedPageOutput) {
   };
 }
 
+/**
+ * Append a page's routing markdown to the running extracted text, with the
+ * "\n\n---\n\n" separator between chunks. Returns the new text + chunk count.
+ * Empty/whitespace-only pages are skipped (returned state is unchanged).
+ */
+function appendPageMarkdown(
+  currentText: string,
+  currentChunks: number,
+  page: { pageNumber: number; text: string; structured: Record<string, unknown> },
+): { text: string; chunks: number } {
+  const pageMarkdown = getPageMarkdownForRouting({
+    pageNumber: page.pageNumber,
+    text: page.text,
+    structured: page.structured,
+  }).trim();
+  if (!pageMarkdown) {
+    return { text: currentText, chunks: currentChunks };
+  }
+  const separator = currentChunks > 0 ? "\n\n---\n\n" : "";
+  return { text: currentText + separator + pageMarkdown, chunks: currentChunks + 1 };
+}
+
+async function unloadAllOllamaModels(apiEndpoint: string, models: Set<string>): Promise<void> {
+  for (const model of models) {
+    await unloadOllamaModel(apiEndpoint, model);
+  }
+}
+
+async function finalizeOcrJob(jobId: string, apiEndpoint: string, usedOllamaModels: Set<string>): Promise<void> {
+  await unloadAllOllamaModels(apiEndpoint, usedOllamaModels);
+  clearOcrJobRunning(jobId);
+  await clearOcrJobStop(jobId);
+}
+
 async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<void> {
   const startedAtIso = new Date(input.startedAtMs).toISOString();
   const pageOutputs: ProcessedPageOutput[] = input.initialPageOutputs ? [...input.initialPageOutputs] : [];
@@ -1947,20 +1981,11 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
   let extractedTextSoFar = "";
   let extractedChunkCount = 0;
   for (const page of pageOutputs) {
-    const pageMarkdown = getPageMarkdownForRouting({
-      pageNumber: page.pageNumber,
-      text: page.text,
-      structured: page.structured,
-    }).trim();
-    if (!pageMarkdown) {
-      continue;
-    }
-
-    if (extractedChunkCount > 0) {
-      extractedTextSoFar += "\n\n---\n\n";
-    }
-    extractedTextSoFar += pageMarkdown;
-    extractedChunkCount += 1;
+    ({ text: extractedTextSoFar, chunks: extractedChunkCount } = appendPageMarkdown(
+      extractedTextSoFar,
+      extractedChunkCount,
+      page,
+    ));
   }
 
   const selectedPostProcessModel = input.postProcessingPayload.model || input.model;
@@ -2031,9 +2056,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       postProcessing: postProcessingMeta,
     });
 
-    for (const ollamaModel of usedOllamaModels) {
-      await unloadOllamaModel(input.settings.apiEndpoint, ollamaModel);
-    }
+    await unloadAllOllamaModels(input.settings.apiEndpoint, usedOllamaModels);
 
     await db.ocrJob.update({
       where: { id: input.jobId },
@@ -2120,18 +2143,11 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       partialStructuredPages.push(toStructuredPagePayload(completedPage));
       partialPageResults.push(toPageResultPayload(completedPage));
 
-      const pageMarkdown = getPageMarkdownForRouting({
-        pageNumber: completedPage.pageNumber,
-        text: completedPage.text,
-        structured: completedPage.structured,
-      }).trim();
-      if (pageMarkdown) {
-        if (extractedChunkCount > 0) {
-          extractedTextSoFar += "\n\n---\n\n";
-        }
-        extractedTextSoFar += pageMarkdown;
-        extractedChunkCount += 1;
-      }
+      ({ text: extractedTextSoFar, chunks: extractedChunkCount } = appendPageMarkdown(
+        extractedTextSoFar,
+        extractedChunkCount,
+        completedPage,
+      ));
 
       const averagePageMs = totalDurationMs / pageOutputs.length;
       const remainingPages = input.inputPreviews.length - pageOutputs.length;
@@ -2353,11 +2369,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       },
     });
     void dispatchJobWebhooks(input.jobId, "job.completed").catch(() => undefined);
-    for (const ollamaModel of usedOllamaModels) {
-      await unloadOllamaModel(input.settings.apiEndpoint, ollamaModel);
-    }
-    clearOcrJobRunning(input.jobId);
-    await clearOcrJobStop(input.jobId);
+    await finalizeOcrJob(input.jobId, input.settings.apiEndpoint, usedOllamaModels);
   } catch (error) {
     progressEvents = appendProgressEvent(
       progressEvents,
@@ -2389,11 +2401,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       },
     });
     void dispatchJobWebhooks(input.jobId, "job.failed").catch(() => undefined);
-    for (const ollamaModel of usedOllamaModels) {
-      await unloadOllamaModel(input.settings.apiEndpoint, ollamaModel);
-    }
-    clearOcrJobRunning(input.jobId);
-    await clearOcrJobStop(input.jobId);
+    await finalizeOcrJob(input.jobId, input.settings.apiEndpoint, usedOllamaModels);
   }
 }
 
