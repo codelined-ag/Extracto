@@ -23,16 +23,16 @@ import {
 } from "@/lib/ocr/settings";
 import { ApiRouteError, handleApiError, pipelineStatusFor } from "@/lib/api-error";
 import {
-  DEFAULT_MISTRAL_API_URL,
-  DEFAULT_OPENAI_COMPAT_API_URL,
-  DEFAULT_OPENROUTER_API_URL,
+  getDefaultMistralApiUrl,
+  getDefaultOpenAICompatApiUrl,
+  getDefaultOpenRouterApiUrl,
 } from "@/lib/ocr/provider-config";
 import {
   buildProgressMetadata,
   buildPrompt,
   getModelCatalog,
   normalizePreviewForHistory,
-  OLLAMA_DISCOVERY_FALLBACK_HOST,
+  getOllamaDiscoveryFallbackHost,
   parseCheckpointPages,
   processOcrJobInBackground,
   resolveProvider,
@@ -42,7 +42,7 @@ import {
 } from "@/lib/ocr/pipeline";
 
 const normalizeMistralEndpoint = (raw: string) =>
-  normalizeMistralEndpointBase(raw, DEFAULT_MISTRAL_API_URL);
+  normalizeMistralEndpointBase(raw, getDefaultMistralApiUrl());
 
 interface OCRRequestBody {
   jobId?: unknown;
@@ -61,37 +61,28 @@ function parseRequestPriority(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
   return Math.max(-10, Math.min(10, Math.trunc(value)));
 }
-
-
-
-// Ollama host helpers + model cache moved to src/lib/ocr/pipeline.ts.
-// OLLAMA_DISCOVERY_FALLBACK_HOST is re-exported from there for use in
-// normalizeProviderEndpoint below.
-
 const OCR_RATE_LIMIT_WINDOW_MS = 60_000;
 const OCR_RATE_LIMIT_MAX = 6;
-
-
 
 function normalizeProviderEndpoint(provider: ProviderKind, rawEndpoint: string): string {
   if (provider === "mistral") {
     return enforceProviderEndpointPolicy("mistral",
-      normalizeMistralEndpoint(rawEndpoint || DEFAULT_MISTRAL_API_URL),
-      DEFAULT_MISTRAL_API_URL);
+      normalizeMistralEndpoint(rawEndpoint || getDefaultMistralApiUrl()),
+      getDefaultMistralApiUrl());
   }
   if (provider === "openrouter") {
     return enforceProviderEndpointPolicy("openrouter",
-      normalizeOpenRouterApiBase(rawEndpoint || DEFAULT_OPENROUTER_API_URL),
-      DEFAULT_OPENROUTER_API_URL);
+      normalizeOpenRouterApiBase(rawEndpoint || getDefaultOpenRouterApiUrl()),
+      getDefaultOpenRouterApiUrl());
   }
   if (provider === "openai_compat") {
     return enforceProviderEndpointPolicy("openai_compat",
-      normalizeOpenAICompatApiBase(rawEndpoint || DEFAULT_OPENAI_COMPAT_API_URL),
-      DEFAULT_OPENAI_COMPAT_API_URL);
+      normalizeOpenAICompatApiBase(rawEndpoint || getDefaultOpenAICompatApiUrl()),
+      getDefaultOpenAICompatApiUrl());
   }
   return enforceProviderEndpointPolicy("ollama",
-    resolveOllamaHostEndpoint(rawEndpoint || OLLAMA_DISCOVERY_FALLBACK_HOST, OLLAMA_DISCOVERY_FALLBACK_HOST),
-    OLLAMA_DISCOVERY_FALLBACK_HOST);
+    resolveOllamaHostEndpoint(rawEndpoint || getOllamaDiscoveryFallbackHost(), getOllamaDiscoveryFallbackHost()),
+    getOllamaDiscoveryFallbackHost());
 }
 
 function normalizeAndValidateApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
@@ -102,24 +93,6 @@ function normalizeAndValidateApiSettings(raw: ApiProviderSettings): ApiProviderS
     apiKey: raw.apiKey?.trim() || "",
   };
 }
-
-// Runtime normalization for OpenAI-compatible / OpenRouter base URLs lives in
-// src/lib/ocr/providers/compat.ts (imported above) so the runners can be unit-tested.
-
-
-// sanitizePostProcessing + buildPrompt + normalizePreviewForHistory moved
-// to src/lib/ocr/pipeline.ts so v1/ocr/batch + the OpenAI-compat adapter
-// can reuse them and submit jobs directly without HTTP-loopback.
-
-// isLikelyMistralOcrModel + resolveMistralOcrModel moved to src/lib/ocr/providers/mistral.ts.
-
-// parsePreviewImageData, getStringField, parseServiceError moved to
-// src/lib/ocr/error-parsing.ts (imported above) for unit testability.
-
-
-// parseResponseText + fetchWithTimeout + OcrStopRequestedError moved to
-// src/lib/ocr/providers/shared.ts.
-// getStringField + parseServiceError moved to src/lib/ocr/error-parsing.ts.
 
 
 

@@ -8,9 +8,9 @@ import {
   resolveOllamaHostEndpoint,
 } from "@/lib/ocr/host-normalization";
 import {
-  DEFAULT_MISTRAL_API_URL,
-  DEFAULT_OPENAI_COMPAT_API_URL,
-  DEFAULT_OPENROUTER_API_URL,
+  getDefaultMistralApiUrl,
+  getDefaultOpenAICompatApiUrl,
+  getDefaultOpenRouterApiUrl,
   OLLAMA_DEFAULT_HOST,
 } from "@/lib/ocr/provider-config";
 import {
@@ -20,63 +20,74 @@ import {
   normalizeOpenRouterEndpoint as normalizeOpenRouterEndpointBase,
 } from "@/lib/ocr/provider-normalization";
 
-const DEFAULT_OLLAMA_HOST = normalizeHostEndpoint(
-  process.env.OLLAMA_HOST || "",
-  OLLAMA_DEFAULT_HOST
-);
-const DEFAULT_MISTRAL_OCR_ENDPOINT = normalizeHostEndpoint(
-  process.env.MISTRAL_OCR_API_URL || "",
-  DEFAULT_MISTRAL_API_URL
-);
-const DEFAULT_OPENROUTER_API_ENDPOINT = normalizeHostEndpoint(
-  process.env.OPENROUTER_API_URL || "",
-  DEFAULT_OPENROUTER_API_URL
-);
-const DEFAULT_OPENAI_COMPAT_API_ENDPOINT = normalizeHostEndpoint(
-  process.env.OPENAI_COMPAT_API_URL || "",
-  DEFAULT_OPENAI_COMPAT_API_URL
-);
-const SHOULD_PRESERVE_LOCALHOST =
-  (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase() === "host";
-// Exported so ocr/route.ts and other modules can share the same resolved
-// fallback host instead of recomputing it independently.
-export const FALLBACK_OLLAMA_HOST = resolveOllamaHostEndpoint(
-  DEFAULT_OLLAMA_HOST,
-  OLLAMA_DEFAULT_HOST
-);
-const DATA_ROOT = (() => {
+// Lazy env-derived getters — match the pattern in lib/ocr/result-store.ts +
+// lib/ocr/provider-config.ts. Tests can vi.stubEnv() without resetModules.
+
+function getDefaultOllamaHost(): string {
+  return normalizeHostEndpoint(process.env.OLLAMA_HOST || "", OLLAMA_DEFAULT_HOST);
+}
+
+function getDefaultMistralOcrEndpoint(): string {
+  return normalizeHostEndpoint(process.env.MISTRAL_OCR_API_URL || "", getDefaultMistralApiUrl());
+}
+
+function getDefaultOpenRouterApiEndpoint(): string {
+  return normalizeHostEndpoint(process.env.OPENROUTER_API_URL || "", getDefaultOpenRouterApiUrl());
+}
+
+function getDefaultOpenAICompatApiEndpoint(): string {
+  return normalizeHostEndpoint(
+    process.env.OPENAI_COMPAT_API_URL || "",
+    getDefaultOpenAICompatApiUrl(),
+  );
+}
+
+function shouldPreserveLocalhost(): boolean {
+  return (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase() === "host";
+}
+
+/**
+ * Resolved Ollama fallback host. Returned fresh from env on each call so
+ * tests + dynamic env changes are honored.
+ */
+export function getFallbackOllamaHost(): string {
+  return resolveOllamaHostEndpoint(getDefaultOllamaHost(), OLLAMA_DEFAULT_HOST);
+}
+
+function getDataRoot(): string {
   const envDatabaseUrl = process.env.DATABASE_URL?.trim();
   if (!envDatabaseUrl?.startsWith("file:")) {
     return process.cwd();
   }
-
   const databaseFile = envDatabaseUrl.replace(/^file:/u, "");
   return path.dirname(databaseFile);
-})();
+}
 
 
 export function normalizeMistralEndpoint(rawEndpoint?: string): string {
-  return normalizeMistralEndpointBase(rawEndpoint || "", DEFAULT_MISTRAL_OCR_ENDPOINT);
+  return normalizeMistralEndpointBase(rawEndpoint || "", getDefaultMistralOcrEndpoint());
 }
 
 function normalizeOllamaEndpoint(rawEndpoint?: string): string {
-  return normalizeOllamaEndpointBase(rawEndpoint || "", FALLBACK_OLLAMA_HOST, SHOULD_PRESERVE_LOCALHOST);
+  return normalizeOllamaEndpointBase(rawEndpoint || "", getFallbackOllamaHost(), shouldPreserveLocalhost());
 }
 
 function normalizeOpenRouterEndpoint(rawEndpoint?: string): string {
-  return normalizeOpenRouterEndpointBase(rawEndpoint || "", DEFAULT_OPENROUTER_API_ENDPOINT);
+  return normalizeOpenRouterEndpointBase(rawEndpoint || "", getDefaultOpenRouterApiEndpoint());
 }
 
 function normalizeOpenAICompatEndpoint(rawEndpoint?: string): string {
-  return normalizeOpenAICompatEndpointBase(rawEndpoint || "", DEFAULT_OPENAI_COMPAT_API_ENDPOINT);
+  return normalizeOpenAICompatEndpointBase(rawEndpoint || "", getDefaultOpenAICompatApiEndpoint());
 }
 
-const PROVIDER_DEFAULT_ENDPOINTS: Record<ProviderKind, string> = {
-  mistral: DEFAULT_MISTRAL_OCR_ENDPOINT,
-  openrouter: DEFAULT_OPENROUTER_API_ENDPOINT,
-  openai_compat: DEFAULT_OPENAI_COMPAT_API_ENDPOINT,
-  ollama: FALLBACK_OLLAMA_HOST,
-};
+function getProviderDefaultEndpoints(): Record<ProviderKind, string> {
+  return {
+    mistral: getDefaultMistralOcrEndpoint(),
+    openrouter: getDefaultOpenRouterApiEndpoint(),
+    openai_compat: getDefaultOpenAICompatApiEndpoint(),
+    ollama: getFallbackOllamaHost(),
+  };
+}
 
 function normalizeApiEndpoint(rawEndpoint: string | undefined, provider: ProviderKind): string {
   if (provider === "mistral") return normalizeMistralEndpoint(rawEndpoint);
@@ -94,11 +105,11 @@ interface SaveApiSettingsInput extends Omit<Partial<ApiProviderSettings>, "provi
 
 const DEFAULT_API_SETTINGS: ApiProviderSettings = {
   provider: "ollama",
-  apiEndpoint: normalizeApiEndpoint(DEFAULT_OLLAMA_HOST, "ollama"),
+  apiEndpoint: normalizeApiEndpoint(getDefaultOllamaHost(), "ollama"),
   apiKey: "",
 };
 
-const SETTINGS_DIR = path.join(DATA_ROOT, "api-settings");
+function getSettingsDir(): string { return path.join(getDataRoot(), "api-settings"); }
 const settingsCache = new Map<string, ApiProviderSettings>();
 
 const normalizeSettings = (settings: Partial<ApiProviderSettings>): ApiProviderSettings => {
@@ -107,7 +118,7 @@ const normalizeSettings = (settings: Partial<ApiProviderSettings>): ApiProviderS
   const safeEndpoint = enforceProviderEndpointPolicy(
     provider,
     normalizedEndpoint,
-    PROVIDER_DEFAULT_ENDPOINTS[provider]
+    getProviderDefaultEndpoints()[provider]
   );
 
   return {
@@ -122,7 +133,7 @@ function sanitizeUserId(userId: string): string {
 }
 
 function getSettingsPath(userId: string): string {
-  return path.join(SETTINGS_DIR, `${sanitizeUserId(userId)}.json`);
+  return path.join(getSettingsDir(), `${sanitizeUserId(userId)}.json`);
 }
 
 
@@ -183,7 +194,7 @@ export async function saveApiSettings(
     ? settings.apiEndpoint
     : provider === current.provider
       ? current.apiEndpoint
-      : PROVIDER_DEFAULT_ENDPOINTS[provider];
+      : getProviderDefaultEndpoints()[provider];
   const normalized = normalizeSettings({
     ...current,
     ...settings,
@@ -199,5 +210,5 @@ export async function saveApiSettings(
 }
 
 async function ensureSettingsDirectory() {
-  await mkdir(SETTINGS_DIR, { recursive: true });
+  await mkdir(getSettingsDir(), { recursive: true });
 }

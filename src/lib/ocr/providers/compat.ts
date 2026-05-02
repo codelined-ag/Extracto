@@ -15,10 +15,10 @@ import {
 import { parseServiceError, parsePreviewImageData } from "@/lib/ocr/error-parsing";
 import { parseJsonCandidate } from "@/lib/ocr/markdown-routing";
 import {
-  DEFAULT_OPENAI_COMPAT_API_URL,
-  DEFAULT_OPENROUTER_API_URL,
-  OPENROUTER_REFERER,
-  OPENROUTER_TITLE,
+  getDefaultOpenAICompatApiUrl,
+  getDefaultOpenRouterApiUrl,
+  getOpenRouterReferer,
+  getOpenRouterTitle,
 } from "@/lib/ocr/provider-config";
 import {
   extractChatContentText,
@@ -51,7 +51,7 @@ export interface CompatProviderConfig {
 export function normalizeOpenRouterApiBase(rawEndpoint: string): string {
   const trimmed = rawEndpoint.trim();
   if (!trimmed) {
-    return DEFAULT_OPENROUTER_API_URL;
+    return getDefaultOpenRouterApiUrl();
   }
 
   try {
@@ -68,14 +68,14 @@ export function normalizeOpenRouterApiBase(rawEndpoint: string): string {
     url.pathname = pathname;
     return url.toString().replace(/\/+$/u, "");
   } catch {
-    return DEFAULT_OPENROUTER_API_URL;
+    return getDefaultOpenRouterApiUrl();
   }
 }
 
 export function normalizeOpenAICompatApiBase(rawEndpoint: string): string {
   const trimmed = rawEndpoint.trim();
   if (!trimmed) {
-    return DEFAULT_OPENAI_COMPAT_API_URL;
+    return getDefaultOpenAICompatApiUrl();
   }
   try {
     const url = new URL(/^https?:\/\//iu.test(trimmed) ? trimmed : `https://${trimmed}`);
@@ -87,7 +87,7 @@ export function normalizeOpenAICompatApiBase(rawEndpoint: string): string {
     url.pathname = pathname;
     return url.toString().replace(/\/+$/u, "");
   } catch {
-    return DEFAULT_OPENAI_COMPAT_API_URL;
+    return getDefaultOpenAICompatApiUrl();
   }
 }
 
@@ -97,24 +97,24 @@ const openAICompatModelCache = new Map<string, { values: string[]; expiresAt: nu
 export const OPENROUTER_CONFIG: CompatProviderConfig = {
   provider: "openrouter",
   label: "OpenRouter",
-  defaultUrl: DEFAULT_OPENROUTER_API_URL,
+  defaultUrl: getDefaultOpenRouterApiUrl(),
   normalizeBase: normalizeOpenRouterApiBase,
   buildHeaders: (apiKey) => {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
-      "X-Title": OPENROUTER_TITLE,
+      "X-Title": getOpenRouterTitle(),
     };
-    if (OPENROUTER_REFERER) headers["HTTP-Referer"] = OPENROUTER_REFERER;
+    if (getOpenRouterReferer()) headers["HTTP-Referer"] = getOpenRouterReferer();
     return headers;
   },
   buildDiscoveryHeaders: (apiKey) => {
     const headers: Record<string, string> = {
       Accept: "application/json",
-      "X-Title": OPENROUTER_TITLE,
+      "X-Title": getOpenRouterTitle(),
     };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    if (OPENROUTER_REFERER) headers["HTTP-Referer"] = OPENROUTER_REFERER;
+    if (getOpenRouterReferer()) headers["HTTP-Referer"] = getOpenRouterReferer();
     return headers;
   },
   modelCache: openRouterModelCache,
@@ -125,7 +125,7 @@ export const OPENROUTER_CONFIG: CompatProviderConfig = {
 export const OPENAI_COMPAT_CONFIG: CompatProviderConfig = {
   provider: "openai_compat",
   label: "OpenAI-compatible",
-  defaultUrl: DEFAULT_OPENAI_COMPAT_API_URL,
+  defaultUrl: getDefaultOpenAICompatApiUrl(),
   normalizeBase: normalizeOpenAICompatApiBase,
   // Vanilla OpenAI shape: just Bearer auth + JSON. No X-Title, no HTTP-Referer
   // (those are OpenRouter-specific and confuse strict OpenAI servers).

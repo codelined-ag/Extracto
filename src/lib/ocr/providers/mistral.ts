@@ -11,9 +11,9 @@ import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 import { parseServiceError } from "@/lib/ocr/error-parsing";
 import { normalizeMistralEndpoint as normalizeMistralEndpointBase } from "@/lib/ocr/provider-normalization";
 import {
-  DEFAULT_MISTRAL_API_URL,
-  DEFAULT_MISTRAL_MODELS,
-  DEFAULT_MISTRAL_OCR_MODEL,
+  getDefaultMistralApiUrl,
+  getDefaultMistralModels,
+  getDefaultMistralOcrModel,
 } from "@/lib/ocr/provider-config";
 import {
   extractChatContentText,
@@ -34,7 +34,7 @@ interface OcrPage {
 }
 
 const normalizeMistralEndpoint = (raw: string) =>
-  normalizeMistralEndpointBase(raw, DEFAULT_MISTRAL_API_URL);
+  normalizeMistralEndpointBase(raw, getDefaultMistralApiUrl());
 
 export function buildMistralOcrEndpointCandidates(rawEndpoint: string): string[] {
   const baseEndpoint = normalizeMistralEndpoint(rawEndpoint);
@@ -46,7 +46,7 @@ export function buildMistralOcrEndpointCandidates(rawEndpoint: string): string[]
   return candidates
     .map((candidate) => {
       try {
-        return enforceProviderEndpointPolicy("mistral", candidate, DEFAULT_MISTRAL_API_URL);
+        return enforceProviderEndpointPolicy("mistral", candidate, getDefaultMistralApiUrl());
       } catch {
         return "";
       }
@@ -96,11 +96,11 @@ export function isLikelyMistralOcrModel(model: string): boolean {
 }
 
 export function resolveMistralOcrModel(selectedModel: string): string {
-  return isLikelyMistralOcrModel(selectedModel) ? selectedModel : DEFAULT_MISTRAL_OCR_MODEL;
+  return isLikelyMistralOcrModel(selectedModel) ? selectedModel : getDefaultMistralOcrModel();
 }
 
 export function listMistralModels(): string[] {
-  return [...new Set(DEFAULT_MISTRAL_MODELS)];
+  return [...new Set(getDefaultMistralModels())];
 }
 
 export async function runMistralOcr(
@@ -115,9 +115,9 @@ export async function runMistralOcr(
   }
 
   const endpointCandidates = buildMistralOcrEndpointCandidates(
-    apiEndpoint || DEFAULT_MISTRAL_API_URL,
+    apiEndpoint || getDefaultMistralApiUrl(),
   );
-  let endpointUsed = endpointCandidates[0] || normalizeMistralEndpoint(DEFAULT_MISTRAL_API_URL);
+  let endpointUsed = endpointCandidates[0] || normalizeMistralEndpoint(getDefaultMistralApiUrl());
   let payload: unknown = null;
   let response: Response | null = null;
   let lastError: ApiRouteError | null = null;
@@ -276,8 +276,8 @@ export async function runMistralPostProcessing(
 
   const endpoint = enforceProviderEndpointPolicy(
     "mistral",
-    buildMistralChatEndpoint(apiEndpoint.trim() || DEFAULT_MISTRAL_API_URL),
-    DEFAULT_MISTRAL_API_URL,
+    buildMistralChatEndpoint(apiEndpoint.trim() || getDefaultMistralApiUrl()),
+    getDefaultMistralApiUrl(),
   );
   const response = await fetchWithTimeout(endpoint, {
     method: "POST",

@@ -51,7 +51,7 @@ describe("resolveMistralOcrModel", () => {
     expect(resolveMistralOcrModel("mistral-ocr-latest")).toBe("mistral-ocr-latest");
   });
 
-  it("falls back to DEFAULT_MISTRAL_OCR_MODEL when the input isn't an OCR model", () => {
+  it("falls back to getDefaultMistralOcrModel() when the input isn't an OCR model", () => {
     // Empty string and non-ocr model names both route to the default OCR model;
     // route.ts uses this so a user picking a chat-only model still gets OCR results.
     expect(resolveMistralOcrModel("mistral-large-latest")).toBe("mistral-ocr-latest");

@@ -50,10 +50,10 @@ import {
 } from "@/lib/ocr/job-seed";
 import { appendPageMarkdown } from "@/lib/ocr/markdown-routing";
 import {
-  DEFAULT_OPENAI_COMPAT_API_URL,
-  DEFAULT_OPENAI_COMPAT_FALLBACK_MODELS,
-  DEFAULT_OPENROUTER_API_URL,
-  DEFAULT_OPENROUTER_FALLBACK_MODELS,
+  getDefaultOpenAICompatApiUrl,
+  getDefaultOpenAICompatFallbackModels,
+  getDefaultOpenRouterApiUrl,
+  getDefaultOpenRouterFallbackModels,
   OLLAMA_DEFAULT_HOST,
   OLLAMA_DISCOVERY_PATHS,
   OLLAMA_NETWORK_HINT,
@@ -94,7 +94,7 @@ import {
 } from "@/lib/ocr/result-store";
 import {
   type ApiProviderSettings,
-  FALLBACK_OLLAMA_HOST,
+  getFallbackOllamaHost,
 } from "@/lib/ocr/settings-store";
 
 // ---- Types --------------------------------------------------------------
@@ -208,12 +208,18 @@ export interface ProcessOcrJobInput {
 
 // ---- Constants + module-level state -------------------------------------
 
-const APP_NETWORK_MODE = (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase();
 const OLLAMA_MODEL_CACHE_TTL_MS = 60_000;
-// Exported so the route handler can use the same fallback host for input
-// validation (normalizeProviderEndpoint) without re-deriving it.
-export const OLLAMA_DISCOVERY_FALLBACK_HOST =
-  APP_NETWORK_MODE === "host" ? OLLAMA_DEFAULT_HOST : FALLBACK_OLLAMA_HOST;
+
+/**
+ * Resolved Ollama discovery fallback host. Reads APP_NETWORK_MODE lazily so
+ * tests + dynamic env changes are honored. In "host" mode the loopback
+ * address is used; in "bridge" mode the docker-gateway-resolved host.
+ */
+export function getOllamaDiscoveryFallbackHost(): string {
+  return (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase() === "host"
+    ? OLLAMA_DEFAULT_HOST
+    : getFallbackOllamaHost();
+}
 
 interface OllamaModelCatalogResult {
   models: string[];
@@ -229,11 +235,11 @@ let ollamaModelCache: { values: string[]; expiresAt: number; host: string } = {
 // ---- Ollama host resolution ---------------------------------------------
 
 function getOllamaHostCandidates(rawEndpoint: string): string[] {
-  const rawCandidates = buildOllamaHostCandidates(rawEndpoint, OLLAMA_DISCOVERY_FALLBACK_HOST);
+  const rawCandidates = buildOllamaHostCandidates(rawEndpoint, getOllamaDiscoveryFallbackHost());
   const safeCandidates = rawCandidates
     .map((candidate) => {
       try {
-        return enforceProviderEndpointPolicy("ollama", candidate, OLLAMA_DISCOVERY_FALLBACK_HOST);
+        return enforceProviderEndpointPolicy("ollama", candidate, getOllamaDiscoveryFallbackHost());
       } catch {
         return "";
       }
@@ -242,18 +248,18 @@ function getOllamaHostCandidates(rawEndpoint: string): string[] {
 
   return safeCandidates.length > 0
     ? Array.from(new Set(safeCandidates))
-    : [enforceProviderEndpointPolicy("ollama", rawEndpoint, OLLAMA_DISCOVERY_FALLBACK_HOST)];
+    : [enforceProviderEndpointPolicy("ollama", rawEndpoint, getOllamaDiscoveryFallbackHost())];
 }
 
 function normalizeOllamaApiBase(rawEndpoint: string): string {
-  return normalizeHostEndpoint(rawEndpoint, OLLAMA_DISCOVERY_FALLBACK_HOST)
+  return normalizeHostEndpoint(rawEndpoint, getOllamaDiscoveryFallbackHost())
     .replace(/\/api\/?$/i, "")
     .replace(/\/v1\/?$/i, "");
 }
 
 function resolveOllamaRuntimeEndpoint(rawEndpoint: string): string {
-  const resolvedHost = resolveOllamaHostEndpoint(rawEndpoint, OLLAMA_DISCOVERY_FALLBACK_HOST);
-  return normalizeHostEndpoint(resolvedHost, OLLAMA_DISCOVERY_FALLBACK_HOST)
+  const resolvedHost = resolveOllamaHostEndpoint(rawEndpoint, getOllamaDiscoveryFallbackHost());
+  return normalizeHostEndpoint(resolvedHost, getOllamaDiscoveryFallbackHost())
     .replace(/\/api\/?$/i, "")
     .replace(/\/v1\/?$/i, "");
 }
@@ -277,7 +283,7 @@ function setOllamaModelCache(host: string, values: string[]) {
 
 function getOllamaCandidatesForOcr(endpoint: string): string[] {
   const candidates = getOllamaHostCandidates(endpoint).map(normalizeOllamaApiBase);
-  const normalizedFallback = normalizeOllamaApiBase(OLLAMA_DISCOVERY_FALLBACK_HOST);
+  const normalizedFallback = normalizeOllamaApiBase(getOllamaDiscoveryFallbackHost());
   if (!candidates.includes(normalizedFallback)) {
     candidates.push(normalizedFallback);
   }
@@ -342,8 +348,11 @@ export async function getOllamaModels(endpoint: string): Promise<OllamaModelCata
 // Resolve raw user endpoint into candidate base URLs and add the network hint
 // on Ollama OCR failure. Provider runners themselves (in providers/ollama.ts)
 // take pre-resolved hosts; these wrappers wire env-derived host resolution.
+// Renamed from runOllamaOcr -> ollamaOcrWithHostResolve so the canonical
+// runOllamaOcr in providers/ollama.ts is the only public name with that
+// shape (no more import-as-Iter aliasing collision).
 
-export async function runOllamaOcr(
+export async function ollamaOcrWithHostResolve(
   endpoint: string,
   model: string,
   prompt: string,
@@ -371,7 +380,7 @@ export async function runOllamaOcr(
   }
 }
 
-export async function runOllamaPostProcessing(
+export function ollamaPostProcessingWithHostResolve(
   endpoint: string,
   model: string,
   systemPrompt: string,
@@ -380,11 +389,11 @@ export async function runOllamaPostProcessing(
   return runOllamaPostProcessingIter(getOllamaCandidatesForOcr(endpoint), model, systemPrompt, userPrompt);
 }
 
-export async function unloadOllamaModel(endpoint: string, model: string): Promise<void> {
+export function ollamaUnloadWithHostResolve(endpoint: string, model: string): Promise<void> {
   return unloadOllamaModelIter(getOllamaCandidatesForOcr(endpoint), model);
 }
 
-export async function warmupOllamaModel(endpoint: string, model: string): Promise<void> {
+export function ollamaWarmupWithHostResolve(endpoint: string, model: string): Promise<void> {
   return warmupOllamaModelIter(getOllamaCandidatesForOcr(endpoint), model);
 }
 
@@ -416,9 +425,14 @@ interface ProviderHandler {
 const PROVIDER_HANDLERS: Record<ProviderKind, ProviderHandler> = {
   ollama: {
     envKey: "",
-    runOcr: (s, m, p, pv, _k, sig) => runOllamaOcr(s.apiEndpoint, m, p, pv, sig),
+    runOcr: (s, m, p, pv, _k, sig) => ollamaOcrWithHostResolve(s.apiEndpoint, m, p, pv, sig),
+    // _of (outputFormat) is intentionally discarded for Ollama — its API has
+    // no response_format option; the format is enforced via the user prompt
+    // (buildPostProcessingPrompt includes "Return only valid JSON" when
+    // outputFormat is "json"). The orchestrator separately normalizes the
+    // returned text via normalizePostProcessedText(text, outputFormat).
     runPostProcess: (s, m, sp, up, _k, _of) =>
-      runOllamaPostProcessing(s.apiEndpoint, m, sp, up),
+      ollamaPostProcessingWithHostResolve(s.apiEndpoint, m, sp, up),
   },
   openrouter: {
     envKey: "OPENROUTER_API_KEY",
@@ -664,7 +678,7 @@ function toPageResultPayload(page: ProcessedPageOutput) {
 
 async function unloadAllOllamaModels(apiEndpoint: string, models: Set<string>): Promise<void> {
   for (const model of models) {
-    await unloadOllamaModel(apiEndpoint, model);
+    await ollamaUnloadWithHostResolve(apiEndpoint, model);
   }
 }
 
@@ -716,7 +730,7 @@ async function persistCompletedJob(
 /** Mirror of persistCompletedJob for the failure path. */
 async function persistFailedJob(
   input: ProcessOcrJobInput,
-  errorMessage: string,
+  errorText: string,
   metadata: OcrProgressMetadata,
   usedOllamaModels: Set<string>,
 ): Promise<void> {
@@ -725,7 +739,7 @@ async function persistFailedJob(
     data: {
       status: OcrJobStatus.FAILED,
       metadata: toJsonValue(metadata),
-      errorMessage,
+      errorMessage: errorText,
       completedAt: new Date(),
       processingMs: Date.now() - input.startedAtMs,
     },
@@ -745,10 +759,11 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
   const partialStructuredPages = pageOutputs.map(toStructuredPagePayload);
   const partialPageResults = pageOutputs.map(toPageResultPayload);
   let totalDurationMs = pageOutputs.reduce((sum, page) => sum + page.durationMs, 0);
-  // chunks count from seedExtractedText is unused — only the text matters
-  // for the orchestrator. appendPageMarkdown returns a fresh count per page
-  // but we never read it after the loop.
-  let extractedTextSoFar = seedExtractedText(pageOutputs).text;
+  // chunks counter drives the "\n\n---\n\n" separator between page outputs
+  // inside appendPageMarkdown — the first chunk gets no leading separator.
+  // Must be threaded through the per-page loop or resumed jobs would
+  // double-separate.
+  let { text: extractedTextSoFar, chunks: extractedChunkCount } = seedExtractedText(pageOutputs);
 
   const selectedPostProcessModel = input.postProcessingPayload.model || input.model;
   const usedOllamaModels = seedUsedOllamaModels(input.provider, input.ocrModel);
@@ -827,7 +842,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
     await clearOcrJobStop(input.jobId);
     markOcrJobRunning(input.jobId);
     if (input.provider === "ollama") {
-      await warmupOllamaModel(input.settings.apiEndpoint, input.ocrModel);
+      await ollamaWarmupWithHostResolve(input.settings.apiEndpoint, input.ocrModel);
     }
 
     for (let index = startIndex; index < input.inputPreviews.length; index++) {
@@ -893,7 +908,11 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       partialStructuredPages.push(toStructuredPagePayload(completedPage));
       partialPageResults.push(toPageResultPayload(completedPage));
 
-      extractedTextSoFar = appendPageMarkdown(extractedTextSoFar, 0, completedPage).text;
+      ({ text: extractedTextSoFar, chunks: extractedChunkCount } = appendPageMarkdown(
+        extractedTextSoFar,
+        extractedChunkCount,
+        completedPage,
+      ));
 
       const averagePageMs = totalDurationMs / pageOutputs.length;
       const remainingPages = input.inputPreviews.length - pageOutputs.length;
@@ -954,7 +973,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       const postProcessingProvider = resolveProvider(input.settings);
       if (postProcessingProvider === "ollama") {
         usedOllamaModels.add(postProcessingModel);
-        await warmupOllamaModel(input.settings.apiEndpoint, postProcessingModel);
+        await ollamaWarmupWithHostResolve(input.settings.apiEndpoint, postProcessingModel);
       }
 
       progressEvents = appendProgressEvent(
@@ -1181,7 +1200,7 @@ export async function getModelCatalog(settings: ApiProviderSettings): Promise<Mo
   );
 
   const openRouterEndpoint =
-    settings.provider === "openrouter" ? settings.apiEndpoint : DEFAULT_OPENROUTER_API_URL;
+    settings.provider === "openrouter" ? settings.apiEndpoint : getDefaultOpenRouterApiUrl();
   const openRouterKey =
     settings.provider === "openrouter"
       ? settings.apiKey || process.env.OPENROUTER_API_KEY || ""
@@ -1194,11 +1213,11 @@ export async function getModelCatalog(settings: ApiProviderSettings): Promise<Mo
     : [];
   const resolvedOpenRouterModels =
     openRouterModels.length === 0 && settings.provider === "openrouter"
-      ? [...DEFAULT_OPENROUTER_FALLBACK_MODELS]
+      ? [...getDefaultOpenRouterFallbackModels()]
       : openRouterModels;
 
   const openAICompatEndpoint =
-    settings.provider === "openai_compat" ? settings.apiEndpoint : DEFAULT_OPENAI_COMPAT_API_URL;
+    settings.provider === "openai_compat" ? settings.apiEndpoint : getDefaultOpenAICompatApiUrl();
   const openAICompatKey =
     settings.provider === "openai_compat"
       ? settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || ""
@@ -1211,7 +1230,7 @@ export async function getModelCatalog(settings: ApiProviderSettings): Promise<Mo
     : [];
   const resolvedOpenAICompatModels =
     openAICompatModels.length === 0 && settings.provider === "openai_compat"
-      ? [...DEFAULT_OPENAI_COMPAT_FALLBACK_MODELS]
+      ? [...getDefaultOpenAICompatFallbackModels()]
       : openAICompatModels;
 
   return {

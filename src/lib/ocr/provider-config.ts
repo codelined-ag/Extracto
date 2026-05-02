@@ -72,24 +72,6 @@ export function getDefaultOpenAICompatFallbackModels(): string[] {
   return readEnvModels("OPENAI_COMPAT_MODELS", OPENAI_COMPAT_FALLBACK_MODELS);
 }
 
-// Backwards-compatible const re-exports during the migration. Each forwards
-// to the getter so call sites can be migrated incrementally. Marked as
-// deprecated so new code prefers the getter form.
-/** @deprecated use getDefaultMistralApiUrl() */
-export const DEFAULT_MISTRAL_API_URL = getDefaultMistralApiUrl();
-/** @deprecated use getDefaultMistralOcrModel() */
-export const DEFAULT_MISTRAL_OCR_MODEL = getDefaultMistralOcrModel();
-/** @deprecated use getDefaultMistralModels() */
-export const DEFAULT_MISTRAL_MODELS = getDefaultMistralModels();
-/** @deprecated use getDefaultOpenRouterApiUrl() */
-export const DEFAULT_OPENROUTER_API_URL = getDefaultOpenRouterApiUrl();
-/** @deprecated use getOpenRouterReferer() */
-export const OPENROUTER_REFERER = getOpenRouterReferer();
-/** @deprecated use getOpenRouterTitle() */
-export const OPENROUTER_TITLE = getOpenRouterTitle();
-/** @deprecated use getDefaultOpenRouterFallbackModels() */
-export const DEFAULT_OPENROUTER_FALLBACK_MODELS = getDefaultOpenRouterFallbackModels();
-/** @deprecated use getDefaultOpenAICompatApiUrl() */
-export const DEFAULT_OPENAI_COMPAT_API_URL = getDefaultOpenAICompatApiUrl();
-/** @deprecated use getDefaultOpenAICompatFallbackModels() */
-export const DEFAULT_OPENAI_COMPAT_FALLBACK_MODELS = getDefaultOpenAICompatFallbackModels();
+// All env-derived defaults are accessed via the get* functions above; no
+// const re-exports — those snapshotted env at import time, which is the
+// pattern this module exists to avoid.
