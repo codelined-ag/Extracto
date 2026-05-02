@@ -35,7 +35,7 @@ vi.mock("@/lib/ocr/host-normalization", async (importOriginal) => {
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import {
-  normalizeMistralEndpoint,
+  normalizeMistralEndpointForStorage,
   getApiSettings,
   saveApiSettings,
   toClientApiSettings,
@@ -58,76 +58,76 @@ function makeEnoentError(): NodeJS.ErrnoException {
 }
 
 // ---------------------------------------------------------------------------
-// normalizeMistralEndpoint
+// normalizeMistralEndpointForStorage
 // ---------------------------------------------------------------------------
 
-describe("normalizeMistralEndpoint", () => {
+describe("normalizeMistralEndpointForStorage", () => {
   it("empty string → canonical default /v1/ocr endpoint", () => {
-    const result = normalizeMistralEndpoint("");
+    const result = normalizeMistralEndpointForStorage("");
     expect(result).toBe("https://api.mistral.ai/v1/ocr");
   });
 
   it("undefined → canonical default /v1/ocr endpoint", () => {
-    const result = normalizeMistralEndpoint(undefined);
+    const result = normalizeMistralEndpointForStorage(undefined);
     expect(result).toBe("https://api.mistral.ai/v1/ocr");
   });
 
   it("bare origin with no path → appends /v1/ocr", () => {
-    expect(normalizeMistralEndpoint("https://api.mistral.ai")).toBe(
+    expect(normalizeMistralEndpointForStorage("https://api.mistral.ai")).toBe(
       "https://api.mistral.ai/v1/ocr"
     );
   });
 
   it("/v1 path → appends /ocr to make /v1/ocr", () => {
-    expect(normalizeMistralEndpoint("https://api.mistral.ai/v1")).toBe(
+    expect(normalizeMistralEndpointForStorage("https://api.mistral.ai/v1")).toBe(
       "https://api.mistral.ai/v1/ocr"
     );
   });
 
   it("already /v1/ocr → idempotent, unchanged", () => {
-    expect(normalizeMistralEndpoint("https://api.mistral.ai/v1/ocr")).toBe(
+    expect(normalizeMistralEndpointForStorage("https://api.mistral.ai/v1/ocr")).toBe(
       "https://api.mistral.ai/v1/ocr"
     );
   });
 
   it("/v1/models → rewrites to /v1/ocr", () => {
-    expect(normalizeMistralEndpoint("https://api.mistral.ai/v1/models")).toBe(
+    expect(normalizeMistralEndpointForStorage("https://api.mistral.ai/v1/models")).toBe(
       "https://api.mistral.ai/v1/ocr"
     );
   });
 
   it("/models (without /v1 prefix) → inserts /v1 and rewrites to /v1/ocr", () => {
-    expect(normalizeMistralEndpoint("https://api.mistral.ai/models")).toBe(
+    expect(normalizeMistralEndpointForStorage("https://api.mistral.ai/models")).toBe(
       "https://api.mistral.ai/v1/ocr"
     );
   });
 
   it("/ocr without /v1 prefix → inserts /v1 to get /v1/ocr", () => {
-    expect(normalizeMistralEndpoint("https://api.mistral.ai/ocr")).toBe(
+    expect(normalizeMistralEndpointForStorage("https://api.mistral.ai/ocr")).toBe(
       "https://api.mistral.ai/v1/ocr"
     );
   });
 
   it("trailing slashes on the root are stripped before processing", () => {
-    expect(normalizeMistralEndpoint("https://api.mistral.ai/")).toBe(
+    expect(normalizeMistralEndpointForStorage("https://api.mistral.ai/")).toBe(
       "https://api.mistral.ai/v1/ocr"
     );
   });
 
   it("search params are stripped from the result", () => {
-    const result = normalizeMistralEndpoint("https://api.mistral.ai/v1/ocr?foo=bar");
+    const result = normalizeMistralEndpointForStorage("https://api.mistral.ai/v1/ocr?foo=bar");
     expect(result).not.toContain("?");
     expect(result).toBe("https://api.mistral.ai/v1/ocr");
   });
 
   it("hash fragment is stripped from the result", () => {
-    const result = normalizeMistralEndpoint("https://api.mistral.ai/v1/ocr#section");
+    const result = normalizeMistralEndpointForStorage("https://api.mistral.ai/v1/ocr#section");
     expect(result).not.toContain("#");
     expect(result).toBe("https://api.mistral.ai/v1/ocr");
   });
 
   it("arbitrary non-matching path is treated as a base and /v1/ocr is appended", () => {
-    const result = normalizeMistralEndpoint("https://api.mistral.ai/custom/base");
+    const result = normalizeMistralEndpointForStorage("https://api.mistral.ai/custom/base");
     expect(result).toBe("https://api.mistral.ai/custom/base/v1/ocr");
   });
 });
@@ -302,23 +302,23 @@ describe("saveApiSettings", () => {
 // ---------------------------------------------------------------------------
 
 describe("toClientApiSettings", () => {
-  it("strips the apiKey and sets hasApiKey:false when key is empty", () => {
+  it("omits apiKey entirely and sets hasApiKey:false when key is empty", () => {
     const client = toClientApiSettings({
       provider: "ollama",
       apiEndpoint: "http://localhost:11434",
       apiKey: "",
     });
-    expect(client.apiKey).toBe("");
+    expect("apiKey" in client).toBe(false);
     expect(client.hasApiKey).toBe(false);
   });
 
-  it("sets hasApiKey:true when key is non-empty but still returns empty string for apiKey", () => {
+  it("sets hasApiKey:true when key is non-empty but never includes the key in the response", () => {
     const client = toClientApiSettings({
       provider: "mistral",
       apiEndpoint: "https://api.mistral.ai/v1/ocr",
       apiKey: "secret-token",
     });
-    expect(client.apiKey).toBe("");
+    expect("apiKey" in client).toBe(false);
     expect(client.hasApiKey).toBe(true);
   });
 

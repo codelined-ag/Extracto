@@ -64,19 +64,24 @@ function getDataRoot(): string {
 }
 
 
-export function normalizeMistralEndpoint(rawEndpoint?: string): string {
+// Persistence-tier endpoint normalizers. Each binds the local
+// "DEFAULT_*_ENDPOINT" derived from env, which differs from the runtime
+// per-provider default URL — these run when reading/writing user-stored
+// settings, not when issuing OCR requests.
+
+export function normalizeMistralEndpointForStorage(rawEndpoint?: string): string {
   return normalizeMistralEndpointBase(rawEndpoint || "", getDefaultMistralOcrEndpoint());
 }
 
-function normalizeOllamaEndpoint(rawEndpoint?: string): string {
+function normalizeOllamaEndpointForStorage(rawEndpoint?: string): string {
   return normalizeOllamaEndpointBase(rawEndpoint || "", getFallbackOllamaHost(), shouldPreserveLocalhost());
 }
 
-function normalizeOpenRouterEndpoint(rawEndpoint?: string): string {
+function normalizeOpenRouterEndpointForStorage(rawEndpoint?: string): string {
   return normalizeOpenRouterEndpointBase(rawEndpoint || "", getDefaultOpenRouterApiEndpoint());
 }
 
-function normalizeOpenAICompatEndpoint(rawEndpoint?: string): string {
+function normalizeOpenAICompatEndpointForStorage(rawEndpoint?: string): string {
   return normalizeOpenAICompatEndpointBase(rawEndpoint || "", getDefaultOpenAICompatApiEndpoint());
 }
 
@@ -90,10 +95,10 @@ function getProviderDefaultEndpoints(): Record<ProviderKind, string> {
 }
 
 function normalizeApiEndpoint(rawEndpoint: string | undefined, provider: ProviderKind): string {
-  if (provider === "mistral") return normalizeMistralEndpoint(rawEndpoint);
-  if (provider === "openrouter") return normalizeOpenRouterEndpoint(rawEndpoint);
-  if (provider === "openai_compat") return normalizeOpenAICompatEndpoint(rawEndpoint);
-  return normalizeOllamaEndpoint(rawEndpoint);
+  if (provider === "mistral") return normalizeMistralEndpointForStorage(rawEndpoint);
+  if (provider === "openrouter") return normalizeOpenRouterEndpointForStorage(rawEndpoint);
+  if (provider === "openai_compat") return normalizeOpenAICompatEndpointForStorage(rawEndpoint);
+  return normalizeOllamaEndpointForStorage(rawEndpoint);
 }
 
 export type { ApiProviderSettings, ClientApiSettings } from "@/lib/api-types";
@@ -141,7 +146,6 @@ export function toClientApiSettings(settings: ApiProviderSettings): ClientApiSet
   return {
     provider: settings.provider,
     apiEndpoint: settings.apiEndpoint,
-    apiKey: "",
     hasApiKey: Boolean(settings.apiKey.trim()),
   };
 }

@@ -127,7 +127,10 @@ interface Model {
  provider: string;
 }
 
-type ApiSettings = ClientApiSettings;
+// Server-side ClientApiSettings deliberately omits apiKey. The UI form
+// state still needs an apiKey field for the password input — modeled as a
+// local-only extension so the network shape and the form shape don't drift.
+type ApiSettings = ClientApiSettings & { apiKey: string };
 
 interface HistoryJobSummary {
  id: string;

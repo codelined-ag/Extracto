@@ -18,4 +18,10 @@ export interface ApiProviderSettings {
   apiKey: string;
 }
 
-export type ClientApiSettings = ApiProviderSettings & { hasApiKey: boolean };
+/**
+ * The shape of provider settings returned to the browser. The actual
+ * apiKey is never sent — only a boolean indicating whether one is set.
+ * Type intentionally omits apiKey so callers can't accidentally pretend
+ * to have one.
+ */
+export type ClientApiSettings = Omit<ApiProviderSettings, "apiKey"> & { hasApiKey: boolean };

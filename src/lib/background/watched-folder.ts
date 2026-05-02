@@ -2,7 +2,17 @@ import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { db } from "@/lib/db";
-import { resolveInternalOcrEndpoint } from "@/lib/ocr/forward";
+import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
+import {
+  buildPrompt,
+  normalizePreviewForHistory,
+  resolveProvider,
+  sanitizePostProcessing,
+  submitOcrJob,
+} from "@/lib/ocr/pipeline";
+import { resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
+import { normalizeAdvancedSettings } from "@/lib/ocr/settings";
+import { getApiSettings } from "@/lib/ocr/settings-store";
 
 const WATCH_FOLDER = (process.env.WATCH_FOLDER || "").trim();
 const WATCH_FOLDER_USER_EMAIL = (process.env.WATCH_FOLDER_USER_EMAIL || "").trim().toLowerCase();
@@ -62,42 +72,40 @@ async function ingestFile(filePath: string, user: UserRef): Promise<void> {
   else if (ext === ".webp") mime = "image/webp";
   const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
 
-  const submitUrl = resolveInternalOcrEndpoint();
-  const requestBody = {
-    fileName,
-    preview: dataUrl,
-    model: WATCH_FOLDER_MODEL,
-    provider: WATCH_FOLDER_PROVIDER || undefined,
-    mode: "ocr",
-    priority: -2,
-    settings: {},
-  };
+  // Submit directly via the pipeline helper — no HTTP-loopback to /api/ocr.
+  const storedSettings = await getApiSettings(user.id);
+  const settings = WATCH_FOLDER_PROVIDER
+    ? { ...storedSettings, provider: normalizeProvider(WATCH_FOLDER_PROVIDER) }
+    : { ...storedSettings, provider: normalizeProvider(storedSettings.provider) };
+  const settingsPayload = normalizeAdvancedSettings(undefined);
+  const postProcessingPayload = sanitizePostProcessing(undefined);
+  const provider = resolveProvider(settings);
+  const ocrModel = provider === "mistral" ? resolveMistralOcrModel(WATCH_FOLDER_MODEL) : WATCH_FOLDER_MODEL;
+  const prompt = buildPrompt(settingsPayload);
+  const sourcePreview = normalizePreviewForHistory(dataUrl);
 
-  const response = await fetch(submitUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${WATCH_FOLDER_API_KEY}`,
-      "X-Watch-Folder-User": user.email,
-    },
-    body: JSON.stringify(requestBody),
+  const { jobId } = await submitOcrJob({
+    userId: user.id,
+    apiKeyId: null, // watched-folder runs as the user via session-equivalent ingest
+    fileName,
+    model: WATCH_FOLDER_MODEL,
+    ocrModel,
+    provider,
+    settings,
+    settingsPayload,
+    postProcessingPayload,
+    inputPreviews: [dataUrl],
+    prompt,
+    sourcePreview,
+    priority: -2,
   });
-  if (!response.ok) {
-    throw new Error(`Submit failed: HTTP ${response.status}`);
-  }
-  const submitJson = (await response.json().catch(() => null)) as
-    | { jobId?: string }
-    | null;
-  if (!submitJson?.jobId) {
-    throw new Error("Submit response missing jobId");
-  }
 
   await writeFile(
     doneMarkerPath,
-    JSON.stringify({ jobId: submitJson.jobId, submittedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify({ jobId, submittedAt: new Date().toISOString() }, null, 2),
     "utf8"
   );
-  console.log(`[watched-folder] queued ${fileName} → ${submitJson.jobId}`);
+  console.log(`[watched-folder] queued ${fileName} → ${jobId}`);
 }
 
 async function pollOnce(): Promise<void> {
