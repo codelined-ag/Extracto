@@ -107,3 +107,35 @@ describe("parseAllowlist", () => {
     expect(parseAllowlist(" a , b , ,c ")).toEqual(["a", "b", "c"]);
   });
 });
+
+describe("resolveAndCheckExternalUrl", () => {
+  it("returns ok=false when surface check fails (private host)", async () => {
+    const { resolveAndCheckExternalUrl } = await import("@/lib/url-safety");
+    const r = await resolveAndCheckExternalUrl("http://10.0.0.1/x", []);
+    expect(r.ok).toBe(false);
+  });
+
+  it("returns ok=false when surface check fails (non-http scheme)", async () => {
+    const { resolveAndCheckExternalUrl } = await import("@/lib/url-safety");
+    const r = await resolveAndCheckExternalUrl("ftp://example.com", []);
+    expect(r.ok).toBe(false);
+  });
+
+  it("skips DNS lookup for literal IPv4", async () => {
+    const { resolveAndCheckExternalUrl } = await import("@/lib/url-safety");
+    const r = await resolveAndCheckExternalUrl("http://8.8.8.8/test", []);
+    expect(r.ok).toBe(true);
+  });
+
+  it("skips DNS lookup for literal IPv6", async () => {
+    const { resolveAndCheckExternalUrl } = await import("@/lib/url-safety");
+    const r = await resolveAndCheckExternalUrl("http://[2606:4700:4700::1111]/test", []);
+    expect(r.ok).toBe(true);
+  });
+
+  it("returns ok=false when allowlist rejects the host", async () => {
+    const { resolveAndCheckExternalUrl } = await import("@/lib/url-safety");
+    const r = await resolveAndCheckExternalUrl("https://example.com", ["other.com"]);
+    expect(r.ok).toBe(false);
+  });
+});
