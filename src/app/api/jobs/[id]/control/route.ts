@@ -56,7 +56,6 @@ export const POST = withMutationAuth<{ id: string }>(
     });
 
     return NextResponse.json({
-      success: true,
       stopRequested: true,
       running,
     });

@@ -8,6 +8,10 @@ const PUBLIC_PATHS = [
   "/auth",
   "/api/auth",
   "/api/health",
+  // /api/v1/metrics has its own METRICS_TOKEN bearer scheme — the middleware's
+  // extr_-prefixed bearer check would reject it before the route runs. The
+  // route itself does the constant-time token check.
+  "/api/v1/metrics",
   "/manifest.webmanifest",
   "/sw.js",
   "/extracto-favicon.svg",

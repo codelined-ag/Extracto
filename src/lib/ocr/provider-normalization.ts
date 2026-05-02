@@ -75,8 +75,6 @@ export function normalizeOpenRouterEndpoint(rawEndpoint: string, fallback: strin
       url.pathname = "/api/v1";
     } else if (pathname.endsWith("/api")) {
       url.pathname = `${pathname}/v1`;
-    } else if (pathname.endsWith("/api/v1")) {
-      url.pathname = pathname;
     } else {
       url.pathname = pathname;
     }

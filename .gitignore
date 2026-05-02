@@ -81,3 +81,4 @@ Thumbs.db
 
 # Local dev SQLite created when running bunx prisma db push outside docker
 prisma/db/
+.venv-desloppify/

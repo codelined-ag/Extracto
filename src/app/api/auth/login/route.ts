@@ -74,10 +74,7 @@ export async function POST(request: NextRequest) {
       name: user.name,
     });
 
-    const response = NextResponse.json({
-      user: toSafeUser(user),
-      success: true,
-    });
+    const response = NextResponse.json({ user: toSafeUser(user) });
 
     response.cookies.set({
       name: getAuthCookieName(),

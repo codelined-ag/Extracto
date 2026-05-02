@@ -19,18 +19,21 @@ const mapSettingsResponse = (setting: AdvancedSettings) => ({
   quality: setting.quality,
 });
 
-export const GET = withAuth("settings:read", async () => {
-  const existing = await db.ocrSetting.findUnique({ where: { key: OCR_SETTINGS_KEY } });
+export const GET = withAuth("settings:read", async (_request: NextRequest, { auth }) => {
+  const existing = await db.ocrSetting.findUnique({
+    where: { userId_key: { userId: auth.userId, key: OCR_SETTINGS_KEY } },
+  });
   return NextResponse.json(mapSettingsResponse(existing ?? DEFAULT_SETTINGS));
 });
 
-export const PUT = withMutationAuth("settings:write", async (request: NextRequest) => {
+export const PUT = withMutationAuth("settings:write", async (request: NextRequest, { auth }) => {
   const body = await parseJsonBody(request);
   const normalized = normalizeAdvancedSettings(body);
 
   const settings = await db.ocrSetting.upsert({
-    where: { key: OCR_SETTINGS_KEY },
+    where: { userId_key: { userId: auth.userId, key: OCR_SETTINGS_KEY } },
     create: {
+      userId: auth.userId,
       key: OCR_SETTINGS_KEY,
       ...normalized,
     },

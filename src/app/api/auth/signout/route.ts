@@ -11,7 +11,7 @@ export function POST(_request: NextRequest) {
 
   const isRequestSecure = checkRequestSecure(_request);
 
-  const response = NextResponse.json({ success: true });
+  const response = NextResponse.json({ ok: true });
   response.cookies.set({
     name: getAuthCookieName(),
     value: "",

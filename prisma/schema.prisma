@@ -29,6 +29,7 @@ model AuthUser {
   apiKeys       ApiKey[]
   webhooks      Webhook[]
   outputPresets OutputPreset[]
+  ocrSettings   OcrSetting[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
@@ -83,7 +84,13 @@ model OutputPreset {
 
 model OcrSetting {
   id                     String       @id @default(cuid())
-  key                    String       @unique
+  // Per-user settings row. The (userId, key) tuple is unique so each user
+  // owns exactly one row per key (currently only "global" is in use).
+  // Pre-existing rows with userId=NULL are migration-orphaned; the route
+  // never reads them.
+  userId                 String?
+  user                   AuthUser?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key                    String
   language               String       @default("auto")
   tableDetection         Boolean      @default(true)
   handwritingRecognition Boolean      @default(false)
@@ -93,6 +100,9 @@ model OcrSetting {
   jobs                   OcrJob[]
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt
+
+  @@unique([userId, key])
+  @@index([userId])
 }
 
 model OcrJob {

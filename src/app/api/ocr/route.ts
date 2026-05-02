@@ -8,7 +8,7 @@ import {
   normalizeOpenAICompatApiBase,
   normalizeOpenRouterApiBase,
 } from "@/lib/ocr/providers/compat";
-import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
+import { authenticateMutation, requireScope, withAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { enforceProviderEndpointPolicy, normalizeProvider, ProviderKind } from "@/lib/endpoint-policy";
 import { withOcrJobSlot } from "@/lib/ocr/job-control";
@@ -189,30 +189,13 @@ Rules:
 
 
 
-export async function GET(request: NextRequest) {
-  try {
-    const auth = await authenticateRequest(request);
-    if (!auth) {
-      throw new ApiRouteError("Unauthorized", 401);
-    }
-    const scopeError = requireScope(auth, "ocr:read");
-    if (scopeError) return scopeError;
-    const userId = auth.userId;
-
-    const storedSettings = normalizeAndValidateApiSettings(await getApiSettings(userId));
-    const query = new URL(request.url).searchParams;
-    const provider = normalizeProvider(query.get("provider") || undefined);
-    const catalog = await getModelCatalog(storedSettings);
-    return NextResponse.json({ success: true, models: catalog[provider] });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to fetch model catalog",
-      },
-      { status: error instanceof ApiRouteError ? error.status : 500 }
-    );
-  }
-}
+export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) => {
+  const storedSettings = normalizeAndValidateApiSettings(await getApiSettings(auth.userId));
+  const query = new URL(request.url).searchParams;
+  const provider = normalizeProvider(query.get("provider") || undefined);
+  const catalog = await getModelCatalog(storedSettings);
+  return NextResponse.json({ models: catalog[provider] });
+});
 
 export async function POST(request: NextRequest) {
   const startedAtMs = Date.now();
@@ -243,10 +226,7 @@ export async function POST(request: NextRequest) {
     if (!rateLimit.allowed) {
       return handleApiError(
         new ApiRouteError("Too many OCR jobs requested. Please retry shortly.", 429),
-        {
-          extra: { success: false },
-          headers: { "Retry-After": `${rateLimit.retryAfterSeconds}` },
-        }
+        { headers: { "Retry-After": `${rateLimit.retryAfterSeconds}` } },
       );
     }
 
@@ -287,7 +267,7 @@ export async function POST(request: NextRequest) {
     const resumeRequested = body.resume === true || body.resume === "true";
     const resumeJobId = typeof body.jobId === "string" ? body.jobId.trim() : "";
 
-    const provider = resolveProvider(model, settings);
+    const provider = resolveProvider(settings);
     const ocrModel = provider === "mistral" ? resolveMistralOcrModel(model) : model;
     const prompt = buildPrompt(settingsPayload);
     const sourcePreview = normalizePreviewForHistory(inputPreviews[0] || "");
@@ -414,7 +394,6 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(
         {
-          success: true,
           status: OcrJobStatus.PROCESSING,
           jobId: existingJob.id,
           pageCount: inputPreviews.length,
@@ -510,7 +489,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        success: true,
         status: OcrJobStatus.PROCESSING,
         jobId: createdJob.id,
         pageCount: inputPreviews.length,
@@ -519,9 +497,6 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("OCR processing error:", error);
-    return handleApiError(error, {
-      statusFor: pipelineStatusFor,
-      extra: { success: false },
-    });
+    return handleApiError(error, { statusFor: pipelineStatusFor });
   }
 }

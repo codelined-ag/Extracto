@@ -95,7 +95,7 @@ export const POST = withMutationAuth("webhooks:write", async (request: NextReque
       url,
       secret,
       events: serializeEventList(events),
-      active: body.active === false ? false : true,
+      active: body.active !== false,
     },
     select: { id: true, url: true, events: true, active: true, createdAt: true },
   });

@@ -447,11 +447,7 @@ function resolveProviderApiKey(provider: ProviderKind, settings: ApiProviderSett
   return envKey ? (process.env[envKey] || "") : "";
 }
 
-export function resolveProvider(model: string, settings: ApiProviderSettings): ProviderKind {
-  const normalizedModel = model.trim();
-  if (!normalizedModel) {
-    throw new ApiRouteError("Model is required", 400);
-  }
+export function resolveProvider(settings: ApiProviderSettings): ProviderKind {
   return normalizeProvider(settings.provider);
 }
 
@@ -748,7 +744,10 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
   const partialStructuredPages = pageOutputs.map(toStructuredPagePayload);
   const partialPageResults = pageOutputs.map(toPageResultPayload);
   let totalDurationMs = pageOutputs.reduce((sum, page) => sum + page.durationMs, 0);
-  let { text: extractedTextSoFar, chunks: extractedChunkCount } = seedExtractedText(pageOutputs);
+  // chunks count from seedExtractedText is unused — only the text matters
+  // for the orchestrator. appendPageMarkdown returns a fresh count per page
+  // but we never read it after the loop.
+  let extractedTextSoFar = seedExtractedText(pageOutputs).text;
 
   const selectedPostProcessModel = input.postProcessingPayload.model || input.model;
   const usedOllamaModels = seedUsedOllamaModels(input.provider, input.ocrModel);
@@ -893,11 +892,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       partialStructuredPages.push(toStructuredPagePayload(completedPage));
       partialPageResults.push(toPageResultPayload(completedPage));
 
-      ({ text: extractedTextSoFar, chunks: extractedChunkCount } = appendPageMarkdown(
-        extractedTextSoFar,
-        extractedChunkCount,
-        completedPage,
-      ));
+      extractedTextSoFar = appendPageMarkdown(extractedTextSoFar, 0, completedPage).text;
 
       const averagePageMs = totalDurationMs / pageOutputs.length;
       const remainingPages = input.inputPreviews.length - pageOutputs.length;
@@ -950,12 +945,12 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       pageResults: partialPageResults,
     };
     let finalMarkdown = extractedMarkdown;
-    let postProcessedJson: unknown = undefined;
+    let postProcessedJson: unknown;
     let postProcessedText: string | undefined;
 
     if (input.postProcessingPayload.enabled) {
       const postProcessingModel = selectedPostProcessModel;
-      const postProcessingProvider = resolveProvider(postProcessingModel, input.settings);
+      const postProcessingProvider = resolveProvider(input.settings);
       if (postProcessingProvider === "ollama") {
         usedOllamaModels.add(postProcessingModel);
         await warmupOllamaModel(input.settings.apiEndpoint, postProcessingModel);
@@ -1073,7 +1068,6 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
     if (postProcessedJson !== undefined) {
       extractedMetadata.postProcessingJson = postProcessedJson;
     }
-    void extractedChunkCount; // counted for telemetry; kept for backward inspection
 
     progressEvents = appendProgressEvent(progressEvents, "completed", "OCR job completed");
     latestMetadata = buildProgressMetadata({
