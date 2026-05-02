@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: { message: result.error, type: "auth_error" } }, { status: result.status });
   }
   if (!authHasScope(result.auth, "ocr:submit")) {
+    // OpenAI-compatible error envelope — cannot use requireScope() which returns plain { error: string }
     return NextResponse.json(
       { error: { message: "Missing required scope: ocr:submit", type: "permission_error" } },
       { status: 403 }

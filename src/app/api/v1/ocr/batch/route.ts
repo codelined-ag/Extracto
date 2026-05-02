@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { authenticateMutation, authHasScope } from "@/lib/auth/request";
+import { authenticateMutation, requireScope } from "@/lib/auth/request";
 import { buildOcrForwardHeaders } from "@/lib/ocr/forward";
 
 const MAX_BATCH_SIZE = 50;
@@ -61,12 +61,8 @@ export async function POST(request: NextRequest) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
-  if (!authHasScope(result.auth, "ocr:submit")) {
-    return NextResponse.json(
-      { error: "Missing required scope: ocr:submit" },
-      { status: 403 }
-    );
-  }
+  const scopeError = requireScope(result.auth, "ocr:submit");
+  if (scopeError) return scopeError;
 
   const raw = await request.json().catch(() => null);
   const parsed = parseBatchBody(raw);

@@ -97,15 +97,8 @@ export async function verifySessionToken(
     return null;
   }
 
-  let payloadPart: string;
-  let signaturePart: string;
-
-  try {
-    [payloadPart, signaturePart] = token.split(".");
-    if (!payloadPart || !signaturePart) {
-      return null;
-    }
-  } catch {
+  const [payloadPart, signaturePart] = token.split(".");
+  if (!payloadPart || !signaturePart) {
     return null;
   }
 

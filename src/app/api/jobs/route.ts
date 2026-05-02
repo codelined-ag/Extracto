@@ -82,18 +82,6 @@ export async function DELETE(request: NextRequest) {
   const userId = authResult.auth.userId;
 
   const { searchParams } = new URL(request.url);
-  const jobId = searchParams.get("id");
-
-  if (jobId) {
-    const single = await db.ocrJob.deleteMany({
-      where: { id: jobId, userId },
-    });
-    if (single.count === 0) {
-      return NextResponse.json({ error: "Job not found" }, { status: 404 });
-    }
-    return NextResponse.json({ deleted: single.count });
-  }
-
   const rawStatus = searchParams.get("status");
   const statusFilter = parseStatusFilter(rawStatus);
 

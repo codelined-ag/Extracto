@@ -217,13 +217,23 @@ export async function getApiSettings(userId: string): Promise<ApiProviderSetting
   const settingsPath = getSettingsPath(safeUserId);
   try {
     const stored = await readFile(settingsPath, "utf8");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let parsed: any;
+    let parseOk = false;
     try {
-      const parsed = JSON.parse(stored);
-      const normalized = normalizeSettings(parsed);
-      settingsCache.set(safeUserId, normalized);
-      return { ...normalized };
+      parsed = JSON.parse(stored);
+      parseOk = true;
     } catch (parseErr) {
       console.error(`[settings-store] Corrupt settings file for user ${safeUserId}, resetting to defaults:`, parseErr);
+    }
+    if (parseOk) {
+      try {
+        const normalized = normalizeSettings(parsed);
+        settingsCache.set(safeUserId, normalized);
+        return { ...normalized };
+      } catch (normalizeErr) {
+        console.error(`[settings-store] Settings invalid for user ${safeUserId}, resetting to defaults:`, normalizeErr);
+      }
     }
   } catch (readErr: unknown) {
     const code = (readErr as NodeJS.ErrnoException).code;

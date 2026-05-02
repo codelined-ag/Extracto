@@ -3,7 +3,7 @@ import { OcrJobStatus, Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
 
 import { ApiProviderSettings, getApiSettings, normalizeMistralEndpoint } from "@/lib/settings-store";
-import { authenticateMutation, authenticateRequest, authHasScope, requireScope } from "@/lib/auth/request";
+import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
 import {
   maybeUploadResultJson,
   maybeUploadResultText,
@@ -29,6 +29,7 @@ import { consumeRateLimit } from "@/lib/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
 import { AdvancedSettings, normalizeAdvancedSettings, PostProcessingSettings, PostProcessOutputFormat } from "@/lib/ocr/settings";
 import { ApiRouteError } from "@/lib/api-error";
+import { extractFirstBalancedJsonObject, extractMarkdownFromJsonLikeText } from "@/lib/ocr/text-extract";
 
 interface OCRRequestBody {
   jobId?: unknown;
@@ -41,14 +42,6 @@ interface OCRRequestBody {
   batchId?: unknown;
   settings?: Partial<AdvancedSettings>;
   postProcessing?: Partial<PostProcessingSettings>;
-  provider?: unknown;
-  apiEndpoint?: unknown;
-  apiKey?: unknown;
-  apiSettings?: {
-    provider?: unknown;
-    apiEndpoint?: unknown;
-    apiKey?: unknown;
-  };
 }
 
 function parseRequestPriority(value: unknown): number {
@@ -626,11 +619,11 @@ function formatPageScopedText(
 }
 
 function computeTextStats(text: string) {
-  const safeText = text.trim();
+  const trimmed = text.trim();
   return {
-    characterCount: text.length,
-    wordCount: safeText ? safeText.split(/\s+/).filter(Boolean).length : 0,
-    lineCount: safeText ? safeText.split("\n").filter(Boolean).length : 0,
+    characterCount: trimmed.length,
+    wordCount: trimmed ? trimmed.split(/\s+/).filter(Boolean).length : 0,
+    lineCount: trimmed ? trimmed.split("\n").filter(Boolean).length : 0,
   };
 }
 
@@ -703,56 +696,6 @@ function parseJsonCandidate(rawText: string): unknown | null {
   return null;
 }
 
-function extractFirstBalancedJsonObject(input: string): string | null {
-  let depth = 0;
-  let startIndex = -1;
-  let inString = false;
-  let escapeNext = false;
-
-  for (let index = 0; index < input.length; index++) {
-    const char = input[index];
-
-    if (inString) {
-      if (escapeNext) {
-        escapeNext = false;
-        continue;
-      }
-      if (char === "\\") {
-        escapeNext = true;
-        continue;
-      }
-      if (char === "\"") {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === "\"") {
-      inString = true;
-      continue;
-    }
-
-    if (char === "{") {
-      if (depth === 0) {
-        startIndex = index;
-      }
-      depth += 1;
-      continue;
-    }
-
-    if (char === "}") {
-      if (depth > 0) {
-        depth -= 1;
-        if (depth === 0 && startIndex >= 0) {
-          return input.slice(startIndex, index + 1);
-        }
-      }
-    }
-  }
-
-  return null;
-}
-
 function coerceMarkdownText(value: unknown, fallbackMarkdown: string): string {
   const fallback = fallbackMarkdown.trim();
   if (typeof value !== "string") {
@@ -779,39 +722,6 @@ function coerceMarkdownText(value: unknown, fallbackMarkdown: string): string {
   }
 
   return trimmed;
-}
-
-function extractMarkdownFromJsonLikeText(raw: string): string | null {
-  const normalized = raw
-    .trim()
-    .replace(/^```(?:json)?\s*/iu, "")
-    .replace(/```$/u, "")
-    .replace(/^json\s*/iu, "");
-
-  const keyMatch = /"markdown"\s*:/iu.exec(normalized);
-  if (!keyMatch) {
-    return null;
-  }
-
-  const valueSlice = normalized.slice(keyMatch.index + keyMatch[0].length).trimStart();
-  if (!valueSlice.startsWith("\"")) {
-    return null;
-  }
-
-  const fieldMatch = /^"([\s\S]*?)"\s*(?:,\s*"[\w$-]+"\s*:|\}\s*$)/u.exec(valueSlice);
-  if (!fieldMatch?.[1]) {
-    return null;
-  }
-
-  const decoded = fieldMatch[1]
-    .replace(/\\r\\n/g, "\n")
-    .replace(/\\n/g, "\n")
-    .replace(/\\t/g, "\t")
-    .replace(/\\"/g, "\"")
-    .replace(/\\\\/g, "\\")
-    .trim();
-
-  return decoded || null;
 }
 
 function normalizeStructuredMarkdownPayload(
@@ -1135,10 +1045,6 @@ async function getOllamaModels(
   throw new ApiRouteError(`No reachable Ollama host found (${errors.join(" | ")})`, 502);
 }
 
-async function resolveOllamaEndpoint(endpoint: string): Promise<string> {
-  const result = await getOllamaModels(endpoint);
-  return result.host;
-}
 
 function resolveProvider(model: string, settings: ApiProviderSettings): ProviderKind {
   const normalizedModel = model.trim();
@@ -1322,7 +1228,7 @@ async function runOllamaOcr(
 
   let resolvedHost: string | null = null;
   try {
-    resolvedHost = await resolveOllamaEndpoint(endpoint);
+    resolvedHost = (await getOllamaModels(endpoint)).host;
   } catch {
     // keep fallback message context
   }
@@ -2223,65 +2129,62 @@ async function runOpenAICompatPostProcessing(
   };
 }
 
+async function tryDiscover(discover: () => Promise<string[]>, label: string): Promise<string[]> {
+  try {
+    return await discover();
+  } catch (error) {
+    console.error(`Failed to fetch ${label}:`, error);
+    return [];
+  }
+}
+
 async function getModelCatalog(settings: ApiProviderSettings): Promise<ModelCatalog> {
   const mistralModels = normalizeMistralModels();
-  let ollamaModels: string[] = [];
-  let openRouterModels: string[] = [];
-  let openAICompatModels: string[] = [];
 
-  try {
-    const discovered = await getOllamaModels(settings.apiEndpoint);
-    ollamaModels = discovered.models;
-  } catch (error) {
-    console.error("Failed to fetch Ollama model catalog:", error);
-  }
+  const ollamaModels = await tryDiscover(
+    () => getOllamaModels(settings.apiEndpoint).then((r) => r.models),
+    "Ollama model catalog"
+  );
 
-  try {
-    const endpointForDiscovery =
-      settings.provider === "openrouter" ? settings.apiEndpoint : DEFAULT_OPENROUTER_API_URL;
-    const apiKeyForDiscovery =
-      settings.provider === "openrouter"
-        ? settings.apiKey || process.env.OPENROUTER_API_KEY || ""
-        : process.env.OPENROUTER_API_KEY || "";
-    if (apiKeyForDiscovery) {
-      openRouterModels = await discoverOpenRouterModels(endpointForDiscovery, apiKeyForDiscovery);
-    }
-  } catch (error) {
-    console.error("Failed to fetch OpenRouter model catalog:", error);
-  }
+  const openRouterEndpoint =
+    settings.provider === "openrouter" ? settings.apiEndpoint : DEFAULT_OPENROUTER_API_URL;
+  const openRouterKey =
+    settings.provider === "openrouter"
+      ? settings.apiKey || process.env.OPENROUTER_API_KEY || ""
+      : process.env.OPENROUTER_API_KEY || "";
+  const openRouterModels = openRouterKey
+    ? await tryDiscover(
+        () => discoverOpenRouterModels(openRouterEndpoint, openRouterKey),
+        "OpenRouter model catalog"
+      )
+    : [];
+  const resolvedOpenRouterModels =
+    openRouterModels.length === 0 && settings.provider === "openrouter"
+      ? [...DEFAULT_OPENROUTER_FALLBACK_MODELS]
+      : openRouterModels;
 
-  if (openRouterModels.length === 0 && settings.provider === "openrouter") {
-    openRouterModels = [...DEFAULT_OPENROUTER_FALLBACK_MODELS];
-  }
-
-  try {
-    const endpointForDiscovery =
-      settings.provider === "openai_compat"
-        ? settings.apiEndpoint
-        : DEFAULT_OPENAI_COMPAT_API_URL;
-    const apiKeyForDiscovery =
-      settings.provider === "openai_compat"
-        ? settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || ""
-        : process.env.OPENAI_COMPAT_API_KEY || "";
-    if (apiKeyForDiscovery) {
-      openAICompatModels = await discoverOpenAICompatModels(
-        endpointForDiscovery,
-        apiKeyForDiscovery
-      );
-    }
-  } catch (error) {
-    console.error("Failed to fetch OpenAI-compatible model catalog:", error);
-  }
-
-  if (openAICompatModels.length === 0 && settings.provider === "openai_compat") {
-    openAICompatModels = [...DEFAULT_OPENAI_COMPAT_FALLBACK_MODELS];
-  }
+  const openAICompatEndpoint =
+    settings.provider === "openai_compat" ? settings.apiEndpoint : DEFAULT_OPENAI_COMPAT_API_URL;
+  const openAICompatKey =
+    settings.provider === "openai_compat"
+      ? settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || ""
+      : process.env.OPENAI_COMPAT_API_KEY || "";
+  const openAICompatModels = openAICompatKey
+    ? await tryDiscover(
+        () => discoverOpenAICompatModels(openAICompatEndpoint, openAICompatKey),
+        "OpenAI-compatible model catalog"
+      )
+    : [];
+  const resolvedOpenAICompatModels =
+    openAICompatModels.length === 0 && settings.provider === "openai_compat"
+      ? [...DEFAULT_OPENAI_COMPAT_FALLBACK_MODELS]
+      : openAICompatModels;
 
   return {
     ollama: ollamaModels,
     mistral: mistralModels,
-    openrouter: openRouterModels,
-    openai_compat: openAICompatModels,
+    openrouter: resolvedOpenRouterModels,
+    openai_compat: resolvedOpenAICompatModels,
   };
 }
 
@@ -2896,9 +2799,8 @@ export async function POST(request: NextRequest) {
       throw new ApiRouteError(authResult.error, authResult.status);
     }
     const auth = authResult.auth;
-    if (!authHasScope(auth, "ocr:submit")) {
-      throw new ApiRouteError("Missing required scope: ocr:submit", 403);
-    }
+    const submitScopeError = requireScope(auth, "ocr:submit");
+    if (submitScopeError) return submitScopeError;
     const userId = auth.userId;
 
     const clientIp = getClientIpAddress(request);

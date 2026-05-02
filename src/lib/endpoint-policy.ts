@@ -57,9 +57,6 @@ function normalizeHostPattern(value: string): string {
     const parsed = new URL(trimmed.includes("://") ? trimmed : `http://${trimmed}`);
     return parsed.hostname.toLowerCase();
   } catch {
-    if (trimmed.startsWith(".")) {
-      return trimmed;
-    }
     return trimmed;
   }
 }

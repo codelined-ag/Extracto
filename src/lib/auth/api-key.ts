@@ -5,6 +5,7 @@ import { API_KEY_PREFIX } from "@/lib/auth/api-key-shared";
 const RAW_KEY_BYTES = 32;
 const PREFIX_DISPLAY_LENGTH = 6;
 
+// Re-export edge-safe helpers so Node-only callers can import everything from one file.
 export { API_KEY_PREFIX, extractBearerToken, isLikelyApiKey } from "@/lib/auth/api-key-shared";
 
 function getApiKeySecret(): string {
