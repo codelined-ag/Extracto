@@ -1,9 +1,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { enforceProviderEndpointPolicy, normalizeProvider, ProviderKind } from "@/lib/endpoint-policy";
+import { type ApiProviderSettings, type ClientApiSettings, type ProviderKind, normalizeProvider } from "@/lib/api-types";
+import { enforceProviderEndpointPolicy } from "@/lib/endpoint-policy";
 import {
-  isLikelyLocalhostEndpoint,
   normalizeHostEndpoint,
   resolveOllamaHostEndpoint,
 } from "@/lib/host-normalization";
@@ -13,6 +13,12 @@ import {
   DEFAULT_OPENROUTER_API_URL,
   OLLAMA_DEFAULT_HOST,
 } from "@/lib/ocr/provider-config";
+import {
+  normalizeMistralEndpoint as normalizeMistralEndpointBase,
+  normalizeOllamaEndpoint as normalizeOllamaEndpointBase,
+  normalizeOpenAICompatEndpoint as normalizeOpenAICompatEndpointBase,
+  normalizeOpenRouterEndpoint as normalizeOpenRouterEndpointBase,
+} from "@/lib/ocr/provider-normalization";
 
 const DEFAULT_OLLAMA_HOST = normalizeHostEndpoint(
   process.env.OLLAMA_HOST || "",
@@ -32,7 +38,9 @@ const DEFAULT_OPENAI_COMPAT_API_ENDPOINT = normalizeHostEndpoint(
 );
 const SHOULD_PRESERVE_LOCALHOST =
   (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase() === "host";
-const FALLBACK_OLLAMA_HOST = resolveOllamaHostEndpoint(
+// Exported so ocr/route.ts and other modules can share the same resolved
+// fallback host instead of recomputing it independently.
+export const FALLBACK_OLLAMA_HOST = resolveOllamaHostEndpoint(
   DEFAULT_OLLAMA_HOST,
   OLLAMA_DEFAULT_HOST
 );
@@ -48,96 +56,19 @@ const DATA_ROOT = (() => {
 
 
 export function normalizeMistralEndpoint(rawEndpoint?: string): string {
-  const normalized = normalizeHostEndpoint(rawEndpoint || "", DEFAULT_MISTRAL_OCR_ENDPOINT);
-
-  try {
-    const url = new URL(normalized);
-    url.search = "";
-    url.hash = "";
-
-    const pathname = url.pathname.replace(/\/+$/u, "");
-    if (pathname.endsWith("/v1/ocr")) {
-      url.pathname = pathname;
-      return url.toString();
-    }
-    if (pathname.endsWith("/v1/models")) {
-      url.pathname = `${pathname.slice(0, -10)}/v1/ocr`;
-      return url.toString();
-    }
-    if (pathname.endsWith("/models")) {
-      const base = pathname.slice(0, -7);
-      url.pathname = base.endsWith("/v1") ? `${base}/ocr` : `${base}/v1/ocr`;
-      return url.toString();
-    }
-    if (pathname.endsWith("/ocr")) {
-      const base = pathname.slice(0, -4);
-      url.pathname = base.endsWith("/v1") ? `${base}/ocr` : `${base}/v1/ocr`;
-      return url.toString();
-    }
-    if (pathname.endsWith("/v1")) {
-      url.pathname = `${pathname}/ocr`;
-      return url.toString();
-    }
-    if (!pathname || pathname === "/") {
-      url.pathname = "/v1/ocr";
-      return url.toString();
-    }
-
-    url.pathname = `${pathname}/v1/ocr`;
-    return url.toString();
-  } catch {
-    return DEFAULT_MISTRAL_OCR_ENDPOINT;
-  }
+  return normalizeMistralEndpointBase(rawEndpoint || "", DEFAULT_MISTRAL_OCR_ENDPOINT);
 }
 
 function normalizeOllamaEndpoint(rawEndpoint?: string): string {
-  const configuredHost = FALLBACK_OLLAMA_HOST;
-  const normalized = normalizeHostEndpoint(rawEndpoint || "", configuredHost);
-
-  if (!SHOULD_PRESERVE_LOCALHOST && isLikelyLocalhostEndpoint(normalized)) {
-    return configuredHost;
-  }
-
-  return normalized;
+  return normalizeOllamaEndpointBase(rawEndpoint || "", FALLBACK_OLLAMA_HOST, SHOULD_PRESERVE_LOCALHOST);
 }
 
 function normalizeOpenRouterEndpoint(rawEndpoint?: string): string {
-  const normalized = normalizeHostEndpoint(rawEndpoint || "", DEFAULT_OPENROUTER_API_ENDPOINT);
-
-  try {
-    const url = new URL(normalized);
-    url.search = "";
-    url.hash = "";
-    const pathname = url.pathname.replace(/\/+$/u, "");
-    if (!pathname || pathname === "/") {
-      url.pathname = "/api/v1";
-    } else if (pathname.endsWith("/api")) {
-      url.pathname = `${pathname}/v1`;
-    } else if (pathname.endsWith("/api/v1")) {
-      url.pathname = pathname;
-    } else {
-      url.pathname = pathname;
-    }
-    return url.toString().replace(/\/+$/u, "");
-  } catch {
-    return DEFAULT_OPENROUTER_API_ENDPOINT;
-  }
+  return normalizeOpenRouterEndpointBase(rawEndpoint || "", DEFAULT_OPENROUTER_API_ENDPOINT);
 }
 
 function normalizeOpenAICompatEndpoint(rawEndpoint?: string): string {
-  // No path rewriting: OpenAI-compatible endpoints are BYO, so we must respect
-  // whatever base path the operator pointed at (e.g. /v1, /api/v1, /openai/v1,
-  // a self-hosted vLLM at /). We only normalize scheme + drop search/hash and
-  // trailing slashes.
-  const normalized = normalizeHostEndpoint(rawEndpoint || "", DEFAULT_OPENAI_COMPAT_API_ENDPOINT);
-  try {
-    const url = new URL(normalized);
-    url.search = "";
-    url.hash = "";
-    return url.toString().replace(/\/+$/u, "");
-  } catch {
-    return DEFAULT_OPENAI_COMPAT_API_ENDPOINT;
-  }
+  return normalizeOpenAICompatEndpointBase(rawEndpoint || "", DEFAULT_OPENAI_COMPAT_API_ENDPOINT);
 }
 
 const PROVIDER_DEFAULT_ENDPOINTS: Record<ProviderKind, string> = {
@@ -154,13 +85,7 @@ function normalizeApiEndpoint(rawEndpoint: string | undefined, provider: Provide
   return normalizeOllamaEndpoint(rawEndpoint);
 }
 
-export interface ApiProviderSettings {
-  provider: ProviderKind;
-  apiEndpoint: string;
-  apiKey: string;
-}
-
-export type ClientApiSettings = ApiProviderSettings & { hasApiKey: boolean };
+export type { ApiProviderSettings, ClientApiSettings } from "@/lib/api-types";
 
 interface SaveApiSettingsInput extends Omit<Partial<ApiProviderSettings>, "provider"> {
   provider?: string;
@@ -201,7 +126,7 @@ function getSettingsPath(userId: string): string {
 }
 
 
-export function toClientApiSettings(settings: ApiProviderSettings): ApiProviderSettings & { hasApiKey: boolean } {
+export function toClientApiSettings(settings: ApiProviderSettings): ClientApiSettings {
   return {
     provider: settings.provider,
     apiEndpoint: settings.apiEndpoint,
@@ -227,7 +152,10 @@ export async function getApiSettings(userId: string): Promise<ApiProviderSetting
       throw new Error(`Settings file is corrupt: ${settingsPath}`);
     }
     try {
-      const normalized = normalizeSettings(parsed);
+      // Falls back to defaults intentionally — policy violations and unknown providers are
+      // self-healing for forward-compatibility. Corrupt JSON (above) throws so operators
+      // notice file-level problems; invalid-but-parseable settings degrade silently.
+      const normalized = normalizeSettings(parsed as Partial<ApiProviderSettings>);
       settingsCache.set(safeUserId, normalized);
       return { ...normalized };
     } catch (normalizeErr) {
