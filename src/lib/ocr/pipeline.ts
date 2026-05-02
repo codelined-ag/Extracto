@@ -24,16 +24,9 @@ import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { dispatchJobWebhooks } from "@/lib/background/webhooks";
 import { db } from "@/lib/db";
 import {
-  enforceProviderEndpointPolicy,
   normalizeProvider,
   type ProviderKind,
 } from "@/lib/ocr/endpoint-policy";
-import {
-  buildOllamaHostCandidates,
-  normalizeHostEndpoint,
-  resolveOllamaHostEndpoint,
-} from "@/lib/ocr/host-normalization";
-import { parseServiceError } from "@/lib/ocr/error-parsing";
 import {
   clearOcrJobRunning,
   clearOcrJobStop,
@@ -54,32 +47,17 @@ import {
   getDefaultOpenAICompatFallbackModels,
   getDefaultOpenRouterApiUrl,
   getDefaultOpenRouterFallbackModels,
-  OLLAMA_DEFAULT_HOST,
-  OLLAMA_DISCOVERY_PATHS,
-  OLLAMA_NETWORK_HINT,
 } from "@/lib/ocr/provider-config";
 import {
   discoverCompatModels,
   OPENAI_COMPAT_CONFIG,
   OPENROUTER_CONFIG,
-  runCompatOcr,
-  runCompatPostProcessing,
 } from "@/lib/ocr/providers/compat";
 import {
   listMistralModels,
-  runMistralOcr,
-  runMistralPostProcessing,
 } from "@/lib/ocr/providers/mistral";
 import {
-  runOllamaOcr as runOllamaOcrIter,
-  runOllamaPostProcessing as runOllamaPostProcessingIter,
-  unloadOllamaModel as unloadOllamaModelIter,
-  warmupOllamaModel as warmupOllamaModelIter,
-} from "@/lib/ocr/providers/ollama";
-import {
-  fetchWithTimeout,
   OcrStopRequestedError,
-  parseResponseText,
   type OcrRunResult,
   type PostProcessResult,
 } from "@/lib/ocr/providers/shared";
@@ -94,7 +72,6 @@ import {
 } from "@/lib/ocr/result-store";
 import {
   type ApiProviderSettings,
-  getFallbackOllamaHost,
 } from "@/lib/ocr/settings-store";
 
 // ---- Types --------------------------------------------------------------
@@ -113,81 +90,53 @@ export interface ModelCatalog {
   openai_compat: string[];
 }
 
-export interface OcrJsonResult {
-  fileName: string;
-  extractedAt: string;
-  provider: ProviderKind;
-  model: string;
-  settings: AdvancedSettings;
-  text: string;
-  markdown: string;
-  structured: Record<string, unknown>;
-  metadata: {
-    characterCount: number;
-    wordCount: number;
-    lineCount: number;
-    provider: ProviderKind;
-    [key: string]: unknown;
-  };
-  rawExtractionText?: string;
-  postProcessedText?: string;
-}
+import type {
+  OcrPageCheckpoint,
+  OcrProgressEvent,
+  OcrProgressMetadata,
+  OcrProgressStage,
+} from "@/lib/ocr/pipeline-progress";
+import {
+  appendProgressEvent,
+  buildProgressMetadata,
+} from "@/lib/ocr/pipeline-progress";
+import type {
+  OcrJsonResult,
+  ProcessedPageOutput,
+} from "@/lib/ocr/pipeline-result-builder";
+import {
+  buildJsonResult,
+  toJsonValue,
+  toPageCheckpoint,
+  toPageRecord,
+  toPageResultPayload,
+  toStructuredPagePayload,
+} from "@/lib/ocr/pipeline-result-builder";
+import {
+  buildPostProcessingPrompt,
+  computeTextStats,
+  formatPageScopedText,
+  normalizePostProcessedText,
+} from "@/lib/ocr/pipeline-post-processing";
 
-export type OcrProgressStage =
-  | "queued"
-  | "analyzing"
-  | "ocr"
-  | "post_processing"
-  | "exporting"
-  | "finalizing"
-  | "paused"
-  | "completed"
-  | "failed";
-
-export interface OcrProgressEvent {
-  at: string;
-  stage: OcrProgressStage;
-  message: string;
-}
-
-export interface OcrPageCheckpoint {
-  pageNumber: number;
-  status: "completed";
-  characterCount: number;
-  durationMs: number;
-  previewText: string;
-}
-
-export interface OcrProgressMetadata {
-  stage: OcrProgressStage;
-  message: string;
-  progressPct: number;
-  pageCount: number;
-  processedPages: number;
-  currentPage: number | null;
-  etaSeconds: number | null;
-  startedAt: string;
-  updatedAt: string;
-  events: OcrProgressEvent[];
-  checkpoints: OcrPageCheckpoint[];
-  postProcessing: {
-    enabled: boolean;
-    applied?: boolean;
-    outputFormat?: PostProcessOutputFormat;
-    instruction?: string;
-    model?: string;
-    provider?: ProviderKind;
-    error?: string;
-  };
-}
-
-export interface ProcessedPageOutput {
-  pageNumber: number;
-  text: string;
-  structured: Record<string, unknown>;
-  metadata: Record<string, unknown>;
-  durationMs: number;
-}
+export type {
+  OcrPageCheckpoint,
+  OcrProgressEvent,
+  OcrProgressMetadata,
+  OcrProgressStage,
+  OcrJsonResult,
+  ProcessedPageOutput,
+};
+export {
+  appendProgressEvent,
+  buildProgressMetadata,
+  buildJsonResult,
+  toJsonValue,
+  buildPostProcessingPrompt,
+  computeTextStats,
+  formatPageScopedText,
+  normalizePostProcessedText,
+};
 
 export interface ProcessOcrJobInput {
   jobId: string;
@@ -206,463 +155,29 @@ export interface ProcessOcrJobInput {
   resumed?: boolean;
 }
 
-// ---- Constants + module-level state -------------------------------------
+import {
+  getOllamaCandidatesForOcr,
+  getOllamaDiscoveryFallbackHost,
+  getOllamaModels,
+  ollamaOcrWithHostResolve,
+  ollamaPostProcessingWithHostResolve,
+  ollamaUnloadWithHostResolve,
+  ollamaWarmupWithHostResolve,
+} from "@/lib/ocr/ollama-dispatch";
 
-const OLLAMA_MODEL_CACHE_TTL_MS = 60_000;
-
-/**
- * Resolved Ollama discovery fallback host. Reads APP_NETWORK_MODE lazily so
- * tests + dynamic env changes are honored. In "host" mode the loopback
- * address is used; in "bridge" mode the docker-gateway-resolved host.
- */
-export function getOllamaDiscoveryFallbackHost(): string {
-  return (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase() === "host"
-    ? OLLAMA_DEFAULT_HOST
-    : getFallbackOllamaHost();
-}
-
-interface OllamaModelCatalogResult {
-  models: string[];
-  host: string;
-}
-
-let ollamaModelCache: { values: string[]; expiresAt: number; host: string } = {
-  values: [],
-  expiresAt: 0,
-  host: "",
+export {
+  getOllamaCandidatesForOcr,
+  getOllamaDiscoveryFallbackHost,
+  getOllamaModels,
+  ollamaOcrWithHostResolve,
+  ollamaPostProcessingWithHostResolve,
+  ollamaUnloadWithHostResolve,
+  ollamaWarmupWithHostResolve,
 };
 
-// ---- Ollama host resolution ---------------------------------------------
+import { runProviderOcr, runProviderPostProcessing } from "@/lib/ocr/provider-dispatch";
+export { runProviderOcr, runProviderPostProcessing };
 
-function getOllamaHostCandidates(rawEndpoint: string): string[] {
-  const rawCandidates = buildOllamaHostCandidates(rawEndpoint, getOllamaDiscoveryFallbackHost());
-  const safeCandidates = rawCandidates
-    .map((candidate) => {
-      try {
-        return enforceProviderEndpointPolicy("ollama", candidate, getOllamaDiscoveryFallbackHost());
-      } catch {
-        return "";
-      }
-    })
-    .filter(Boolean);
-
-  return safeCandidates.length > 0
-    ? Array.from(new Set(safeCandidates))
-    : [enforceProviderEndpointPolicy("ollama", rawEndpoint, getOllamaDiscoveryFallbackHost())];
-}
-
-function normalizeOllamaApiBase(rawEndpoint: string): string {
-  return normalizeHostEndpoint(rawEndpoint, getOllamaDiscoveryFallbackHost())
-    .replace(/\/api\/?$/i, "")
-    .replace(/\/v1\/?$/i, "");
-}
-
-function resolveOllamaRuntimeEndpoint(rawEndpoint: string): string {
-  const resolvedHost = resolveOllamaHostEndpoint(rawEndpoint, getOllamaDiscoveryFallbackHost());
-  return normalizeHostEndpoint(resolvedHost, getOllamaDiscoveryFallbackHost())
-    .replace(/\/api\/?$/i, "")
-    .replace(/\/v1\/?$/i, "");
-}
-
-function getCachedOllamaHost(endpoint: string): string | null {
-  const now = Date.now();
-  if (!ollamaModelCache.host) return null;
-  if (ollamaModelCache.expiresAt <= now || !ollamaModelCache.values.length) return null;
-  const candidates = getOllamaHostCandidates(endpoint).map(resolveOllamaRuntimeEndpoint);
-  if (candidates.includes(ollamaModelCache.host)) return ollamaModelCache.host;
-  return null;
-}
-
-function setOllamaModelCache(host: string, values: string[]) {
-  ollamaModelCache = {
-    values,
-    host,
-    expiresAt: Date.now() + OLLAMA_MODEL_CACHE_TTL_MS,
-  };
-}
-
-function getOllamaCandidatesForOcr(endpoint: string): string[] {
-  const candidates = getOllamaHostCandidates(endpoint).map(normalizeOllamaApiBase);
-  const normalizedFallback = normalizeOllamaApiBase(getOllamaDiscoveryFallbackHost());
-  if (!candidates.includes(normalizedFallback)) {
-    candidates.push(normalizedFallback);
-  }
-  return Array.from(new Set(candidates));
-}
-
-export async function getOllamaModels(endpoint: string): Promise<OllamaModelCatalogResult> {
-  const cachedHost = getCachedOllamaHost(endpoint);
-  if (cachedHost) {
-    return { host: cachedHost, models: ollamaModelCache.values };
-  }
-
-  const errors: string[] = [];
-  const candidates = getOllamaCandidatesForOcr(endpoint);
-
-  for (const host of candidates) {
-    for (const path of OLLAMA_DISCOVERY_PATHS) {
-      try {
-        const response = await fetchWithTimeout(`${host}${path}`, {
-          headers: { Accept: "application/json" },
-        });
-        const payload = await parseResponseText(response);
-        if (!response.ok) {
-          errors.push(`${host}${path}: ${response.status} ${parseServiceError(response, payload)}`);
-          continue;
-        }
-        if (!payload || typeof payload !== "object") {
-          errors.push(`${host}${path}: invalid Ollama model response`);
-          continue;
-        }
-        const candidatePayload = payload as {
-          models?: { name?: unknown }[];
-          data?: { name?: unknown }[];
-        };
-        const entries = Array.isArray(candidatePayload.models)
-          ? candidatePayload.models
-          : Array.isArray(candidatePayload.data)
-            ? candidatePayload.data
-            : [];
-        const values = Array.isArray(entries)
-          ? entries
-              .map((entry) => (typeof entry?.name === "string" ? entry.name : ""))
-              .filter((value): value is string => value.length > 0)
-          : [];
-        if (!values.length) {
-          errors.push(`${host}${path}: no models returned`);
-          continue;
-        }
-        const uniqueValues = Array.from(new Set(values));
-        setOllamaModelCache(host, uniqueValues);
-        return { host, models: uniqueValues };
-      } catch (error) {
-        errors.push(`${host}${path}: ${errorMessage(error, "Request failed")}`);
-      }
-    }
-  }
-
-  throw new ApiRouteError(`No reachable Ollama host found (${errors.join(" | ")})`, 502);
-}
-
-// ---- Route-level Ollama wrappers ----------------------------------------
-// Resolve raw user endpoint into candidate base URLs and add the network hint
-// on Ollama OCR failure. Provider runners themselves (in providers/ollama.ts)
-// take pre-resolved hosts; these wrappers wire env-derived host resolution.
-// Renamed from runOllamaOcr -> ollamaOcrWithHostResolve so the canonical
-// runOllamaOcr in providers/ollama.ts is the only public name with that
-// shape (no more import-as-Iter aliasing collision).
-
-export async function ollamaOcrWithHostResolve(
-  endpoint: string,
-  model: string,
-  prompt: string,
-  preview: string,
-  signal?: AbortSignal,
-): Promise<OcrRunResult> {
-  const hosts = getOllamaCandidatesForOcr(endpoint);
-  try {
-    return await runOllamaOcrIter(hosts, model, prompt, preview, signal);
-  } catch (error) {
-    if (error instanceof OcrStopRequestedError) throw error;
-    if (error instanceof ApiRouteError) {
-      let resolvedHost: string | null = null;
-      try {
-        resolvedHost = (await getOllamaModels(endpoint)).host;
-      } catch {
-        // keep fallback message context
-      }
-      const hint = resolvedHost
-        ? `Last reachable host was ${resolvedHost}.`
-        : "No reachable Ollama endpoint found.";
-      throw new ApiRouteError(`${hint} ${error.message}. ${OLLAMA_NETWORK_HINT}`, error.status);
-    }
-    throw error;
-  }
-}
-
-export function ollamaPostProcessingWithHostResolve(
-  endpoint: string,
-  model: string,
-  systemPrompt: string,
-  userPrompt: string,
-  outputFormat?: PostProcessOutputFormat,
-  signal?: AbortSignal,
-): Promise<PostProcessResult> {
-  return runOllamaPostProcessingIter(getOllamaCandidatesForOcr(endpoint), model, systemPrompt, userPrompt, outputFormat, signal);
-}
-
-export function ollamaUnloadWithHostResolve(endpoint: string, model: string): Promise<void> {
-  return unloadOllamaModelIter(getOllamaCandidatesForOcr(endpoint), model);
-}
-
-export function ollamaWarmupWithHostResolve(endpoint: string, model: string): Promise<void> {
-  return warmupOllamaModelIter(getOllamaCandidatesForOcr(endpoint), model);
-}
-
-// ---- Provider dispatch --------------------------------------------------
-
-interface ProviderHandler {
-  envKey: string | null;
-  runOcr: (
-    settings: ApiProviderSettings,
-    model: string,
-    prompt: string,
-    preview: string,
-    apiKey: string,
-    signal?: AbortSignal,
-  ) => Promise<OcrRunResult>;
-  runPostProcess: (
-    settings: ApiProviderSettings,
-    model: string,
-    systemPrompt: string,
-    userPrompt: string,
-    apiKey: string,
-    outputFormat: PostProcessOutputFormat,
-  ) => Promise<PostProcessResult>;
-}
-
-const PROVIDER_HANDLERS: Record<ProviderKind, ProviderHandler> = {
-  ollama: {
-    envKey: null,
-    runOcr: (s, m, p, pv, _k, sig) => ollamaOcrWithHostResolve(s.apiEndpoint, m, p, pv, sig),
-    runPostProcess: (s, m, sp, up, _k, of) =>
-      ollamaPostProcessingWithHostResolve(s.apiEndpoint, m, sp, up, of),
-  },
-  openrouter: {
-    envKey: "OPENROUTER_API_KEY",
-    runOcr: (s, m, p, pv, k, sig) =>
-      runCompatOcr(OPENROUTER_CONFIG, s.apiEndpoint, m, k, p, pv, sig),
-    runPostProcess: (s, m, sp, up, k, of) =>
-      runCompatPostProcessing(OPENROUTER_CONFIG, s.apiEndpoint, m, k, sp, up, of),
-  },
-  openai_compat: {
-    envKey: "OPENAI_COMPAT_API_KEY",
-    runOcr: (s, m, p, pv, k, sig) =>
-      runCompatOcr(OPENAI_COMPAT_CONFIG, s.apiEndpoint, m, k, p, pv, sig),
-    runPostProcess: (s, m, sp, up, k, of) =>
-      runCompatPostProcessing(OPENAI_COMPAT_CONFIG, s.apiEndpoint, m, k, sp, up, of),
-  },
-  mistral: {
-    envKey: "MISTRAL_API_KEY",
-    runOcr: (s, m, _p, pv, k, sig) => runMistralOcr(s.apiEndpoint, m, k, pv, sig),
-    runPostProcess: (s, m, sp, up, k, of) =>
-      runMistralPostProcessing(s.apiEndpoint, m, k, sp, up, of),
-  },
-};
-
-function resolveProviderApiKey(provider: ProviderKind, settings: ApiProviderSettings): string {
-  if (settings.apiKey) return settings.apiKey;
-  const envKey = PROVIDER_HANDLERS[provider].envKey;
-  return envKey ? (process.env[envKey] || "") : "";
-}
-
-export async function runProviderOcr(
-  provider: ProviderKind,
-  settings: ApiProviderSettings,
-  model: string,
-  prompt: string,
-  preview: string,
-  signal?: AbortSignal,
-): Promise<OcrRunResult> {
-  const handler = PROVIDER_HANDLERS[provider];
-  return handler.runOcr(settings, model, prompt, preview, resolveProviderApiKey(provider, settings), signal);
-}
-
-export async function runProviderPostProcessing(
-  provider: ProviderKind,
-  settings: ApiProviderSettings,
-  model: string,
-  systemPrompt: string,
-  userPrompt: string,
-  outputFormat: PostProcessOutputFormat,
-): Promise<PostProcessResult> {
-  const handler = PROVIDER_HANDLERS[provider];
-  return handler.runPostProcess(
-    settings,
-    model,
-    systemPrompt,
-    userPrompt,
-    resolveProviderApiKey(provider, settings),
-    outputFormat,
-  );
-}
-
-// ---- Pure helpers (progress, post-processing prompt, result builder) ----
-
-function clampProgress(value: number): number {
-  return Math.max(0, Math.min(100, Math.round(value)));
-}
-
-export function appendProgressEvent(
-  events: OcrProgressEvent[],
-  stage: OcrProgressStage,
-  message: string,
-): OcrProgressEvent[] {
-  const nextEvents = [...events, { at: new Date().toISOString(), stage, message }];
-  return nextEvents.slice(-60);
-}
-
-export function buildProgressMetadata(input: {
-  stage: OcrProgressStage;
-  message: string;
-  progressPct: number;
-  pageCount: number;
-  processedPages: number;
-  currentPage: number | null;
-  etaSeconds: number | null;
-  startedAt: string;
-  events: OcrProgressEvent[];
-  checkpoints: OcrPageCheckpoint[];
-  postProcessing: OcrProgressMetadata["postProcessing"];
-}): OcrProgressMetadata {
-  return {
-    stage: input.stage,
-    message: input.message,
-    progressPct: clampProgress(input.progressPct),
-    pageCount: input.pageCount,
-    processedPages: input.processedPages,
-    currentPage: input.currentPage,
-    etaSeconds: input.etaSeconds,
-    startedAt: input.startedAt,
-    updatedAt: new Date().toISOString(),
-    events: input.events,
-    checkpoints: input.checkpoints,
-    postProcessing: input.postProcessing,
-  };
-}
-
-export function buildPostProcessingPrompt(
-  postProcessing: PostProcessingSettings,
-): { systemPrompt: string; userPrompt: string } {
-  const outputInstruction =
-    postProcessing.outputFormat === "json"
-      ? "Return only valid JSON (no markdown code fences)."
-      : "Return markdown only.";
-
-  return {
-    systemPrompt:
-      "You are a precise post-processing assistant for OCR results. " +
-      "Follow the user instruction exactly. Do not invent missing facts. " +
-      "If data is missing, set fields to null or explicitly note missing values.",
-    userPrompt: [
-      "User instruction:",
-      postProcessing.instruction,
-      "",
-      "Output format requirement:",
-      outputInstruction,
-    ].join("\n"),
-  };
-}
-
-export function formatPageScopedText(
-  pages: Array<{ pageNumber: number; text: string }>,
-): string {
-  return pages
-    .map((page) => [`[PAGE ${page.pageNumber}]`, page.text.trim(), `[END PAGE ${page.pageNumber}]`].join("\n"))
-    .join("\n\n");
-}
-
-export function computeTextStats(text: string) {
-  const trimmed = text.trim();
-  return {
-    characterCount: trimmed.length,
-    wordCount: trimmed ? trimmed.split(/\s+/).filter(Boolean).length : 0,
-    lineCount: trimmed ? trimmed.split("\n").filter(Boolean).length : 0,
-  };
-}
-
-export function normalizePostProcessedText(
-  text: string,
-  outputFormat: PostProcessOutputFormat,
-): { text: string; parsedJson?: unknown } {
-  if (outputFormat !== "json") {
-    return { text: text.trim() };
-  }
-
-  const trimmed = text.trim();
-  const codeFenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
-  const jsonCandidate = (codeFenceMatch?.[1] || trimmed).trim();
-  try {
-    const parsed = JSON.parse(jsonCandidate);
-    return {
-      text: JSON.stringify(parsed, null, 2),
-      parsedJson: parsed,
-    };
-  } catch {
-    return { text: trimmed };
-  }
-}
-
-/** Convert a JS object into a Prisma InputJsonValue. Used for metadata blobs. */
-export function toJsonValue(value: unknown): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
-}
-
-export function buildJsonResult(
-  fileName: string,
-  model: string,
-  provider: ProviderKind,
-  settings: AdvancedSettings,
-  markdown: string,
-  structured: Record<string, unknown>,
-  metadata: Record<string, unknown> = {},
-): OcrJsonResult {
-  const normalizedMarkdown = markdown.trim();
-  return {
-    fileName,
-    extractedAt: new Date().toISOString(),
-    provider,
-    model,
-    settings,
-    text: normalizedMarkdown,
-    markdown: normalizedMarkdown,
-    structured,
-    metadata: {
-      ...computeTextStats(normalizedMarkdown),
-      provider,
-      ...metadata,
-    },
-  };
-}
-
-// ---- Page checkpoint adapters -------------------------------------------
-
-function toPageCheckpoint(page: ProcessedPageOutput): OcrPageCheckpoint {
-  return {
-    pageNumber: page.pageNumber,
-    status: "completed",
-    characterCount: page.text.length,
-    durationMs: page.durationMs,
-    previewText: page.text.trim().slice(0, 320),
-  };
-}
-
-function toPageRecord(page: ProcessedPageOutput) {
-  return {
-    pageNumber: page.pageNumber,
-    text: page.text,
-    structured: page.structured,
-    durationMs: page.durationMs,
-    metadata: page.metadata,
-  };
-}
-
-function toStructuredPagePayload(page: ProcessedPageOutput) {
-  return {
-    pageNumber: page.pageNumber,
-    durationMs: page.durationMs,
-    ...page.structured,
-  };
-}
-
-function toPageResultPayload(page: ProcessedPageOutput) {
-  return {
-    pageNumber: page.pageNumber,
-    durationMs: page.durationMs,
-    structured: page.structured,
-    ...page.metadata,
-  };
-}
 
 // ---- Persistence + finalization -----------------------------------------
 
