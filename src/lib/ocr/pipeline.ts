@@ -24,16 +24,12 @@ import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { dispatchJobWebhooks } from "@/lib/background/webhooks";
 import { db } from "@/lib/db";
 import {
-  normalizeProvider,
   type ProviderKind,
 } from "@/lib/ocr/endpoint-policy";
 import {
   clearOcrJobRunning,
   clearOcrJobStop,
-  isOcrJobStopRequested,
   markOcrJobRunning,
-  registerOcrJobAbortController,
-  unregisterOcrJobAbortController,
   withOcrJobSlot,
 } from "@/lib/ocr/job-control";
 import {
@@ -41,7 +37,6 @@ import {
   seedPostProcessingMeta,
   seedUsedOllamaModels,
 } from "@/lib/ocr/job-seed";
-import { appendPageMarkdown } from "@/lib/ocr/markdown-routing";
 import {
   getDefaultOpenAICompatApiUrl,
   getDefaultOpenAICompatFallbackModels,
@@ -56,9 +51,6 @@ import {
 import {
   listMistralModels,
 } from "@/lib/ocr/providers/mistral";
-import {
-  OcrStopRequestedError,
-} from "@/lib/ocr/providers/shared";
 import {
   type AdvancedSettings,
   type PostProcessingSettings,
@@ -178,6 +170,7 @@ import { runProviderOcr, runProviderPostProcessing } from "@/lib/ocr/provider-di
 export { runProviderOcr, runProviderPostProcessing };
 
 import { runOcrPages, type OrchestratorState } from "@/lib/ocr/pipeline-page-loop";
+import { runPostProcessingStage } from "@/lib/ocr/pipeline-post-processing-stage";
 
 
 // ---- Persistence + finalization -----------------------------------------
@@ -368,91 +361,20 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       pageCount: input.inputPreviews.length,
       pageResults: state.partialPageResults,
     };
-    let finalMarkdown = extractedMarkdown;
-    let postProcessedJson: unknown;
-    let postProcessedText: string | undefined;
 
-    if (input.postProcessingPayload.enabled) {
-      const postProcessingModel = selectedPostProcessModel;
-      const postProcessingProvider = normalizeProvider((input.settings).provider);
-      if (postProcessingProvider === "ollama") {
-        state.usedOllamaModels.add(postProcessingModel);
-        await ollamaWarmupWithHostResolve(input.settings.apiEndpoint, postProcessingModel);
-      }
-
-      state.progressEvents = appendProgressEvent(
-        state.progressEvents,
-        "post_processing",
-        `Running post-processing with ${postProcessingModel}`,
-      );
-      state.latestMetadata = snapshotMetadata({
-        stage: "post_processing",
-        message: `Applying post-processing with ${postProcessingModel}`,
-        progressPct: 90,
-        etaSeconds: 2,
-      });
-      await db.ocrJob.update({
-        where: { id: input.jobId },
-        data: { metadata: toJsonValue(state.latestMetadata) },
-      });
-
-      const { systemPrompt, userPrompt } = buildPostProcessingPrompt(input.postProcessingPayload);
-      const postProcessRequestText = [
-        userPrompt,
-        "",
-        "OCR source text grouped by page:",
-        pageScopedText,
-      ].join("\n");
-
-      try {
-        const postProcessResult = await runProviderPostProcessing(
-          postProcessingProvider,
-          input.settings,
-          postProcessingModel,
-          systemPrompt,
-          postProcessRequestText,
-          input.postProcessingPayload.outputFormat,
-        );
-
-        const normalizedPostProcessed = normalizePostProcessedText(
-          postProcessResult.text,
-          input.postProcessingPayload.outputFormat,
-        );
-        if (normalizedPostProcessed.text) {
-          postProcessedText = normalizedPostProcessed.text;
-          postProcessedJson = normalizedPostProcessed.parsedJson;
-          if (input.postProcessingPayload.outputFormat === "markdown") {
-            finalMarkdown = normalizedPostProcessed.text;
-          }
-        }
-
-        state.postProcessingMeta = {
-          enabled: true,
-          applied: Boolean(postProcessedText),
-          outputFormat: input.postProcessingPayload.outputFormat,
-          instruction: input.postProcessingPayload.instruction,
-          model: postProcessingModel,
-          provider: postProcessingProvider,
-        };
-        extractedMetadata.postProcessing = {
-          ...state.postProcessingMeta,
-          ...postProcessResult.metadata,
-        };
-      } catch (error) {
-        state.postProcessingMeta = {
-          enabled: true,
-          applied: false,
-          outputFormat: input.postProcessingPayload.outputFormat,
-          instruction: input.postProcessingPayload.instruction,
-          model: postProcessingModel,
-          provider: postProcessingProvider,
-          error: errorMessage(error, "Post-processing failed"),
-        };
-        extractedMetadata.postProcessing = state.postProcessingMeta;
-      }
-    } else {
-      extractedMetadata.postProcessing = { enabled: false };
-    }
+    const postProcessing = await runPostProcessingStage(state, {
+      jobId: input.jobId,
+      settings: input.settings,
+      postProcessingPayload: input.postProcessingPayload,
+      postProcessingModel: selectedPostProcessModel,
+      pageScopedText,
+      extractedMarkdown,
+      snapshot: snapshotMetadata,
+    });
+    const finalMarkdown = postProcessing.finalMarkdown;
+    const postProcessedText = postProcessing.postProcessedText;
+    const postProcessedJson = postProcessing.postProcessedJson;
+    extractedMetadata.postProcessing = postProcessing.postProcessingForExtractedMetadata;
 
     const result = buildJsonResult(
       input.fileName,

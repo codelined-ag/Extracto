@@ -85,7 +85,7 @@ describe("ChromaAdapter.upsert", () => {
   });
 
   it("get-or-creates the collection then posts ids/documents/embeddings/metadatas", async () => {
-    const { fetch: f, calls } = recordingFetch([
+    const { fetch: f } = recordingFetch([
       // create
       (url, init) => {
         expect(url).toBe("http://c/api/v1/collections");
@@ -117,7 +117,7 @@ describe("ChromaAdapter.upsert", () => {
   });
 
   it("attaches dimensions metadata at create time when configured", async () => {
-    const { fetch: f, calls } = recordingFetch([
+    const { fetch: f } = recordingFetch([
       (_u, init) => {
         const body = JSON.parse(init.body as string);
         expect(body.metadata?.dimension).toBe(384);
@@ -130,7 +130,7 @@ describe("ChromaAdapter.upsert", () => {
   });
 
   it("uses contentHash for ids when present", async () => {
-    const { fetch: f, calls } = recordingFetch([
+    const { fetch: f } = recordingFetch([
       () => jsonResponse({ id: "col", name: "x" }),
       (_u, init) => {
         const body = JSON.parse(init.body as string);
