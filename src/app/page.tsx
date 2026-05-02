@@ -1357,7 +1357,13 @@ export default function ExtractoPage() {
 
  toast({
  title: t("File aggiunti","Files added","Fichiers ajoutés","Archivos añadidos","Dateien hinzugefügt"),
- description: t(`${newFiles.length} file pronti per l'OCR`, `${newFiles.length} file(s) ready for OCR processing`),
+ description: t(
+`${newFiles.length} file pronti per l'OCR`,
+`${newFiles.length} file${newFiles.length === 1 ?"":"s"} ready for OCR`,
+`${newFiles.length} fichier${newFiles.length === 1 ?"":"s"} prêt${newFiles.length === 1 ?"":"s"} pour l'OCR`,
+`${newFiles.length} archivo${newFiles.length === 1 ?"":"s"} listo${newFiles.length === 1 ?"":"s"} para el OCR`,
+`${newFiles.length} ${newFiles.length === 1 ?"Datei":"Dateien"} bereit für OCR`,
+ ),
  });
  };
 
@@ -1407,7 +1413,13 @@ export default function ExtractoPage() {
 
  toast({
  title: t("Copiato negli appunti","Copied to clipboard!","Copié dans le presse-papiers !","¡Copiado al portapapeles!","In Zwischenablage kopiert!"),
- description: t(`Contenuto ${type ==="md"?"Markdown":"JSON"} copiato`, `${type ==="md"?"Markdown":"JSON"} content has been copied`),
+ description: t(
+`Contenuto ${type ==="md"?"Markdown":"JSON"} copiato`,
+`${type ==="md"?"Markdown":"JSON"} content has been copied`,
+`Contenu ${type ==="md"?"Markdown":"JSON"} copié`,
+`Contenido ${type ==="md"?"Markdown":"JSON"} copiado`,
+`${type ==="md"?"Markdown":"JSON"}-Inhalt kopiert`,
+ ),
  });
  };
 
@@ -1427,7 +1439,13 @@ export default function ExtractoPage() {
 
  toast({
  title: t("Download avviato","Download started","Téléchargement démarré","Descarga iniciada","Download gestartet"),
- description: t(`${selectedFile.name}.${type ==="md"?"md":"json"} in download`, `${selectedFile.name}.${type ==="md"?"md":"json"} is being downloaded`),
+ description: t(
+`${selectedFile.name}.${type ==="md"?"md":"json"} in download`,
+`${selectedFile.name}.${type ==="md"?"md":"json"} is downloading`,
+`${selectedFile.name}.${type ==="md"?"md":"json"} en téléchargement`,
+`Descargando ${selectedFile.name}.${type ==="md"?"md":"json"}`,
+`${selectedFile.name}.${type ==="md"?"md":"json"} wird heruntergeladen`,
+ ),
  });
  };
 
@@ -1470,7 +1488,13 @@ export default function ExtractoPage() {
 
  toast({
  title: t("Esportazione completata","Export complete!","Exportation terminée !","¡Exportación completada!","Export abgeschlossen!"),
- description: t(`${completedFiles.length} file esportati in ZIP`, `${completedFiles.length} files exported to ZIP archive`),
+ description: t(
+`${completedFiles.length} file esportati in ZIP`,
+`${completedFiles.length} files exported to a ZIP archive`,
+`${completedFiles.length} fichiers exportés dans une archive ZIP`,
+`${completedFiles.length} archivos exportados a ZIP`,
+`${completedFiles.length} Dateien als ZIP exportiert`,
+ ),
  });
  };
 
@@ -1698,7 +1722,13 @@ export default function ExtractoPage() {
  stage: resume ?"resuming":"queued",
  stageMessage: resume
  ? t("Ripresa dal checkpoint...","Resuming from checkpoint...","Reprise depuis le checkpoint...","Reanudando desde checkpoint...","Wird vom Checkpoint fortgesetzt...")
- : t(`In coda per OCR (${pagePreviews.length} pagine)`, `Queued for OCR (${pagePreviews.length} pages)`),
+ : t(
+`In coda per OCR (${pagePreviews.length} pagine)`,
+`Queued for OCR (${pagePreviews.length} pages)`,
+`En file d'attente OCR (${pagePreviews.length} pages)`,
+`En cola para OCR (${pagePreviews.length} páginas)`,
+`In OCR-Warteschlange (${pagePreviews.length} Seiten)`,
+ ),
  pageCount: pagePreviews.length,
  processedPages: entry.processedPages || 0,
  etaSeconds: null,
@@ -1748,7 +1778,13 @@ export default function ExtractoPage() {
  } else if (result.status ==="paused") {
  toast({
  title: t("OCR in pausa","OCR paused","OCR en pause","OCR en pausa","OCR pausiert"),
- description: t(`${file.name} messo in pausa al checkpoint. Premi Riprendi per continuare.`, `${file.name} paused at checkpoint. Click Resume to continue.`),
+ description: t(
+`${file.name} messo in pausa al checkpoint. Premi Riprendi per continuare.`,
+`${file.name} paused at checkpoint. Click Resume to continue.`,
+`${file.name} en pause au checkpoint. Cliquez sur Reprendre pour continuer.`,
+`${file.name} en pausa en el checkpoint. Pulsa Reanudar para continuar.`,
+`${file.name} am Checkpoint pausiert. Auf Fortsetzen klicken, um weiterzumachen.`,
+ ),
  });
  break;
  }
@@ -1765,7 +1801,13 @@ export default function ExtractoPage() {
  if (completedInRun > 0) {
  toast({
  title: t("Elaborazione completata","Processing complete","Traitement terminé","Procesamiento completado","Verarbeitung abgeschlossen"),
- description: t(`${completedInRun} file elaborati con successo`, `${completedInRun} file(s) processed successfully`),
+ description: t(
+`${completedInRun} file elaborati con successo`,
+`${completedInRun} file${completedInRun === 1 ?"":"s"} processed successfully`,
+`${completedInRun} fichier${completedInRun === 1 ?"":"s"} traité${completedInRun === 1 ?"":"s"} avec succès`,
+`${completedInRun} archivo${completedInRun === 1 ?"":"s"} procesado${completedInRun === 1 ?"":"s"} correctamente`,
+`${completedInRun} ${completedInRun === 1 ?"Datei":"Dateien"} erfolgreich verarbeitet`,
+ ),
  });
  }
  };
@@ -1815,7 +1857,13 @@ export default function ExtractoPage() {
  if (result.status ==="completed") {
  toast({
  title: t("Ripresa completata","Resume complete","Reprise terminée","Reanudación completa","Fortsetzen abgeschlossen"),
- description: t(`${file.name} ripreso e completato con successo.`, `${file.name} resumed and finished successfully.`),
+ description: t(
+`${file.name} ripreso e completato con successo.`,
+`${file.name} resumed and finished successfully.`,
+`${file.name} repris et terminé avec succès.`,
+`${file.name} reanudado y completado con éxito.`,
+`${file.name} fortgesetzt und erfolgreich abgeschlossen.`,
+ ),
  });
  }
  } catch (error) {
@@ -2536,7 +2584,7 @@ export default function ExtractoPage() {
  <span className={cn(
 "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium",
  selectedHistoryJob.status ==="FAILED"?"bg-destructive/15 text-destructive"
- : selectedHistoryJob.status ==="COMPLETED"?"bg-[oklch(0.55_0.13_150)]/12 text-[oklch(0.55_0.13_150)]"
+ : selectedHistoryJob.status ==="COMPLETED"?"bg-[oklch(0.55_0.13_150)]/15 text-[oklch(0.55_0.13_150)]"
  :"bg-accent text-accent-foreground",
  )}>
  <span className="status-dot"/>
@@ -2719,13 +2767,13 @@ export default function ExtractoPage() {
  {completedCount > 0 && (
  <Badge variant="secondary"className="text-xs">
  <CircleCheckIcon size={12} className="inline-flex items-center justify-center mr-1"/>
- {t(`${completedCount} completati`, `${completedCount} done`)}
+ {t(`${completedCount} completati`,`${completedCount} done`,`${completedCount} terminés`,`${completedCount} listos`,`${completedCount} fertig`)}
  </Badge>
  )}
  {errorCount > 0 && (
  <Badge variant="destructive"className="text-xs">
  <AlertCircle className="h-3 w-3 mr-1"/>
- {t(`${errorCount} falliti`, `${errorCount} failed`)}
+ {t(`${errorCount} falliti`,`${errorCount} failed`,`${errorCount} échoués`,`${errorCount} fallidos`,`${errorCount} fehlgeschlagen`)}
  </Badge>
  )}
  </div>
@@ -2778,7 +2826,9 @@ export default function ExtractoPage() {
  </span>
  {typeof file.pageCount ==="number"? (
  <span className="text-[11px] text-muted-foreground">
- {file.pageCount} {t(file.pageCount === 1 ?"pagina":"pagine", file.pageCount === 1 ?"page":"pages")}
+ {file.pageCount} {file.pageCount === 1
+ ? t("pagina","page","page","página","Seite")
+ : t("pagine","pages","pages","páginas","Seiten")}
  </span>
  ) : null}
  {file.status ==="processing"&& (

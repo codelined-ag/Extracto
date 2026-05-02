@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { db } from "@/lib/db";
-import { isAllowedExternalUrl, parseAllowlist } from "@/lib/url-safety";
+import { parseAllowlist, resolveAndCheckExternalUrl } from "@/lib/url-safety";
 
 const SUPPORTED_EVENTS = ["job.completed", "job.failed"] as const;
 export type WebhookEvent = (typeof SUPPORTED_EVENTS)[number];
@@ -143,7 +143,7 @@ export async function dispatchJobWebhooks(
       const controller = new AbortController();
       const timeoutHandle = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
       try {
-        const safety = isAllowedExternalUrl(webhook.url, parseAllowlist(process.env.WEBHOOK_ALLOWED_HOSTS));
+        const safety = await resolveAndCheckExternalUrl(webhook.url, parseAllowlist(process.env.WEBHOOK_ALLOWED_HOSTS));
         if (!safety.ok) {
           throw new Error(`Refusing delivery to ${webhook.url}: ${safety.reason}`);
         }

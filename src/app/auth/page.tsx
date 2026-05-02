@@ -335,6 +335,7 @@ export default function AuthPage() {
                     value={form.password}
                     onChange={(v) => setForm((c) => ({ ...c, password: v }))}
                     helper={t("Minimo 12 caratteri.", "Minimum 12 characters.", "Au moins 12 caractères.", "Mínimo 12 caracteres.", "Mindestens 12 Zeichen.")}
+                    autoComplete="new-password"
                   />
                   <Button type="submit" disabled={loading} className="w-full group" size="lg">
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -400,7 +401,7 @@ function FieldEmail({ id, label, value, onChange, helper }: FieldProps) {
   );
 }
 
-function FieldPassword({ id, label, value, onChange, helper }: FieldProps) {
+function FieldPassword({ id, label, value, onChange, helper, autoComplete = "current-password" }: FieldProps & { autoComplete?: "current-password" | "new-password" }) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id} className="text-xs uppercase tracking-wider text-muted-foreground/80">{label}</Label>
@@ -409,7 +410,7 @@ function FieldPassword({ id, label, value, onChange, helper }: FieldProps) {
         <Input
           id={id}
           type="password"
-          autoComplete="current-password"
+          autoComplete={autoComplete}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="pl-10"

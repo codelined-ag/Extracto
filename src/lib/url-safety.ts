@@ -38,11 +38,22 @@ function isPrivateIPv4(ip: string): boolean {
 
 function isPrivateIPv6(ip: string): boolean {
   const lower = ip.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!lower.includes(":")) return false;
   if (lower === "::" || lower === "::1") return true;
-  if (lower.startsWith("fe80:") || lower.startsWith("fc") || lower.startsWith("fd")) return true;
+  if (/^fe[89ab][0-9a-f]?:/.test(lower)) return true;
+  if (/^f[cd][0-9a-f]{2}:/.test(lower)) return true;
+  if (/^fec[0-9a-f]:/.test(lower)) return true;
+  if (lower.startsWith("ff")) return true;
   if (lower.startsWith("::ffff:")) {
     const tail = lower.slice("::ffff:".length);
     return isPrivateIPv4(tail);
+  }
+  if (lower.startsWith("2002:")) {
+    const parts = lower.split(":");
+    if (parts.length >= 3) {
+      const ipv4 = `${parseInt(parts[1].slice(0, 2) || "0", 16)}.${parseInt(parts[1].slice(2, 4) || "0", 16)}.${parseInt(parts[2].slice(0, 2) || "0", 16)}.${parseInt(parts[2].slice(2, 4) || "0", 16)}`;
+      return isPrivateIPv4(ipv4);
+    }
   }
   return false;
 }
@@ -103,4 +114,29 @@ export function isAllowedExternalUrl(rawUrl: string, allowlist: string[]): UrlSa
 export function parseAllowlist(raw: string | undefined | null): string[] {
   if (!raw) return [];
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+export async function resolveAndCheckExternalUrl(rawUrl: string, allowlist: string[]): Promise<UrlSafetyResult> {
+  const surface = isAllowedExternalUrl(rawUrl, allowlist);
+  if (!surface.ok) return surface;
+  const parsed = new URL(rawUrl);
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname) || hostname.includes(":")) {
+    return surface;
+  }
+  try {
+    const dns = await import("node:dns/promises");
+    const records = await dns.lookup(hostname, { all: true, verbatim: true });
+    if (!records.length) {
+      return { ok: false, reason: `${hostname} did not resolve to any address` };
+    }
+    for (const r of records) {
+      if (isPrivateOrLoopbackHost(r.address)) {
+        return { ok: false, reason: `${hostname} resolves to a private address (${r.address})` };
+      }
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: `DNS lookup failed for ${hostname}: ${err instanceof Error ? err.message : String(err)}` };
+  }
 }
