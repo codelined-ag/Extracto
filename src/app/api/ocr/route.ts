@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus, Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
 
-import { ApiProviderSettings, getApiSettings, normalizeMistralEndpoint } from "@/lib/settings-store";
+import { ApiProviderSettings, FALLBACK_OLLAMA_HOST, getApiSettings } from "@/lib/settings-store";
+import { normalizeMistralEndpoint as normalizeMistralEndpointBase } from "@/lib/ocr/provider-normalization";
+import { getStringField, parsePreviewImageData, parseServiceError } from "@/lib/ocr/error-parsing";
 import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
 import {
   maybeUploadResultJson,
   maybeUploadResultText,
 } from "@/lib/result-store";
-import { dispatchJobWebhooks } from "@/lib/webhooks";
+import { dispatchJobWebhooks } from "@/lib/background/webhooks";
 import { db } from "@/lib/db";
 import { enforceProviderEndpointPolicy, normalizeProvider, ProviderKind } from "@/lib/endpoint-policy";
 import {
@@ -44,6 +46,9 @@ import {
   OPENROUTER_REFERER,
   OPENROUTER_TITLE,
 } from "@/lib/ocr/provider-config";
+
+const normalizeMistralEndpoint = (raw: string) =>
+  normalizeMistralEndpointBase(raw, DEFAULT_MISTRAL_API_URL);
 
 interface OCRRequestBody {
   jobId?: unknown;
@@ -154,14 +159,6 @@ class OcrStopRequestedError extends Error {
   }
 }
 
-const DEFAULT_OLLAMA_HOST = normalizeHostEndpoint(
-  process.env.OLLAMA_HOST || "",
-  OLLAMA_DEFAULT_HOST
-);
-const FALLBACK_OLLAMA_HOST = resolveOllamaHostEndpoint(
-  DEFAULT_OLLAMA_HOST,
-  OLLAMA_DEFAULT_HOST,
-);
 const APP_NETWORK_MODE = (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase();
 const OPENROUTER_MODEL_CACHE_TTL_MS = 5 * 60_000;
 const OPENAI_COMPAT_MODEL_CACHE_TTL_MS = 5 * 60_000;
@@ -233,7 +230,7 @@ function getCachedOllamaHost(endpoint: string): string | null {
   if (ollamaModelCache.expiresAt <= now || !ollamaModelCache.values.length) {
     return null;
   }
-  const candidates = getOllamaHostCandidates(endpoint).map(normalizeOllamaEndpoint);
+  const candidates = getOllamaHostCandidates(endpoint).map(resolveOllamaRuntimeEndpoint);
   if (candidates.includes(ollamaModelCache.host)) {
     return ollamaModelCache.host;
   }
@@ -290,7 +287,7 @@ function normalizeProviderEndpoint(provider: ProviderKind, rawEndpoint: string):
     OLLAMA_DISCOVERY_FALLBACK_HOST);
 }
 
-function normalizeApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
+function normalizeAndValidateApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
   const provider = normalizeProvider(raw.provider);
   return {
     provider,
@@ -348,7 +345,7 @@ function normalizeOpenRouterApiBase(rawEndpoint: string): string {
   }
 }
 
-function normalizeOllamaEndpoint(rawEndpoint: string): string {
+function resolveOllamaRuntimeEndpoint(rawEndpoint: string): string {
   const resolvedHost = resolveOllamaHostEndpoint(
     rawEndpoint,
     OLLAMA_DISCOVERY_FALLBACK_HOST,
@@ -401,48 +398,8 @@ function resolveMistralOcrModel(selectedModel: string): string {
   return isLikelyMistralOcrModel(selectedModel) ? selectedModel : DEFAULT_MISTRAL_OCR_MODEL;
 }
 
-function parsePreviewImageData(preview: string): {
-  mimeType: string;
-  base64: string;
-  dataUrl: string;
-} {
-  if (!preview) {
-    return {
-      mimeType: "image/jpeg",
-      base64: "",
-      dataUrl: "",
-    };
-  }
-
-  const match = preview.match(/^data:([^;]+);base64,(.*)$/i);
-  if (match) {
-    const mimeType = match[1]?.trim() || "image/jpeg";
-    const base64 = match[2] || "";
-    return {
-      mimeType,
-      base64,
-      dataUrl: `data:${mimeType};base64,${base64}`,
-    };
-  }
-
-  if (preview.startsWith("data:") && preview.includes(",")) {
-    const base64 = preview.slice(preview.indexOf(",") + 1);
-    const mimeMatch = preview.match(/^data:([^;,]+)/i);
-    const mimeType = mimeMatch?.[1]?.trim() || "image/jpeg";
-    return {
-      mimeType,
-      base64,
-      dataUrl: `data:${mimeType};base64,${base64}`,
-    };
-  }
-
-  const base64 = preview.trim();
-  return {
-    mimeType: "image/jpeg",
-    base64,
-    dataUrl: `data:image/jpeg;base64,${base64}`,
-  };
-}
+// parsePreviewImageData, getStringField, parseServiceError moved to
+// src/lib/ocr/error-parsing.ts (imported above) for unit testability.
 
 function buildPrompt(settings: AdvancedSettings): string {
   const languageInstruction =
@@ -832,60 +789,7 @@ async function parseResponseText(response: Response): Promise<unknown> {
   }
 }
 
-function parseServiceError(response: Response, payload: unknown): string {
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "error" in payload &&
-    typeof (payload as { error?: unknown }).error === "object" &&
-    (payload as { error: Record<string, unknown> }).error !== null
-  ) {
-    const nestedError = (payload as { error: Record<string, unknown> }).error;
-    if (typeof nestedError.message === "string") {
-      return nestedError.message;
-    }
-    if (typeof nestedError.detail === "string") {
-      return nestedError.detail;
-    }
-    const nestedErrors = nestedError.errors as unknown[] | undefined;
-    if (
-      Array.isArray(nestedErrors) &&
-      nestedErrors.length > 0 &&
-      typeof nestedErrors[0] === "string"
-    ) {
-      return nestedErrors[0] as string;
-    }
-  }
-
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "error" in payload &&
-    typeof (payload as { error?: unknown }).error === "string"
-  ) {
-    return (payload as { error: string }).error;
-  }
-
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "message" in payload &&
-    typeof (payload as { message?: unknown }).message === "string"
-  ) {
-    return (payload as { message: string }).message;
-  }
-
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "detail" in payload &&
-    typeof (payload as { detail?: unknown }).detail === "string"
-  ) {
-    return (payload as { detail: string }).detail;
-  }
-
-  return response.statusText || "Request failed";
-}
+// getStringField + parseServiceError moved to src/lib/ocr/error-parsing.ts.
 
 async function fetchWithTimeout(
   input: string,
@@ -1020,27 +924,77 @@ function resolveProvider(model: string, settings: ApiProviderSettings): Provider
 
 type OcrRunResult = { text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> };
 
+type PostProcessResult = { text: string; metadata: Record<string, unknown> };
+
+interface ProviderHandler {
+  envKey: string;
+  runOcr: (
+    settings: ApiProviderSettings,
+    model: string,
+    prompt: string,
+    preview: string,
+    apiKey: string,
+    signal?: AbortSignal,
+  ) => Promise<OcrRunResult>;
+  runPostProcess: (
+    settings: ApiProviderSettings,
+    model: string,
+    systemPrompt: string,
+    userPrompt: string,
+    apiKey: string,
+    outputFormat: PostProcessOutputFormat,
+  ) => Promise<PostProcessResult>;
+}
+
+// Single registry of per-provider OCR + post-processing handlers. TypeScript
+// enforces that every ProviderKind has an entry, so adding a new provider is
+// one declaration here rather than three if-chains across the file.
+const PROVIDER_HANDLERS: Record<ProviderKind, ProviderHandler> = {
+  ollama: {
+    envKey: "",
+    runOcr: (s, m, p, pv, _k, sig) => runOllamaOcr(s.apiEndpoint, m, p, pv, sig),
+    runPostProcess: (s, m, sp, up, _k, _of) =>
+      runOllamaPostProcessing(s.apiEndpoint, m, sp, up),
+  },
+  openrouter: {
+    envKey: "OPENROUTER_API_KEY",
+    runOcr: (s, m, p, pv, k, sig) =>
+      runCompatOcr(OPENROUTER_CONFIG, s.apiEndpoint, m, k, p, pv, sig),
+    runPostProcess: (s, m, sp, up, k, of) =>
+      runCompatPostProcessing(OPENROUTER_CONFIG, s.apiEndpoint, m, k, sp, up, of),
+  },
+  openai_compat: {
+    envKey: "OPENAI_COMPAT_API_KEY",
+    runOcr: (s, m, p, pv, k, sig) =>
+      runCompatOcr(OPENAI_COMPAT_CONFIG, s.apiEndpoint, m, k, p, pv, sig),
+    runPostProcess: (s, m, sp, up, k, of) =>
+      runCompatPostProcessing(OPENAI_COMPAT_CONFIG, s.apiEndpoint, m, k, sp, up, of),
+  },
+  mistral: {
+    envKey: "MISTRAL_API_KEY",
+    runOcr: (s, m, _p, pv, k, sig) => runMistralOcr(s.apiEndpoint, m, k, pv, sig),
+    runPostProcess: (s, m, sp, up, k, of) =>
+      runMistralPostProcessing(s.apiEndpoint, m, k, sp, up, of),
+  },
+};
+
+function resolveProviderApiKey(provider: ProviderKind, settings: ApiProviderSettings): string {
+  if (settings.apiKey) return settings.apiKey;
+  const envKey = PROVIDER_HANDLERS[provider].envKey;
+  return envKey ? (process.env[envKey] || "") : "";
+}
+
 async function runProviderOcr(
   provider: ProviderKind,
   settings: ApiProviderSettings,
   model: string,
   prompt: string,
   preview: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<OcrRunResult> {
-  if (provider === "ollama") {
-    return runOllamaOcr(settings.apiEndpoint, model, prompt, preview, signal);
-  }
-  if (provider === "openrouter") {
-    return runCompatOcr(OPENROUTER_CONFIG, settings.apiEndpoint, model, settings.apiKey || process.env.OPENROUTER_API_KEY || "", prompt, preview, signal);
-  }
-  if (provider === "openai_compat") {
-    return runCompatOcr(OPENAI_COMPAT_CONFIG, settings.apiEndpoint, model, settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "", prompt, preview, signal);
-  }
-  return runMistralOcr(settings.apiEndpoint, model, settings.apiKey || process.env.MISTRAL_API_KEY || "", preview, signal);
+  const handler = PROVIDER_HANDLERS[provider];
+  return handler.runOcr(settings, model, prompt, preview, resolveProviderApiKey(provider, settings), signal);
 }
-
-type PostProcessResult = { text: string; metadata: Record<string, unknown> };
 
 async function runProviderPostProcessing(
   provider: ProviderKind,
@@ -1048,18 +1002,17 @@ async function runProviderPostProcessing(
   model: string,
   systemPrompt: string,
   userPrompt: string,
-  outputFormat: PostProcessOutputFormat
+  outputFormat: PostProcessOutputFormat,
 ): Promise<PostProcessResult> {
-  if (provider === "ollama") {
-    return runOllamaPostProcessing(settings.apiEndpoint, model, systemPrompt, userPrompt);
-  }
-  if (provider === "openrouter") {
-    return runCompatPostProcessing(OPENROUTER_CONFIG, settings.apiEndpoint, model, settings.apiKey || process.env.OPENROUTER_API_KEY || "", systemPrompt, userPrompt, outputFormat);
-  }
-  if (provider === "openai_compat") {
-    return runCompatPostProcessing(OPENAI_COMPAT_CONFIG, settings.apiEndpoint, model, settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "", systemPrompt, userPrompt, outputFormat);
-  }
-  return runMistralPostProcessing(settings.apiEndpoint, model, settings.apiKey || process.env.MISTRAL_API_KEY || "", systemPrompt, userPrompt, outputFormat);
+  const handler = PROVIDER_HANDLERS[provider];
+  return handler.runPostProcess(
+    settings,
+    model,
+    systemPrompt,
+    userPrompt,
+    resolveProviderApiKey(provider, settings),
+    outputFormat,
+  );
 }
 
 
@@ -2507,13 +2460,12 @@ export async function GET(request: NextRequest) {
     if (scopeError) return scopeError;
     const userId = auth.userId;
 
-    const storedSettings = normalizeApiSettings(await getApiSettings(userId));
+    const storedSettings = normalizeAndValidateApiSettings(await getApiSettings(userId));
     const query = new URL(request.url).searchParams;
     const provider = normalizeProvider(query.get("provider") || undefined);
     const catalog = await getModelCatalog(storedSettings);
     return NextResponse.json({ success: true, models: catalog[provider] });
   } catch (error) {
-    console.error("Model catalog error:", error);
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Failed to fetch model catalog",
@@ -2564,7 +2516,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const storedSettings = normalizeApiSettings(await getApiSettings(userId));
+    const storedSettings = normalizeAndValidateApiSettings(await getApiSettings(userId));
     const body = (await request.json().catch(() => null)) as OCRRequestBody | null;
 
     if (!body || typeof body !== "object" || Array.isArray(body)) {
