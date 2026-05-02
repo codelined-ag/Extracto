@@ -5,7 +5,7 @@ interface CounterEntry {
 
 const counters = new Map<string, CounterEntry>();
 
-function key(name: string): CounterEntry {
+function getOrCreateCounter(name: string): CounterEntry {
   let entry = counters.get(name);
   if (!entry) {
     entry = { total: 0, byLabel: new Map() };
@@ -27,10 +27,10 @@ export function incrCounter(
   labels?: Record<string, string>,
   delta = 1
 ): void {
-  const entry = key(name);
+  const entry = getOrCreateCounter(name);
   entry.total += delta;
-  const lk = buildLabelKey(labels);
-  entry.byLabel.set(lk, (entry.byLabel.get(lk) ?? 0) + delta);
+  const labelKey = buildLabelKey(labels);
+  entry.byLabel.set(labelKey, (entry.byLabel.get(labelKey) ?? 0) + delta);
 }
 
 export function getCounters(): ReadonlyMap<string, CounterEntry> {

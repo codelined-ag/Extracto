@@ -16,7 +16,7 @@ const parseLimit = (value: string | null): number => {
   return Math.min(parsed, MAX_PAGE_SIZE);
 };
 
-const parseStatusFilter = (value: string | null) => {
+const parseStatusFilter = (value: string | null): OcrJobStatus | null | undefined => {
   const normalized = value?.trim().toUpperCase();
   if (!normalized) return undefined;
   return Object.values(OcrJobStatus).includes(normalized as OcrJobStatus)

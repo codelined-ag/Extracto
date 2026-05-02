@@ -73,7 +73,7 @@ interface ModelCatalog {
 interface OcrJsonResult {
   fileName: string;
   extractedAt: string;
-  provider: "ollama" | "mistral" | "openrouter" | "openai_compat";
+  provider: ProviderKind;
   model: string;
   settings: AdvancedSettings;
   text: string;
@@ -83,7 +83,7 @@ interface OcrJsonResult {
     characterCount: number;
     wordCount: number;
     lineCount: number;
-    provider: "ollama" | "mistral" | "openrouter" | "openai_compat";
+    provider: ProviderKind;
     [key: string]: unknown;
   };
   rawExtractionText?: string;
@@ -133,7 +133,7 @@ interface OcrProgressMetadata {
     outputFormat?: PostProcessOutputFormat;
     instruction?: string;
     model?: string;
-    provider?: "ollama" | "mistral" | "openrouter" | "openai_compat";
+    provider?: ProviderKind;
     error?: string;
   };
 }
@@ -315,46 +315,32 @@ function normalizePreviewForHistory(preview: string): string | null {
   return trimmed;
 }
 
+function normalizeProviderEndpoint(provider: ProviderKind, rawEndpoint: string): string {
+  if (provider === "mistral") {
+    return enforceProviderEndpointPolicy("mistral",
+      normalizeMistralOcrEndpoint(rawEndpoint || DEFAULT_MISTRAL_API_URL),
+      DEFAULT_MISTRAL_API_URL);
+  }
+  if (provider === "openrouter") {
+    return enforceProviderEndpointPolicy("openrouter",
+      normalizeOpenRouterApiBase(rawEndpoint || DEFAULT_OPENROUTER_API_URL),
+      DEFAULT_OPENROUTER_API_URL);
+  }
+  if (provider === "openai_compat") {
+    return enforceProviderEndpointPolicy("openai_compat",
+      normalizeOpenAICompatApiBase(rawEndpoint || DEFAULT_OPENAI_COMPAT_API_URL),
+      DEFAULT_OPENAI_COMPAT_API_URL);
+  }
+  return enforceProviderEndpointPolicy("ollama",
+    resolveOllamaHostEndpoint(rawEndpoint || OLLAMA_DISCOVERY_FALLBACK_HOST, OLLAMA_DISCOVERY_FALLBACK_HOST),
+    OLLAMA_DISCOVERY_FALLBACK_HOST);
+}
+
 function normalizeApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
   const provider = normalizeProvider(raw.provider);
-  let normalizedEndpoint: string;
-  if (provider === "mistral") {
-    normalizedEndpoint = normalizeMistralOcrEndpoint(raw.apiEndpoint || DEFAULT_MISTRAL_API_URL);
-  } else if (provider === "openrouter") {
-    normalizedEndpoint = normalizeOpenRouterApiBase(raw.apiEndpoint || DEFAULT_OPENROUTER_API_URL);
-  } else if (provider === "openai_compat") {
-    normalizedEndpoint = normalizeOpenAICompatApiBase(
-      raw.apiEndpoint || DEFAULT_OPENAI_COMPAT_API_URL
-    );
-  } else {
-    normalizedEndpoint = resolveOllamaHostEndpoint(
-      raw.apiEndpoint || OLLAMA_DISCOVERY_FALLBACK_HOST,
-      OLLAMA_DISCOVERY_FALLBACK_HOST,
-    );
-  }
-
-  let safeEndpoint: string;
-  if (provider === "mistral") {
-    safeEndpoint = enforceProviderEndpointPolicy("mistral", normalizedEndpoint, DEFAULT_MISTRAL_API_URL);
-  } else if (provider === "openrouter") {
-    safeEndpoint = enforceProviderEndpointPolicy(
-      "openrouter",
-      normalizedEndpoint,
-      DEFAULT_OPENROUTER_API_URL
-    );
-  } else if (provider === "openai_compat") {
-    safeEndpoint = enforceProviderEndpointPolicy(
-      "openai_compat",
-      normalizedEndpoint,
-      DEFAULT_OPENAI_COMPAT_API_URL
-    );
-  } else {
-    safeEndpoint = enforceProviderEndpointPolicy("ollama", normalizedEndpoint, OLLAMA_DISCOVERY_FALLBACK_HOST);
-  }
-
   return {
     provider,
-    apiEndpoint: safeEndpoint,
+    apiEndpoint: normalizeProviderEndpoint(provider, raw.apiEndpoint),
     apiKey: raw.apiKey?.trim() || "",
   };
 }
@@ -984,7 +970,7 @@ function buildProgressMetadata(input: {
 function buildJsonResult(
   fileName: string,
   model: string,
-  provider: "ollama" | "mistral" | "openrouter" | "openai_compat",
+  provider: ProviderKind,
   settings: AdvancedSettings,
   markdown: string,
   structured: Record<string, unknown>,
@@ -1208,6 +1194,28 @@ function resolveProvider(model: string, settings: ApiProviderSettings): Provider
     throw new ApiRouteError("Model is required", 400);
   }
   return normalizeProvider(settings.provider);
+}
+
+type OcrRunResult = { text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> };
+
+async function runProviderOcr(
+  provider: ProviderKind,
+  settings: ApiProviderSettings,
+  model: string,
+  prompt: string,
+  preview: string,
+  signal?: AbortSignal
+): Promise<OcrRunResult> {
+  if (provider === "ollama") {
+    return runOllamaOcr(settings.apiEndpoint, model, prompt, preview, signal);
+  }
+  if (provider === "openrouter") {
+    return runOpenRouterOcr(settings.apiEndpoint, model, settings.apiKey || process.env.OPENROUTER_API_KEY || "", prompt, preview, signal);
+  }
+  if (provider === "openai_compat") {
+    return runOpenAICompatOcr(settings.apiEndpoint, model, settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "", prompt, preview, signal);
+  }
+  return runMistralOcr(model, preview, settings.apiKey || process.env.MISTRAL_API_KEY || "", settings.apiEndpoint, signal);
 }
 
 async function runOllamaOcr(
@@ -2308,7 +2316,7 @@ interface ProcessOcrJobInput {
   fileName: string;
   model: string;
   ocrModel: string;
-  provider: "ollama" | "mistral" | "openrouter" | "openai_compat";
+  provider: ProviderKind;
   settings: ApiProviderSettings;
   settingsPayload: AdvancedSettings;
   postProcessingPayload: PostProcessingSettings;
@@ -2511,53 +2519,14 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       const pageAbortController = new AbortController();
       registerOcrJobAbortController(input.jobId, pageAbortController);
       try {
-        if (input.provider === "ollama") {
-          ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runOllamaOcr(
-            input.settings.apiEndpoint,
-            input.ocrModel,
-            input.prompt,
-            pagePreview,
-            pageAbortController.signal
-          ));
-        } else if (input.provider === "openrouter") {
-          const openRouterEndpoint =
-            input.settings.provider === "openrouter"
-              ? input.settings.apiEndpoint
-              : DEFAULT_OPENROUTER_API_URL;
-          ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runOpenRouterOcr(
-            openRouterEndpoint,
-            input.ocrModel,
-            input.settings.apiKey || process.env.OPENROUTER_API_KEY || "",
-            input.prompt,
-            pagePreview,
-            pageAbortController.signal
-          ));
-        } else if (input.provider === "openai_compat") {
-          const openAICompatEndpoint =
-            input.settings.provider === "openai_compat"
-              ? input.settings.apiEndpoint
-              : DEFAULT_OPENAI_COMPAT_API_URL;
-          ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runOpenAICompatOcr(
-            openAICompatEndpoint,
-            input.ocrModel,
-            input.settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "",
-            input.prompt,
-            pagePreview,
-            pageAbortController.signal
-          ));
-        } else {
-          const mistralEndpoint =
-            input.settings.provider === "mistral"
-              ? input.settings.apiEndpoint
-              : DEFAULT_MISTRAL_API_URL;
-          ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runMistralOcr(
-            input.ocrModel,
-            pagePreview,
-            input.settings.apiKey || process.env.MISTRAL_API_KEY || "",
-            mistralEndpoint,
-            pageAbortController.signal
-          ));
-        }
+        ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runProviderOcr(
+          input.provider,
+          input.settings,
+          input.ocrModel,
+          input.prompt,
+          pagePreview,
+          pageAbortController.signal
+        ));
       } catch (error) {
         if (error instanceof OcrStopRequestedError || (await isOcrJobStopRequested(input.jobId))) {
           await pauseAtCheckpoint(
@@ -2965,24 +2934,7 @@ export async function GET(request: NextRequest) {
     const query = new URL(request.url).searchParams;
     const provider = normalizeProvider(query.get("provider") || undefined);
     const catalog = await getModelCatalog(storedSettings);
-
-    if (provider === "ollama") {
-      return NextResponse.json({ success: true, models: catalog.ollama });
-    }
-
-    if (provider === "mistral") {
-      return NextResponse.json({ success: true, models: catalog.mistral });
-    }
-
-    if (provider === "openrouter") {
-      return NextResponse.json({ success: true, models: catalog.openrouter });
-    }
-
-    if (provider === "openai_compat") {
-      return NextResponse.json({ success: true, models: catalog.openai_compat });
-    }
-
-    return NextResponse.json({ success: true, models: catalog });
+    return NextResponse.json({ success: true, models: catalog[provider] });
   } catch (error) {
     console.error("Model catalog error:", error);
     return NextResponse.json(

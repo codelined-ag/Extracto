@@ -69,6 +69,7 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { normalizeProvider, type ProviderKind } from "@/lib/endpoint-policy";
+import { type ApiProviderSettings } from "@/lib/settings-store";
 import { type AdvancedSettings, type PostProcessingSettings, type PostProcessOutputFormat } from "@/lib/ocr/settings";
 import ReactMarkdown from "react-markdown";
 
@@ -117,12 +118,7 @@ interface Model {
   provider: string;
 }
 
-interface ApiSettings {
-  provider: string;
-  apiEndpoint: string;
-  apiKey: string;
-  hasApiKey?: boolean;
-}
+type ApiSettings = ApiProviderSettings & { hasApiKey?: boolean };
 
 interface HistoryJobSummary {
   id: string;
