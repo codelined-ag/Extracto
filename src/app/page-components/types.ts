@@ -6,6 +6,8 @@ export type Translator = (
   de?: string,
 ) => string;
 
+export type SettingsTab = "model" | "provider" | "kb" | "general" | "account";
+
 export interface HistoryJobSummary {
   id: string;
   status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
