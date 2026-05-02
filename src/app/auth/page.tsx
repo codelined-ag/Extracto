@@ -126,8 +126,14 @@ export default function AuthPage() {
 
     if (!isValidEmail(form.email) || form.password.length < 8) {
       toast({
-        title: t("Input non valido", "Invalid input", "Entrée invalide", "Entrada no válida", "Ungültige Eingabe"),
-        description: t("Inserisci una email valida e una password di almeno 8 caratteri.", "Enter a valid email and a password with at least 8 characters.", "Saisissez un email valide et un mot de passe d'au moins 8 caractères.", "Introduce un correo válido y una contraseña de al menos 8 caracteres.", "Gib eine gültige E-Mail und ein Passwort mit mindestens 8 Zeichen ein."),
+        title: t("Quasi", "Almost there", "Presque", "Casi", "Fast geschafft"),
+        description: t(
+          "Servono un'email valida e una password di almeno 8 caratteri.",
+          "We need a real email and a password of at least 8 characters.",
+          "Il faut un email valide et un mot de passe d'au moins 8 caractères.",
+          "Necesitamos un correo válido y una contraseña de al menos 8 caracteres.",
+          "Eine gültige E-Mail und ein Passwort mit mindestens 8 Zeichen reichen.",
+        ),
         variant: "destructive",
       });
       return;
@@ -153,14 +159,20 @@ export default function AuthPage() {
       };
 
       if (!response.ok) {
-        throw new Error(payload.error || t("Autenticazione non riuscita", "Authentication failed", "Échec de l'authentification", "Error de autenticación", "Authentifizierung fehlgeschlagen"));
+        throw new Error(payload.error || t("Non siamo riusciti ad accedere", "Couldn't sign you in", "Connexion impossible", "No pudimos iniciar sesión", "Anmeldung nicht möglich"));
       }
 
       router.push("/");
     } catch (error) {
       toast({
-        title: t("Autenticazione non riuscita", "Authentication failed", "Échec de l'authentification", "Error de autenticación", "Authentifizierung fehlgeschlagen"),
-        description: error instanceof Error ? error.message : t("Riprova", "Please try again", "Veuillez réessayer", "Por favor, inténtalo de nuevo", "Bitte erneut versuchen"),
+        title: t("Non siamo riusciti ad accedere", "Couldn't sign you in", "Connexion impossible", "No pudimos iniciar sesión", "Anmeldung nicht möglich"),
+        description: error instanceof Error ? error.message : t(
+          "Controlla email e password e prova ancora.",
+          "Double-check your email and password and try again.",
+          "Vérifiez votre email et votre mot de passe puis réessayez.",
+          "Revisa tu correo y contraseña e inténtalo de nuevo.",
+          "Prüfe E-Mail und Passwort und versuche es erneut.",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -211,42 +223,20 @@ export default function AuthPage() {
           </Select>
         </header>
 
-        <section className="hidden flex-col justify-between lg:flex stagger" style={{ ["--i" as string]: 0 } as React.CSSProperties}>
-          <div className="anim-fade-in-up" style={{ ["--i" as string]: 0 } as React.CSSProperties}>
-            <span className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-              <span className="status-dot text-primary anim-pulse-glow" />
-              {t("OCR di documenti, accurato", "Document OCR, done right", "OCR de documents, juste", "OCR de documentos bien hecho", "Dokument-OCR, präzise")}
-            </span>
-          </div>
-
-          <div className="space-y-6">
-            <h1 className="font-display text-[5.5rem] leading-[0.9] font-semibold tracking-tight wordmark anim-fade-in-up" style={{ ["--i" as string]: 1 } as React.CSSProperties}>
-              Extracto
-              <span className="text-primary not-italic">.</span>
-            </h1>
-            <p className="max-w-md text-lg leading-relaxed text-muted-foreground anim-fade-in-up" style={{ ["--i" as string]: 2 } as React.CSSProperties}>
-              {t(
-                "Estrai testo da PDF, immagini e scansioni. Batch, anteprime, post-elaborazione, esportazione verso vector store.",
-                "Extract text from PDFs, images, and scans. Batch, previews, post-processing, vector-store export.",
-                "Extrayez le texte de PDF, images et scans. Batch, aperçus, post-traitement, export vector-store.",
-                "Extrae texto de PDF, imágenes y escaneos. Lotes, vistas previas, post-procesamiento, exportación a vector-store.",
-                "Text aus PDFs, Bildern und Scans extrahieren. Stapel, Vorschauen, Nachverarbeitung, Vector-Store-Export.",
-              )}
-            </p>
-          </div>
-
-          <ul className="space-y-3 text-sm anim-fade-in-up" style={{ ["--i" as string]: 3 } as React.CSSProperties}>
-            {[
-              t("Provider Ollama, Mistral, OpenRouter, OpenAI-compatible", "Ollama, Mistral, OpenRouter, OpenAI-compatible providers"),
-              t("Batch + checkpoint, riprendi qualsiasi job", "Batch + checkpoints, resume any job"),
-              t("Esportazione verso Chroma per knowledge base", "Export to Chroma for knowledge base"),
-            ].map((line, i) => (
-              <li key={i} className="flex items-start gap-3 text-foreground/80">
-                <span className="mt-[7px] inline-block size-1.5 rounded-full bg-primary" />
-                <span className="leading-relaxed">{line}</span>
-              </li>
-            ))}
-          </ul>
+        <section className="hidden flex-col justify-center gap-8 lg:flex">
+          <h1 className="font-display text-[6rem] leading-[0.92] font-semibold tracking-tight wordmark anim-fade-in-up">
+            Extracto
+            <span className="text-primary not-italic">.</span>
+          </h1>
+          <p className="max-w-lg text-lg leading-relaxed text-foreground/85 anim-fade-in-up" style={{ animationDelay: "120ms" } as React.CSSProperties}>
+            {t(
+              "Trasforma qualsiasi documento — PDF, foto, scansioni — in testo pulito e modificabile. Lavora in locale o nel cloud, conserva tabelle e formattazione, e archivia tutto dove ti serve.",
+              "Turn any document — PDFs, photos, scans — into clean, editable text. Run it locally or in the cloud, keep tables and formatting intact, and ship it wherever you need.",
+              "Transformez n'importe quel document — PDF, photos, scans — en texte propre et modifiable. Exécutez-le en local ou dans le cloud, conservez tableaux et mise en forme, et exportez-le où bon vous semble.",
+              "Convierte cualquier documento — PDFs, fotos, escaneos — en texto limpio y editable. Ejecútalo en local o en la nube, conserva tablas y formato, y envíalo a donde lo necesites.",
+              "Wandle jedes Dokument — PDFs, Fotos, Scans — in sauberen, bearbeitbaren Text um. Lokal oder in der Cloud, mit Tabellen und Formatierung intakt, und exportiere es überallhin.",
+            )}
+          </p>
         </section>
 
         <section className="flex w-full max-w-md flex-col justify-center self-center lg:max-w-none lg:justify-self-end lg:max-w-[28rem]">
@@ -260,13 +250,25 @@ export default function AuthPage() {
             <div className="space-y-1.5">
               <h2 className="font-display text-2xl font-semibold tracking-tight">
                 {mode === "signin"
-                  ? t("Bentornato", "Welcome back", "Bon retour", "Bienvenido de nuevo", "Willkommen zurück")
-                  : t("Crea il tuo spazio", "Make it yours", "Faites-le vôtre", "Hazlo tuyo", "Mach es zu deinem")}
+                  ? t("Bentornato", "Welcome back", "Content de te revoir", "Bienvenido de nuevo", "Willkommen zurück")
+                  : t("Apri un account", "Create your account", "Créer votre compte", "Crea tu cuenta", "Konto erstellen")}
               </h2>
               <p className="text-sm leading-relaxed text-muted-foreground">
                 {mode === "signin"
-                  ? t("Accedi per continuare con i tuoi documenti.", "Sign in to keep working on your documents.", "Connectez-vous pour reprendre vos documents.", "Inicia sesión para seguir con tus documentos.", "Melde dich an, um mit deinen Dokumenten fortzufahren.")
-                  : t("Bastano email e password per iniziare.", "Just email and password to get started.", "Email et mot de passe suffisent pour commencer.", "Solo email y contraseña para empezar.", "E-Mail und Passwort reichen, um zu beginnen.")}
+                  ? t(
+                    "Accedi per riprendere da dove avevi lasciato.",
+                    "Sign in to pick up right where you left off.",
+                    "Connectez-vous pour reprendre là où vous vous étiez arrêté.",
+                    "Inicia sesión para retomar donde lo dejaste.",
+                    "Melde dich an, um genau dort weiterzumachen, wo du aufgehört hast.",
+                  )
+                  : t(
+                    "Bastano un'email e una password — nessuna carta, nessuna formalità.",
+                    "Just an email and a password — no card, no fine print.",
+                    "Une email et un mot de passe — aucune carte, aucune formalité.",
+                    "Solo un correo y una contraseña — sin tarjeta, sin letra pequeña.",
+                    "Nur E-Mail und Passwort — keine Karte, kein Kleingedrucktes.",
+                  )}
               </p>
             </div>
 
@@ -330,9 +332,6 @@ export default function AuthPage() {
             </Tabs>
           </div>
 
-          <p className="mt-6 text-center text-[11px] uppercase tracking-[0.18em] text-muted-foreground/80">
-            {t("Privato per impostazione predefinita", "Private by default", "Privé par défaut", "Privado por defecto", "Standardmäßig privat")}
-          </p>
         </section>
       </div>
     </div>

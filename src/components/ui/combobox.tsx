@@ -106,7 +106,7 @@ export function Combobox({
               </button>
             ) : null}
           </div>
-          <CommandPrimitive.List className="max-h-72 overflow-y-auto p-1.5">
+          <CommandPrimitive.List className="custom-scroll max-h-[22rem] overflow-y-auto p-1.5">
             <CommandPrimitive.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">
               {emptyText}
               {allowCustom && search.trim() ? (

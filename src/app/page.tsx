@@ -17,6 +17,7 @@ import {
 import { ArchiveIcon } from"@/components/ui/archive";
 import { ArrowRightIcon } from"@/components/ui/arrow-right";
 import { CheckIcon } from"@/components/ui/check";
+import { ChevronDownIcon } from"@/components/ui/chevron-down";
 import { CircleCheckIcon } from"@/components/ui/circle-check";
 import { ClipboardCheckIcon } from"@/components/ui/clipboard-check";
 import { ClockIcon } from"@/components/ui/clock";
@@ -551,7 +552,7 @@ export default function ExtractoPage() {
  const [selectedFileId, setSelectedFileId] = React.useState<string | null>(null);
  const [copied, setCopied] = React.useState<"md"|"json"| null>(null);
  const [apiSettingsOpen, setApiSettingsOpen] = React.useState(false);
- const [settingsTab, setSettingsTab] = React.useState<"model"|"provider"|"ocr"|"kb"|"general"|"account">("model");
+ const [settingsTab, setSettingsTab] = React.useState<"model"|"provider"|"kb"|"general"|"account">("model");
  const [viewMode, setViewMode] = React.useState<"preview"|"split"|"result">("split");
  const fileInputRef = React.useRef<HTMLInputElement>(null);
  const pdfPagePreviewCacheRef = React.useRef<Record<string, string[]>>({});
@@ -1855,7 +1856,7 @@ export default function ExtractoPage() {
  animate={{ y: 0, opacity: 1 }}
  transition={{ duration: 0.5, ease: [0.2, 0.7, 0.2, 1] }}
  className="sticky top-0 z-50 bg-background/75 backdrop-blur-md">
- <div className="container mx-auto px-5 h-16 flex items-center justify-between">
+ <div className="container mx-auto px-3 sm:px-5 h-16 flex items-center justify-between gap-2">
  <motion.div
  className="flex items-center gap-3 group"whileHover={{ scale: 1.015 }}
  transition={{ type:"spring", stiffness: 400, damping: 24 }}
@@ -1869,9 +1870,9 @@ export default function ExtractoPage() {
  <SparklesIcon size={12} className="inline-flex items-center justify-center text-accent-foreground"/>
  </motion.div>
  </div>
- <div className="flex items-baseline gap-1">
- <span className="wordmark font-display text-2xl leading-none">Extracto</span>
- <span className="font-display italic text-2xl leading-none text-primary">.</span>
+ <div className="flex items-baseline gap-0.5 overflow-visible">
+ <span className="wordmark font-display text-2xl leading-tight inline-block pr-1.5 overflow-visible">Extracto</span>
+ <span className="font-display italic text-2xl leading-tight text-primary inline-block">.</span>
  </div>
  </motion.div>
 
@@ -1941,7 +1942,6 @@ export default function ExtractoPage() {
  <div className="px-6">
  <TabsList className="w-full justify-start overflow-x-auto">
  <TabsTrigger value="model"className="gap-1.5"><SparklesIcon size={14} className="inline-flex items-center justify-center"/>{t("Modello","Model","Modèle","Modelo","Modell")}</TabsTrigger>
- <TabsTrigger value="ocr"className="gap-1.5"><ScanLine className="h-3.5 w-3.5"/>{t("OCR","OCR","OCR","OCR","OCR")}</TabsTrigger>
  <TabsTrigger value="kb"className="gap-1.5"><DatabaseBackupIcon size={14} className="inline-flex items-center justify-center"/>{t("Knowledge base","Knowledge base","Base de connaissances","Base de conocimiento","Wissensdatenbank")}</TabsTrigger>
  <TabsTrigger value="provider"className="gap-1.5"><SettingsIcon size={14} className="inline-flex items-center justify-center"/>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</TabsTrigger>
  <TabsTrigger value="general"className="gap-1.5"><LanguagesIcon size={14} className="inline-flex items-center justify-center"/>{t("Generale","General","Général","General","Allgemein")}</TabsTrigger>
@@ -1953,7 +1953,13 @@ export default function ExtractoPage() {
  <TabsContent value="model"className="space-y-5 mt-4">
  <SettingsSection
  title={t("Modello OCR","OCR model","Modèle OCR","Modelo OCR","OCR-Modell")}
- hint={t("Modello usato per leggere ogni pagina del documento.","Model used to read each page of the document.","Modèle utilisé pour lire chaque page.","Modelo usado para leer cada página.","Modell, das jede Seite liest.")}
+ hint={t(
+"Il modello che legge ogni pagina e ne tira fuori il testo. Cerca per nome, oppure incolla un ID se il provider non lo elenca.",
+"The model that reads each page and pulls the text out. Search by name, or paste an ID if the provider doesn't list it.",
+"Le modèle qui lit chaque page et en extrait le texte. Cherchez par nom ou collez un ID si le fournisseur ne le liste pas.",
+"El modelo que lee cada página y extrae el texto. Busca por nombre o pega un ID si el proveedor no lo lista.",
+"Das Modell, das jede Seite liest und den Text extrahiert. Suche per Name, oder füge eine ID ein, falls der Anbieter sie nicht listet.",
+)}
  >
  <Combobox
  options={models.map((m) => ({ value: m.id, label: m.name, hint: m.provider }))}
@@ -1974,7 +1980,13 @@ export default function ExtractoPage() {
 
  <SettingsSection
  title={t("Post-processing","Post-processing","Post-traitement","Post-procesamiento","Nachverarbeitung")}
- hint={t("Esegui un secondo passaggio modello per riformattare o estrarre dati.","Run a second model pass to reformat or extract data.","Effectuer un second passage du modèle pour reformater ou extraire des données.","Ejecuta un segundo paso para reformatear o extraer datos.","Zweiten Modell-Pass für Neuformatierung oder Datenextraktion ausführen.")}
+ hint={t(
+"Una seconda passata facoltativa: riformatta il risultato OCR o estrae campi specifici (es. tabelle, totali, schede prodotto).",
+"An optional second pass: reformat the OCR output or pull out specific fields (think tables, totals, product cards).",
+"Une seconde passe optionnelle : reformatte la sortie OCR ou en extrait des champs précis (tableaux, totaux, fiches produit).",
+"Una segunda pasada opcional: reformatea la salida OCR o extrae campos concretos (tablas, totales, fichas).",
+"Ein optionaler zweiter Durchgang: formatiert die OCR-Ausgabe um oder extrahiert bestimmte Felder (Tabellen, Summen, Produktkarten).",
+)}
  right={
  <Switch checked={postProcessing.enabled} onCheckedChange={(enabled) => setPostProcessing((prev) => ({ ...prev, enabled }))} />
  }
@@ -2029,64 +2041,6 @@ export default function ExtractoPage() {
  </SettingsSection>
  </TabsContent>
 
- <TabsContent value="ocr"className="space-y-5 mt-4">
- <SettingsSection
- title={t("Lingua documento","Document language","Langue du document","Idioma del documento","Dokumentsprache")}
- hint={t("Suggerimento per il modello: quale lingua aspettarsi nel documento.","Hint to the model: what language to expect in the document.","Indique au modèle la langue attendue.","Indica al modelo qué idioma esperar.","Hinweis ans Modell zur erwarteten Sprache.")}
- >
- <Select value={settings.language} onValueChange={(v) => setSettings((s) => ({ ...s, language: v }))}>
- <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
- <SelectContent>
- {LANGUAGES.map((lang) => (
- <SelectItem key={lang.code} value={lang.code}>{lang.names[uiLanguage] ?? lang.names.en}</SelectItem>
- ))}
- </SelectContent>
- </Select>
- </SettingsSection>
-
- <SettingsSection title={t("Comportamento estrazione","Extraction behavior","Comportement d'extraction","Comportamiento de extracción","Extraktionsverhalten")}>
- <div className="space-y-3">
- <ToggleRow
- label={t("Rilevamento tabelle","Table detection","Détection des tableaux","Detección de tablas","Tabellenerkennung")}
- hint={t("Rileva tabelle e le rende come Markdown.","Detect tables and render them as Markdown.","Détecte les tableaux et les rend en Markdown.","Detecta tablas y las convierte a Markdown.","Erkennt Tabellen und gibt sie als Markdown aus.")}
- checked={settings.tableDetection}
- onCheckedChange={(v) => setSettings((s) => ({ ...s, tableDetection: v }))}
- />
- <ToggleRow
- label={t("Riconoscimento scrittura a mano","Handwriting recognition","Reconnaissance d'écriture","Reconocimiento de escritura","Handschrifterkennung")}
- hint={t("Tenta di leggere testo manoscritto. Più lento e meno preciso.","Attempt to read handwritten text. Slower and less accurate.","Tente de lire le texte manuscrit. Plus lent et moins précis.","Intenta leer texto manuscrito. Más lento y menos preciso.","Versucht, Handschrift zu lesen. Langsamer und ungenauer.")}
- checked={settings.handwritingRecognition}
- onCheckedChange={(v) => setSettings((s) => ({ ...s, handwritingRecognition: v }))}
- />
- <ToggleRow
- label={t("Mantieni formattazione","Preserve formatting","Conserver la mise en forme","Conservar formato","Formatierung beibehalten")}
- hint={t("Conserva titoli, elenchi, spaziatura. Disattiva per testo piatto.","Preserve headings, lists, spacing. Disable for flat text.","Conserve titres, listes et espacements. Désactivez pour du texte brut.","Conserva títulos, listas y espacios. Desactiva para texto plano.","Behält Überschriften, Listen, Abstände. Aus für reinen Text.")}
- checked={settings.preserveFormatting}
- onCheckedChange={(v) => setSettings((s) => ({ ...s, preserveFormatting: v }))}
- />
- </div>
- </SettingsSection>
-
- <SettingsSection
- title={t("Qualità output","Output quality","Qualité de sortie","Calidad de salida","Ausgabequalität")}
- hint={t("Più alto: testo più ricco ma più lento.","Higher: richer text but slower.","Plus haut : texte plus riche mais plus lent.","Más alto: texto más rico pero más lento.","Höher: reichhaltiger, aber langsamer.")}
- right={<span className="text-xs text-muted-foreground tabular">{settings.quality}%</span>}
- >
- <Slider value={[settings.quality]} onValueChange={([v]) => setSettings((s) => ({ ...s, quality: v }))} min={50} max={100} step={10} className="py-2"/>
- </SettingsSection>
-
- <SettingsSection
- title={t("Istruzioni personalizzate","Custom instructions","Instructions personnalisées","Instrucciones personalizadas","Eigene Anweisungen")}
- hint={t("Aggiunte al prompt OCR per ogni pagina.","Appended to the OCR prompt for each page.","Ajoutées au prompt OCR pour chaque page.","Se añaden al prompt OCR de cada página.","Werden dem OCR-Prompt jeder Seite angehängt.")}
- >
- <Textarea
- placeholder={t("Esempio: ignora intestazioni e piè di pagina.","Example: ignore headers and footers.","Exemple : ignore en-têtes et pieds de page.","Ejemplo: ignora encabezados y pies.","Beispiel: Kopf- und Fußzeilen ignorieren.")}
- value={settings.customPrompt}
- onChange={(e) => setSettings((s) => ({ ...s, customPrompt: e.target.value }))}
- className="min-h-20 text-xs"/>
- </SettingsSection>
- </TabsContent>
-
  <TabsContent value="kb"className="space-y-5 mt-4">
  <p className="text-xs text-muted-foreground">
  {t(
@@ -2116,7 +2070,13 @@ export default function ExtractoPage() {
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
  <span className="inline-flex items-center gap-1">
  {t("Dimensioni","Dimensions","Dimensions","Dimensiones","Dimensionen")}
- <HintInfo text={t("Dimensione del vettore restituito dal modello (es. 768 per nomic-embed-text).","Vector dimensionality returned by the model (e.g. 768 for nomic-embed-text).","Dimensions du vecteur (ex. 768 pour nomic-embed-text).","Dimensión del vector (p. ej. 768 para nomic-embed-text).","Vektor-Dimension (z. B. 768 für nomic-embed-text).")} />
+ <HintInfo text={t(
+"Quanti numeri ha ogni vettore. Devi metterlo uguale a quello del modello (es. nomic-embed-text → 768).",
+"How many numbers each vector has. Match the model's value (e.g. nomic-embed-text → 768).",
+"Le nombre de valeurs par vecteur. Doit correspondre à celui du modèle (ex. nomic-embed-text → 768).",
+"Cuántos números tiene cada vector. Debe coincidir con el del modelo (p. ej. nomic-embed-text → 768).",
+"Wie viele Zahlen jeder Vektor hat. Muss zum Modell passen (z. B. nomic-embed-text → 768).",
+)} />
  </span>
  </Label>
  <Input type="number"min={1} max={32768} value={kbDefaultsDraft.embeddingDimensions} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, embeddingDimensions: e.target.value }))}/>
@@ -2177,7 +2137,13 @@ export default function ExtractoPage() {
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
  <span className="inline-flex items-center gap-1">
  {t("Overlap","Overlap","Chevauchement","Solapamiento","Überlappung")}
- <HintInfo text={t("Solo strategia fissa.","Fixed strategy only.","Stratégie fixe uniquement.","Solo estrategia fija.","Nur feste Strategie.")}/>
+ <HintInfo text={t(
+"Caratteri ripetuti tra un chunk e il successivo: aiuta a non spezzare le idee a metà. Solo per la strategia 'lunghezza fissa'.",
+"Characters repeated between adjacent chunks so ideas don't get sliced in half. Only meaningful for the fixed-length strategy.",
+"Caractères répétés entre deux chunks adjacents pour ne pas couper une idée en deux. Utile uniquement avec la stratégie « longueur fixe ».",
+"Caracteres compartidos entre fragmentos contiguos para no cortar ideas a la mitad. Solo aplica a la estrategia de longitud fija.",
+"Zeichen, die zwischen Nachbar-Chunks geteilt werden, damit kein Gedanke abreißt. Nur bei fester Länge sinnvoll.",
+)}/>
  </span>
  </Label>
  <Input type="number"min={0} value={kbDefaultsDraft.chunkingOverlap} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingOverlap: e.target.value }))} disabled={kbDefaultsDraft.chunkingStrategy !=="fixed"}/>
@@ -2186,7 +2152,13 @@ export default function ExtractoPage() {
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
  <span className="inline-flex items-center gap-1">
  Min
- <HintInfo text={t("Solo strategie per frase / paragrafo.","Sentence / paragraph strategies only.","Stratégies phrase / paragraphe uniquement.","Solo estrategias por frase / párrafo.","Nur Satz- / Absatz-Strategien.")}/>
+ <HintInfo text={t(
+"Lunghezza minima di un chunk: i frammenti più corti vengono uniti al successivo. Vale per le strategie 'per frase' e 'per paragrafo'.",
+"Minimum chunk length: anything shorter gets glued onto the next one. Applies to the sentence and paragraph strategies.",
+"Longueur minimale d'un chunk : tout fragment plus court est fusionné avec le suivant. S'applique aux stratégies par phrase ou paragraphe.",
+"Longitud mínima del fragmento: si es menor se fusiona con el siguiente. Solo para las estrategias por frase y por párrafo.",
+"Mindestlänge eines Chunks: Kürzere werden an den nächsten angehängt. Gilt für Satz- und Absatzstrategie.",
+)}/>
  </span>
  </Label>
  <Input type="number"min={0} value={kbDefaultsDraft.chunkingMinSize} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMinSize: e.target.value }))} disabled={kbDefaultsDraft.chunkingStrategy ==="fixed"}/>
@@ -2249,7 +2221,13 @@ export default function ExtractoPage() {
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
  <span className="inline-flex items-center gap-1">
  {t("Nome collezione","Collection name","Nom collection","Nombre colección","Sammlungsname")}
- <HintInfo text={t("Sostituzioni: {jobId}, {fileName}.","Substitutions: {jobId}, {fileName}.","Substitutions : {jobId}, {fileName}.","Sustituciones: {jobId}, {fileName}.","Ersetzungen: {jobId}, {fileName}.")}/>
+ <HintInfo text={t(
+"Il nome con cui finisce nel vector store. Puoi usare i segnaposti {jobId} e {fileName} — verranno sostituiti per ogni esportazione.",
+"The name your chunks land under in the vector store. Use {jobId} or {fileName} as placeholders — they're filled in for every export.",
+"Le nom utilisé dans le vector store. Utilisez les placeholders {jobId} et {fileName} — ils sont remplacés à chaque export.",
+"El nombre que se usa en el vector store. Puedes usar los marcadores {jobId} y {fileName} — se sustituyen en cada exportación.",
+"Der Name im Vektor-Store. Nutze {jobId} oder {fileName} als Platzhalter — sie werden bei jedem Export ersetzt.",
+)}/>
  </span>
  </Label>
  <Input value={kbDefaultsDraft.collectionTemplate} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, collectionTemplate: e.target.value }))} placeholder="extracto-{jobId}"/>
@@ -2266,7 +2244,13 @@ export default function ExtractoPage() {
  </TabsContent>
 
  <TabsContent value="provider"className="space-y-5 mt-4">
- <SettingsSection title={t("Provider","Provider","Fournisseur","Proveedor","Anbieter")} hint={t("Da dove arriva l'inferenza OCR.","Where the OCR inference runs.","D'où vient l'inférence OCR.","De dónde viene la inferencia OCR.","Wo die OCR-Inferenz läuft.")}>
+ <SettingsSection title={t("Provider","Provider","Fournisseur","Proveedor","Anbieter")} hint={t(
+"Chi esegue il modello: Ollama in locale per la massima privacy, Mistral o OpenRouter per più potenza, o un endpoint compatibile OpenAI tuo.",
+"Where the model actually runs: Ollama on your machine for full privacy, Mistral or OpenRouter for raw horsepower, or any OpenAI-compatible endpoint you trust.",
+"Qui exécute le modèle : Ollama en local pour la confidentialité, Mistral ou OpenRouter pour la puissance, ou un endpoint compatible OpenAI de votre choix.",
+"Quién ejecuta el modelo: Ollama en local para máxima privacidad, Mistral o OpenRouter para más potencia, o un endpoint compatible OpenAI.",
+"Wer das Modell ausführt: Ollama lokal für volle Privatsphäre, Mistral oder OpenRouter für Performance, oder ein eigener OpenAI-kompatibler Endpoint.",
+)}>
  <Select value={apiSettingsDraft.provider} onValueChange={(value) => setApiSettingsDraft((prev) => { const nextProvider = normalizeProvider(value); return { ...prev, provider: nextProvider, apiEndpoint: defaultEndpointForProvider(nextProvider) }; })}>
  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
  <SelectContent>
@@ -2326,12 +2310,6 @@ export default function ExtractoPage() {
  </Select>
  </SettingsSection>
 
- <SettingsSection title={t("Esecuzioni passate","Past runs","Exécutions passées","Ejecuciones pasadas","Frühere Läufe")} hint={t("Sfoglia, scarica ed elimina lavori OCR precedenti.","Browse, download, and delete previous OCR runs.","Parcourez, téléchargez et supprimez les exécutions passées.","Explora, descarga y elimina ejecuciones anteriores.","Frühere OCR-Läufe durchsuchen, herunterladen oder löschen.")}>
- <Button variant="secondary"className="w-full justify-start group"onClick={() => { setApiSettingsOpen(false); openHistoryModal(); }}>
- <HistoryIcon size={16} className="inline-flex items-center justify-center mr-2 text-primary transition-transform duration-200 group-hover:-rotate-6"/>
- {t("Apri cronologia","Open history","Ouvrir l'historique","Abrir historial","Verlauf öffnen")}
- </Button>
- </SettingsSection>
  </TabsContent>
 
  <TabsContent value="account"className="space-y-5 mt-4">
@@ -2649,14 +2627,14 @@ export default function ExtractoPage() {
  </Dialog>
 
  {/* Main Content */}
- <main className="flex-1 min-h-0 overflow-y-auto scrollbar-hide lg:overflow-hidden container mx-auto px-4 py-6">
- <div className="grid lg:grid-cols-[420px_1fr] gap-6 min-h-0 lg:h-full">
+ <main className="flex-1 min-h-0 overflow-y-auto custom-scroll lg:overflow-hidden container mx-auto px-3 py-4 sm:px-5 sm:py-6">
+ <div className="grid gap-4 sm:gap-6 min-h-0 lg:h-full md:grid-cols-[minmax(320px,380px)_1fr] xl:grid-cols-[420px_1fr]">
  {/* Left Panel - File Upload & List */}
  <motion.div
  initial={{ x: -20, opacity: 0 }}
  animate={{ x: 0, opacity: 1 }}
  transition={{ duration: 0.4, delay: 0.1 }}
- className="flex flex-col gap-4 min-h-0 lg:overflow-y-auto lg:scrollbar-hide lg:pr-1">
+ className="flex flex-col gap-4 min-h-0 md:overflow-y-auto md:custom-scroll md:pr-1">
  {/* Upload Area */}
  <Card
  className={cn(
@@ -2903,6 +2881,123 @@ export default function ExtractoPage() {
  </CardContent>
  </Card>
 
+ <Collapsible defaultOpen={false}>
+ <Card>
+ <CollapsibleTrigger asChild>
+ <button type="button"className="group w-full flex items-center justify-between gap-2 px-4 py-3 text-left rounded-2xl">
+ <span className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight">
+ <SettingsIcon size={14} className="inline-flex items-center justify-center text-foreground/70"/>
+ {t("Opzioni avanzate","Advanced options","Options avancées","Opciones avanzadas","Erweiterte Optionen")}
+ </span>
+ <ChevronDownIcon size={14} className="inline-flex items-center justify-center text-muted-foreground/70 transition-transform duration-200 group-data-[state=open]:rotate-180"/>
+ </button>
+ </CollapsibleTrigger>
+ <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0">
+ <CardContent className="space-y-4 pb-4">
+ <div className="space-y-1.5">
+ <Label className="text-[11px] uppercase tracking-wider text-muted-foreground/80">{t("Lingua documento","Document language","Langue","Idioma","Sprache")}</Label>
+ <Select value={settings.language} onValueChange={(v) => setSettings((s) => ({ ...s, language: v }))}>
+ <SelectTrigger className="w-full h-9 text-xs"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ {LANGUAGES.map((lang) => (
+ <SelectItem key={lang.code} value={lang.code}>{lang.names[uiLanguage] ?? lang.names.en}</SelectItem>
+ ))}
+ </SelectContent>
+ </Select>
+ </div>
+
+ <div className="space-y-2">
+ <ToggleRow
+ label={t("Tabelle","Tables","Tableaux","Tablas","Tabellen")}
+ hint={t("Rileva tabelle e le rende come Markdown.","Detect tables and render them as Markdown.")}
+ checked={settings.tableDetection}
+ onCheckedChange={(v) => setSettings((s) => ({ ...s, tableDetection: v }))}
+ />
+ <ToggleRow
+ label={t("Scrittura a mano","Handwriting","Écriture","Manuscrita","Handschrift")}
+ hint={t("Tenta di leggere testo manoscritto.","Attempt to read handwritten text.")}
+ checked={settings.handwritingRecognition}
+ onCheckedChange={(v) => setSettings((s) => ({ ...s, handwritingRecognition: v }))}
+ />
+ <ToggleRow
+ label={t("Mantieni formattazione","Preserve formatting","Mise en forme","Formato","Formatierung")}
+ hint={t("Conserva titoli, elenchi, spaziatura.","Preserve headings, lists, spacing.")}
+ checked={settings.preserveFormatting}
+ onCheckedChange={(v) => setSettings((s) => ({ ...s, preserveFormatting: v }))}
+ />
+ </div>
+
+ <div className="space-y-1.5">
+ <div className="flex items-center justify-between">
+ <Label className="text-[11px] uppercase tracking-wider text-muted-foreground/80">{t("Qualità","Quality","Qualité","Calidad","Qualität")}</Label>
+ <span className="text-[11px] text-muted-foreground tabular">{settings.quality}%</span>
+ </div>
+ <Slider value={[settings.quality]} onValueChange={([v]) => setSettings((s) => ({ ...s, quality: v }))} min={50} max={100} step={10} className="py-1.5"/>
+ </div>
+
+ <div className="space-y-1.5">
+ <Label className="text-[11px] uppercase tracking-wider text-muted-foreground/80">{t("Istruzioni","Instructions","Instructions","Instrucciones","Anweisungen")}</Label>
+ <Textarea
+ placeholder={t("Esempio: ignora intestazioni e piè di pagina.","Example: ignore headers and footers.","Exemple : ignore en-têtes et pieds de page.","Ejemplo: ignora encabezados y pies.","Beispiel: Kopf- und Fußzeilen ignorieren.")}
+ value={settings.customPrompt}
+ onChange={(e) => setSettings((s) => ({ ...s, customPrompt: e.target.value }))}
+ className="min-h-[60px] text-xs"/>
+ </div>
+
+ <div className="space-y-2 surface-soft rounded-xl px-3.5 py-3">
+ <div className="flex items-center justify-between gap-2">
+ <Label className="text-sm font-medium">{t("Post-processing","Post-processing","Post-traitement","Post-procesamiento","Nachverarbeitung")}</Label>
+ <Switch checked={postProcessing.enabled} onCheckedChange={(enabled) => setPostProcessing((prev) => ({ ...prev, enabled }))} />
+ </div>
+ {postProcessing.enabled ? (
+ <div className="space-y-2">
+ <Textarea
+ placeholder={t("Es: estrai numero fattura, scadenza, totali — tabella.","Ex: extract invoice number, due date, totals — return one table.","Ex : extraire numéro, échéance, totaux — un tableau.","Ej: número, vencimiento, totales — tabla.","Bsp.: Rechnungsnummer, Fälligkeit, Summen — eine Tabelle.")}
+ value={postProcessing.instruction}
+ onChange={(e) => setPostProcessing((prev) => ({ ...prev, instruction: e.target.value }))}
+ className="min-h-[60px] text-xs bg-card"/>
+ <div className="grid grid-cols-2 gap-2">
+ <Select value={postProcessModelValue} onValueChange={(value) => setPostProcessing((prev) => ({ ...prev, model: value ==="__same__"?"": value }))}>
+ <SelectTrigger className="h-8 text-xs w-full"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ <SelectItem value="__same__">{t("Stesso modello","Same model","Même modèle","Mismo modelo","Gleiches Modell")}</SelectItem>
+ {!selectedPostProcessModelExists && postProcessing.model ? <SelectItem value={postProcessing.model}>{postProcessing.model}</SelectItem> : null}
+ {models.map((m) => (<SelectItem key={`pp-side-${m.id}`} value={m.id}>{m.name}</SelectItem>))}
+ </SelectContent>
+ </Select>
+ <Select value={postProcessing.outputFormat} onValueChange={(value: PostProcessOutputFormat) => setPostProcessing((prev) => ({ ...prev, outputFormat: value }))}>
+ <SelectTrigger className="h-8 text-xs w-full"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ <SelectItem value="markdown">Markdown</SelectItem>
+ <SelectItem value="json">JSON</SelectItem>
+ </SelectContent>
+ </Select>
+ </div>
+ </div>
+ ) : null}
+ </div>
+ </CardContent>
+ </CollapsibleContent>
+ </Card>
+ </Collapsible>
+
+ <button
+ type="button"
+ onClick={openHistoryModal}
+ className="group flex items-center justify-between gap-2 px-4 py-3 rounded-2xl bg-card text-left shadow-[var(--shadow-soft)] transition-[transform,box-shadow] duration-200 ease-[cubic-bezier(0.2,0.7,0.2,1)] hover:-translate-y-px hover:shadow-[var(--shadow-lift)]"
+ >
+ <span className="inline-flex items-center gap-2.5">
+ <span className="grid place-items-center size-9 rounded-xl bg-primary/12 text-primary">
+ <HistoryIcon size={16} className="inline-flex items-center justify-center"/>
+ </span>
+ <span className="flex flex-col">
+ <span className="text-sm font-semibold tracking-tight">{t("Cronologia","History","Historique","Historial","Verlauf")}</span>
+ <span className="text-[11px] text-muted-foreground">{t("Sfoglia esecuzioni passate","Browse past runs","Parcourir les exécutions","Explorar ejecuciones","Vergangene Läufe")}</span>
+ </span>
+ </span>
+ <ArrowRightIcon size={14} className="inline-flex items-center justify-center text-muted-foreground/60 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary"/>
+ </button>
+
  </motion.div>
 
  {/* Right Panel - Preview */}
@@ -2910,7 +3005,7 @@ export default function ExtractoPage() {
  initial={{ x: 20, opacity: 0 }}
  animate={{ x: 0, opacity: 1 }}
  transition={{ duration: 0.4, delay: 0.2 }}
- className="flex flex-col min-h-[500px] lg:min-h-0">
+ className="flex flex-col min-h-[420px] md:min-h-[500px] lg:min-h-0">
  {selectedFile ? (
  <Card className="flex-1 flex flex-col min-h-0">
  <CardContent className="flex-1 flex flex-col p-0 min-h-0">
@@ -3281,7 +3376,7 @@ export default function ExtractoPage() {
  animate={{ y: 0, opacity: 1 }}
  transition={{ duration: 0.4, delay: 0.3 }}
  className="mt-auto">
- <div className="container mx-auto px-5 h-14 flex items-center justify-between gap-3">
+ <div className="container mx-auto px-3 sm:px-5 min-h-14 py-2 flex flex-wrap items-center justify-between gap-3">
  <p className="text-xs text-muted-foreground">
  © {new Date().getFullYear()}{" "}
  <span className="font-display italic font-medium text-foreground/80">Extracto</span>{" "}
