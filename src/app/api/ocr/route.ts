@@ -12,6 +12,11 @@ import {
   getPageMarkdownForRouting,
   parseJsonCandidate,
 } from "@/lib/ocr/markdown-routing";
+import {
+  seedExtractedText,
+  seedPostProcessingMeta,
+  seedUsedOllamaModels,
+} from "@/lib/ocr/job-seed";
 import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
 import {
   maybeUploadResultJson,
@@ -1839,6 +1844,68 @@ async function finalizeOcrJob(jobId: string, apiEndpoint: string, usedOllamaMode
   await clearOcrJobStop(jobId);
 }
 
+/**
+ * Persist a successful OCR job: offload large artifacts (text + JSON
+ * result) to the result store, write the COMPLETED row, dispatch the
+ * job.completed webhook, then finalize (unload Ollama models, clear
+ * running/stop flags). One unit so the success-path tail of
+ * processOcrJobInBackground reads as one call instead of 25 lines of
+ * Prisma + side effects.
+ */
+async function persistCompletedJob(
+  input: ProcessOcrJobInput,
+  finalMarkdown: string,
+  result: unknown,
+  extractedMetadata: Record<string, unknown>,
+  usedOllamaModels: Set<string>,
+): Promise<void> {
+  const [extractedTextOffload, resultOffload] = await Promise.all([
+    maybeUploadResultText(input.jobId, finalMarkdown),
+    maybeUploadResultJson(input.jobId, result),
+  ]);
+
+  await db.ocrJob.update({
+    where: { id: input.jobId },
+    data: {
+      status: OcrJobStatus.COMPLETED,
+      extractedText: extractedTextOffload.inline,
+      extractedTextLocation: extractedTextOffload.location,
+      result: (resultOffload.inline ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+      resultLocation: resultOffload.location,
+      metadata: toJsonValue(extractedMetadata),
+      completedAt: new Date(),
+      processingMs: Date.now() - input.startedAtMs,
+    },
+  });
+  void dispatchJobWebhooks(input.jobId, "job.completed").catch(() => undefined);
+  await finalizeOcrJob(input.jobId, input.settings.apiEndpoint, usedOllamaModels);
+}
+
+/**
+ * Persist a failed OCR job: write the FAILED row with the captured
+ * error message + final progress metadata, dispatch the job.failed
+ * webhook, then finalize. Mirror of persistCompletedJob.
+ */
+async function persistFailedJob(
+  input: ProcessOcrJobInput,
+  errorMessage: string,
+  metadata: OcrProgressMetadata,
+  usedOllamaModels: Set<string>,
+): Promise<void> {
+  await db.ocrJob.update({
+    where: { id: input.jobId },
+    data: {
+      status: OcrJobStatus.FAILED,
+      metadata: toJsonValue(metadata),
+      errorMessage,
+      completedAt: new Date(),
+      processingMs: Date.now() - input.startedAtMs,
+    },
+  });
+  void dispatchJobWebhooks(input.jobId, "job.failed").catch(() => undefined);
+  await finalizeOcrJob(input.jobId, input.settings.apiEndpoint, usedOllamaModels);
+}
+
 async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<void> {
   const startedAtIso = new Date(input.startedAtMs).toISOString();
   const pageOutputs: ProcessedPageOutput[] = input.initialPageOutputs ? [...input.initialPageOutputs] : [];
@@ -1848,21 +1915,10 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
   const partialStructuredPages = pageOutputs.map(toStructuredPagePayload);
   const partialPageResults = pageOutputs.map(toPageResultPayload);
   let totalDurationMs = pageOutputs.reduce((sum, page) => sum + page.durationMs, 0);
-  let extractedTextSoFar = "";
-  let extractedChunkCount = 0;
-  for (const page of pageOutputs) {
-    ({ text: extractedTextSoFar, chunks: extractedChunkCount } = appendPageMarkdown(
-      extractedTextSoFar,
-      extractedChunkCount,
-      page,
-    ));
-  }
+  let { text: extractedTextSoFar, chunks: extractedChunkCount } = seedExtractedText(pageOutputs);
 
   const selectedPostProcessModel = input.postProcessingPayload.model || input.model;
-  const usedOllamaModels = new Set<string>();
-  if (input.provider === "ollama") {
-    usedOllamaModels.add(input.ocrModel);
-  }
+  const usedOllamaModels = seedUsedOllamaModels(input.provider, input.ocrModel);
 
   let progressEvents: OcrProgressEvent[] = [];
   progressEvents = appendProgressEvent(
@@ -1880,16 +1936,10 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
     );
   }
 
-  let postProcessingMeta: OcrProgressMetadata["postProcessing"] = {
-    enabled: input.postProcessingPayload.enabled,
-    ...(input.postProcessingPayload.enabled
-      ? {
-          outputFormat: input.postProcessingPayload.outputFormat,
-          instruction: input.postProcessingPayload.instruction,
-          model: selectedPostProcessModel,
-        }
-      : {}),
-  };
+  let postProcessingMeta: OcrProgressMetadata["postProcessing"] = seedPostProcessingMeta(
+    input.postProcessingPayload,
+    selectedPostProcessModel,
+  );
 
   let latestMetadata = buildProgressMetadata({
     stage: "analyzing",
@@ -2220,26 +2270,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
     });
     extractedMetadata.progress = latestMetadata;
 
-    const [extractedTextOffload, resultOffload] = await Promise.all([
-      maybeUploadResultText(input.jobId, finalMarkdown),
-      maybeUploadResultJson(input.jobId, result),
-    ]);
-
-    await db.ocrJob.update({
-      where: { id: input.jobId },
-      data: {
-        status: OcrJobStatus.COMPLETED,
-        extractedText: extractedTextOffload.inline,
-        extractedTextLocation: extractedTextOffload.location,
-        result: (resultOffload.inline ?? Prisma.JsonNull) as Prisma.InputJsonValue,
-        resultLocation: resultOffload.location,
-        metadata: toJsonValue(extractedMetadata),
-        completedAt: new Date(),
-        processingMs: Date.now() - input.startedAtMs,
-      },
-    });
-    void dispatchJobWebhooks(input.jobId, "job.completed").catch(() => undefined);
-    await finalizeOcrJob(input.jobId, input.settings.apiEndpoint, usedOllamaModels);
+    await persistCompletedJob(input, finalMarkdown, result, extractedMetadata, usedOllamaModels);
   } catch (error) {
     progressEvents = appendProgressEvent(
       progressEvents,
@@ -2260,18 +2291,12 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
       postProcessing: postProcessingMeta,
     });
 
-    await db.ocrJob.update({
-      where: { id: input.jobId },
-      data: {
-        status: OcrJobStatus.FAILED,
-        metadata: toJsonValue(latestMetadata),
-        errorMessage: error instanceof Error ? error.message : "OCR processing failed",
-        completedAt: new Date(),
-        processingMs: Date.now() - input.startedAtMs,
-      },
-    });
-    void dispatchJobWebhooks(input.jobId, "job.failed").catch(() => undefined);
-    await finalizeOcrJob(input.jobId, input.settings.apiEndpoint, usedOllamaModels);
+    await persistFailedJob(
+      input,
+      error instanceof Error ? error.message : "OCR processing failed",
+      latestMetadata,
+      usedOllamaModels,
+    );
   }
 }
 
