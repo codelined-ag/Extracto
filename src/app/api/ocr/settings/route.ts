@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { OcrSetting } from "@prisma/client";
 import { db } from "@/lib/db";
 import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
 import {
+  AdvancedSettings,
   DEFAULT_SETTINGS,
   OCR_SETTINGS_KEY,
   normalizeAdvancedSettings,
 } from "@/lib/ocr/settings";
 
-const mapSettingsResponse = (setting: OcrSetting) => ({
+const mapSettingsResponse = (setting: AdvancedSettings) => ({
   language: setting.language,
   tableDetection: setting.tableDetection,
   handwritingRecognition: setting.handwritingRecognition,
@@ -17,22 +17,6 @@ const mapSettingsResponse = (setting: OcrSetting) => ({
   quality: setting.quality,
 });
 
-async function getOrCreateDefaultSettingsRow() {
-  const settings = await db.ocrSetting.findUnique({
-    where: { key: OCR_SETTINGS_KEY },
-  });
-
-  if (!settings) {
-    return await db.ocrSetting.create({
-      data: {
-        key: OCR_SETTINGS_KEY,
-        ...DEFAULT_SETTINGS,
-      },
-    });
-  }
-
-  return settings;
-}
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest(request);
@@ -42,8 +26,8 @@ export async function GET(request: NextRequest) {
   const scopeError = requireScope(auth, "settings:read");
   if (scopeError) return scopeError;
 
-  const settings = await getOrCreateDefaultSettingsRow();
-  return NextResponse.json(mapSettingsResponse(settings));
+  const existing = await db.ocrSetting.findUnique({ where: { key: OCR_SETTINGS_KEY } });
+  return NextResponse.json(mapSettingsResponse(existing ?? DEFAULT_SETTINGS));
 }
 
 export async function PUT(request: NextRequest) {

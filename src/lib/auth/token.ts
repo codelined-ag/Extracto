@@ -25,6 +25,7 @@ function getSecret(): string {
   return configured;
 }
 
+// Edge-compatible variant (TextEncoder/btoa). For Node-only callers using Buffer see api-key.ts.
 function base64UrlEncode(input: string | Uint8Array): string {
   const bytes = typeof input === "string" ? encoder.encode(input) : new Uint8Array(input);
 

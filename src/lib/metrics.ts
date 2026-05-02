@@ -22,7 +22,7 @@ function buildLabelKey(labels?: Record<string, string>): string {
   return entries.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(",");
 }
 
-export function incrCounter(
+export function incrementCounter(
   name: string,
   labels?: Record<string, string>,
   delta = 1
@@ -38,19 +38,19 @@ export function getCounters(): ReadonlyMap<string, CounterEntry> {
 }
 
 export function recordProviderError(provider: string): void {
-  incrCounter("extracto_provider_errors_total", { provider });
+  incrementCounter("extracto_provider_errors_total", { provider });
 }
 
 export function recordCacheHit(cache: string): void {
-  incrCounter("extracto_cache_hits_total", { cache });
+  incrementCounter("extracto_cache_hits_total", { cache });
 }
 
 export function recordCacheMiss(cache: string): void {
-  incrCounter("extracto_cache_misses_total", { cache });
+  incrementCounter("extracto_cache_misses_total", { cache });
 }
 
 export function recordWebhookDelivery(status: "success" | "failure"): void {
-  incrCounter("extracto_webhook_deliveries_total", { status });
+  incrementCounter("extracto_webhook_deliveries_total", { status });
 }
 
 export function formatPrometheus(counterEntries: ReadonlyMap<string, CounterEntry>): string {

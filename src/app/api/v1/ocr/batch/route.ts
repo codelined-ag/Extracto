@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { authenticateMutation, requireScope } from "@/lib/auth/request";
-import { buildOcrForwardHeaders } from "@/lib/ocr/forward";
+import { buildOcrForwardHeaders, resolveInternalOcrEndpoint } from "@/lib/ocr/forward";
 
 const MAX_BATCH_SIZE = 50;
 
@@ -71,13 +71,13 @@ export async function POST(request: NextRequest) {
   }
 
   const batchId = `batch_${randomBytes(8).toString("hex")}`;
-  const origin = request.nextUrl.origin;
+  const submitUrl = resolveInternalOcrEndpoint();
   const fetchHeaders = buildOcrForwardHeaders(request);
 
   const submissions: Array<{ fileName: string; jobId?: string; error?: string; status?: number }> = [];
   for (const file of parsed) {
     try {
-      const response = await fetch(`${origin}/api/ocr`, {
+      const response = await fetch(submitUrl, {
         method: "POST",
         headers: fetchHeaders,
         body: JSON.stringify({

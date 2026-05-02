@@ -1,5 +1,10 @@
 import { NextRequest } from "next/server";
 
+export function resolveInternalOcrEndpoint(): string {
+  const port = process.env.PORT ?? "3000";
+  return `http://127.0.0.1:${port}/api/ocr`;
+}
+
 export function buildOcrForwardHeaders(request: NextRequest): Record<string, string> {
   const origin = request.nextUrl.origin;
   const cookie = request.headers.get("cookie") || "";

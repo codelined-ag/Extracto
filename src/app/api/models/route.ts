@@ -8,6 +8,12 @@ import {
   normalizeHostEndpoint,
   resolveOllamaHostEndpoint,
 } from "@/lib/host-normalization";
+import {
+  DEFAULT_MISTRAL_API_URL,
+  DEFAULT_MISTRAL_MODELS,
+  OLLAMA_DEFAULT_HOST,
+  OLLAMA_NETWORK_HINT,
+} from "@/lib/ocr/provider-config";
 
 interface NormalizedModel {
   id: string;
@@ -18,41 +24,24 @@ interface NormalizedModel {
 const MODELS_SOURCE_TIMEOUT_MS = 8000;
 const OLLAMA_MODEL_PATHS = ["api/tags", "v1/models"] as const;
 const MISTRAL_MODEL_PATHS = ["v1/models"] as const;
-const DEFAULT_MODEL_PATHS = ["api/tags", "v1/models"] as const;
 
-const OLLAMA_NETWORK_HINT =
-  "If Ollama runs on the host machine, ensure it is not bound only to 127.0.0.1; " +
-  "set Ollama on host to listen on 0.0.0.0:11434 and use a host-reachable address in settings " +
-  "(for Docker: host.docker.internal:11434).";
 const APP_NETWORK_MODE = (process.env.APP_NETWORK_MODE || "bridge")
   .trim()
   .toLowerCase();
 const envOllamaHost = resolveOllamaHostEndpoint(
   process.env.OLLAMA_HOST || "",
-  "http://127.0.0.1:11434"
+  OLLAMA_DEFAULT_HOST
 );
 const FALLBACK_OLLAMA_HOST = resolveOllamaHostEndpoint(
   envOllamaHost,
-  "http://127.0.0.1:11434",
+  OLLAMA_DEFAULT_HOST,
 );
 const DISCOVERY_FALLBACK_HOST =
-  APP_NETWORK_MODE === "host" ? "http://127.0.0.1:11434" : FALLBACK_OLLAMA_HOST;
+  APP_NETWORK_MODE === "host" ? OLLAMA_DEFAULT_HOST : FALLBACK_OLLAMA_HOST;
 const DEFAULT_MISTRAL_ENDPOINT = normalizeHostEndpoint(
   process.env.MISTRAL_OCR_API_URL || "",
-  "https://api.mistral.ai/v1/ocr"
+  DEFAULT_MISTRAL_API_URL
 );
-const DEFAULT_MISTRAL_MODELS = (() => {
-  const configured = (process.env.MISTRAL_MODELS || "")
-    .split(",")
-    .map((model) => model.trim())
-    .filter(Boolean);
-
-  if (configured.length > 0) {
-    return Array.from(new Set(configured));
-  }
-
-  return ["mistral-ocr-latest", "mistral-ocr", "pixtral-12b"];
-})();
 
 function getModelPaths(providerHint: ProviderKind): readonly string[] {
   if (providerHint === "ollama") return OLLAMA_MODEL_PATHS;

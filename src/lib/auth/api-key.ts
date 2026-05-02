@@ -16,6 +16,7 @@ function getApiKeySecret(): string {
   return configured;
 }
 
+// Node-only variant (Buffer.toString). For edge-compatible base64url see token.ts.
 function base64UrlEncode(bytes: Buffer): string {
   return bytes.toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }

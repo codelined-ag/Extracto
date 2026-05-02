@@ -2,6 +2,7 @@ import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { db } from "@/lib/db";
+import { resolveInternalOcrEndpoint } from "@/lib/ocr/forward";
 
 const WATCH_FOLDER = (process.env.WATCH_FOLDER || "").trim();
 const WATCH_FOLDER_USER_EMAIL = (process.env.WATCH_FOLDER_USER_EMAIL || "").trim().toLowerCase();
@@ -61,8 +62,7 @@ async function ingestFile(filePath: string, user: UserRef): Promise<void> {
   else if (ext === ".webp") mime = "image/webp";
   const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
 
-  const port = process.env.PORT || "3000";
-  const submitUrl = `http://127.0.0.1:${port}/api/ocr`;
+  const submitUrl = resolveInternalOcrEndpoint();
   const requestBody = {
     fileName,
     preview: dataUrl,

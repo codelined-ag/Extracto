@@ -1,3 +1,4 @@
+import { scryptSync, randomBytes } from "node:crypto";
 import { describe, it, expect, vi } from "vitest";
 
 vi.mock("@/lib/db", () => ({
@@ -34,7 +35,6 @@ describe("verifyPassword", () => {
     // We need to create a real hash first. Since hashPassword is private,
     // we test through the full round-trip via the scrypt format.
     // Create a hash manually using the same format: salt:hash
-    const { scryptSync, randomBytes } = require("node:crypto");
     const salt = randomBytes(16).toString("hex");
     const key = scryptSync("secret", salt, 64).toString("hex");
     const hash = `${salt}:${key}`;
@@ -42,7 +42,6 @@ describe("verifyPassword", () => {
   });
 
   it("rejects an incorrect password", () => {
-    const { scryptSync, randomBytes } = require("node:crypto");
     const salt = randomBytes(16).toString("hex");
     const key = scryptSync("secret", salt, 64).toString("hex");
     const hash = `${salt}:${key}`;
@@ -58,7 +57,6 @@ describe("verifyPassword", () => {
   });
 
   it("rejects when hash lengths differ", () => {
-    const { scryptSync, randomBytes } = require("node:crypto");
     const salt = randomBytes(16).toString("hex");
     const shortKey = scryptSync("other", salt, 32).toString("hex");
     const hash = `${salt}:${shortKey}`;

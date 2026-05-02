@@ -1,6 +1,5 @@
 import { Prisma } from "@prisma/client";
 
-const STORAGE_MODE = (process.env.RESULT_STORAGE || "local").trim().toLowerCase();
 const S3_BUCKET = process.env.S3_BUCKET?.trim() || "";
 const S3_REGION = process.env.S3_REGION?.trim() || "us-east-1";
 const S3_ENDPOINT = process.env.S3_ENDPOINT?.trim() || "";
@@ -17,13 +16,13 @@ interface ResultStore {
 }
 
 class LocalResultStore implements ResultStore {
-  async put(): Promise<{ location: string }> {
+  async put(_key: string, _body: string, _contentType: string): Promise<{ location: string }> {
     return { location: "" };
   }
-  async get(): Promise<string | null> {
+  async get(_location: string): Promise<string | null> {
     return null;
   }
-  async delete(): Promise<void> {
+  async delete(_location: string): Promise<void> {
     // noop
   }
 }
@@ -56,6 +55,14 @@ async function getS3Client() {
   }
 }
 
+function parseS3Location(location: string): { bucket: string; key: string } | null {
+  if (!location.startsWith("s3://")) return null;
+  const without = location.slice("s3://".length);
+  const slash = without.indexOf("/");
+  if (slash < 0) return null;
+  return { bucket: without.slice(0, slash), key: without.slice(slash + 1) };
+}
+
 class S3ResultStore implements ResultStore {
   async put(key: string, body: string, contentType: string): Promise<{ location: string }> {
     if (!S3_BUCKET) {
@@ -76,12 +83,9 @@ class S3ResultStore implements ResultStore {
   }
 
   async get(location: string): Promise<string | null> {
-    if (!location.startsWith("s3://")) return null;
-    const without = location.slice("s3://".length);
-    const slash = without.indexOf("/");
-    if (slash < 0) return null;
-    const bucket = without.slice(0, slash);
-    const key = without.slice(slash + 1);
+    const parsed = parseS3Location(location);
+    if (!parsed) return null;
+    const { bucket, key } = parsed;
 
     const client = await getS3Client();
     const mod = await import("@aws-sdk/client-s3");
@@ -98,12 +102,9 @@ class S3ResultStore implements ResultStore {
   }
 
   async delete(location: string): Promise<void> {
-    if (!location.startsWith("s3://")) return;
-    const without = location.slice("s3://".length);
-    const slash = without.indexOf("/");
-    if (slash < 0) return;
-    const bucket = without.slice(0, slash);
-    const key = without.slice(slash + 1);
+    const parsed = parseS3Location(location);
+    if (!parsed) return;
+    const { bucket, key } = parsed;
 
     const client = await getS3Client();
     const mod = await import("@aws-sdk/client-s3");
@@ -111,10 +112,19 @@ class S3ResultStore implements ResultStore {
   }
 }
 
-const store: ResultStore = STORAGE_MODE === "s3" ? new S3ResultStore() : new LocalResultStore();
+let _store: ResultStore | null = null;
+
+function getStore(): ResultStore {
+  if (!_store) {
+    _store = (process.env.RESULT_STORAGE || "local").trim().toLowerCase() === "s3"
+      ? new S3ResultStore()
+      : new LocalResultStore();
+  }
+  return _store;
+}
 
 export function isRemoteResultStore(): boolean {
-  return STORAGE_MODE === "s3";
+  return (process.env.RESULT_STORAGE || "local").trim().toLowerCase() === "s3";
 }
 
 export async function maybeUploadResultText(
@@ -124,17 +134,12 @@ export async function maybeUploadResultText(
   if (!isRemoteResultStore() || !text) {
     return { inline: text || null, location: null };
   }
-  try {
-    const { location } = await store.put(
-      `jobs/${jobId}/extracted-text.txt`,
-      text,
-      "text/plain; charset=utf-8"
-    );
-    return { inline: null, location };
-  } catch (error) {
-    console.error("Result store upload (text) failed:", error);
-    return { inline: text, location: null };
-  }
+  const { location } = await getStore().put(
+    `jobs/${jobId}/extracted-text.txt`,
+    text,
+    "text/plain; charset=utf-8"
+  );
+  return { inline: null, location };
 }
 
 export async function maybeUploadResultJson(
@@ -144,18 +149,13 @@ export async function maybeUploadResultJson(
   if (!isRemoteResultStore()) {
     return { inline: (value ?? null) as Prisma.InputJsonValue, location: null };
   }
-  try {
-    const serialized = JSON.stringify(value ?? null);
-    const { location } = await store.put(
-      `jobs/${jobId}/result.json`,
-      serialized,
-      "application/json; charset=utf-8"
-    );
-    return { inline: null, location };
-  } catch (error) {
-    console.error("Result store upload (json) failed:", error);
-    return { inline: (value ?? null) as Prisma.InputJsonValue, location: null };
-  }
+  const serialized = JSON.stringify(value ?? null);
+  const { location } = await getStore().put(
+    `jobs/${jobId}/result.json`,
+    serialized,
+    "application/json; charset=utf-8"
+  );
+  return { inline: null, location };
 }
 
 export async function readResultText(
@@ -164,7 +164,7 @@ export async function readResultText(
 ): Promise<string | null> {
   if (location) {
     try {
-      return await store.get(location);
+      return await getStore().get(location);
     } catch (error) {
       console.error("Result store read (text) failed:", error);
       return null;
@@ -179,7 +179,7 @@ export async function readResultJson(
 ): Promise<unknown> {
   if (location) {
     try {
-      const text = await store.get(location);
+      const text = await getStore().get(location);
       if (text == null) return null;
       return JSON.parse(text) as unknown;
     } catch (error) {
@@ -195,7 +195,7 @@ export async function deleteResultArtifacts(locations: Array<string | null | und
   for (const loc of locations) {
     if (!loc) continue;
     try {
-      await store.delete(loc);
+      await getStore().delete(loc);
     } catch (error) {
       console.error("Result store delete failed:", error);
     }

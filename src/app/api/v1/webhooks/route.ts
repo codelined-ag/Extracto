@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
+import { handleApiError } from "@/lib/api-error";
 import { db } from "@/lib/db";
 import {
   generateWebhookSecret,
@@ -26,100 +27,108 @@ function parseEventsArray(input: unknown): WebhookEvent[] | null {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await authenticateRequest(request);
-  if (!auth) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const scopeError = requireScope(auth, "webhooks:read");
-  if (scopeError) return scopeError;
-
-  const rows = await db.webhook.findMany({
-    where: { userId: auth.userId },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      url: true,
-      events: true,
-      active: true,
-      lastFiredAt: true,
-      failureCount: true,
-      createdAt: true,
-    },
-  });
-
-  const webhooks = rows.map((row) => {
-    let events: string[] = [];
-    try {
-      const parsed = JSON.parse(row.events);
-      if (Array.isArray(parsed)) {
-        events = parsed.filter((value): value is string => typeof value === "string");
-      }
-    } catch {
-      events = [];
+  try {
+    const auth = await authenticateRequest(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    return { ...row, events };
-  });
+    const scopeError = requireScope(auth, "webhooks:read");
+    if (scopeError) return scopeError;
 
-  return NextResponse.json({ webhooks });
+    const rows = await db.webhook.findMany({
+      where: { userId: auth.userId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        url: true,
+        events: true,
+        active: true,
+        lastFiredAt: true,
+        failureCount: true,
+        createdAt: true,
+      },
+    });
+
+    const webhooks = rows.map((row) => {
+      let events: string[] = [];
+      try {
+        const parsed = JSON.parse(row.events);
+        if (Array.isArray(parsed)) {
+          events = parsed.filter((value): value is string => typeof value === "string");
+        }
+      } catch {
+        events = [];
+      }
+      return { ...row, events };
+    });
+
+    return NextResponse.json({ webhooks });
+  } catch (error) {
+    return handleApiError(error);
+  }
 }
 
 export async function POST(request: NextRequest) {
-  const result = await authenticateMutation(request);
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
-  }
-  const scopeError = requireScope(result.auth, "webhooks:write");
-  if (scopeError) return scopeError;
-  const userId = result.auth.userId;
-
-  const body = (await request.json().catch(() => ({}))) as {
-    url?: unknown;
-    events?: unknown;
-    active?: unknown;
-  };
-
-  const url = typeof body.url === "string" ? body.url.trim() : "";
-  if (!url || url.length > MAX_URL_LENGTH) {
-    return NextResponse.json({ error: "url must be a non-empty https/http URL" }, { status: 400 });
-  }
-  let parsedUrl: URL;
   try {
-    parsedUrl = new URL(url);
-  } catch {
-    return NextResponse.json({ error: "url is not a valid URL" }, { status: 400 });
-  }
-  if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
-    return NextResponse.json({ error: "url must be http or https" }, { status: 400 });
-  }
+    const result = await authenticateMutation(request);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+    const scopeError = requireScope(result.auth, "webhooks:write");
+    if (scopeError) return scopeError;
+    const userId = result.auth.userId;
 
-  const events = parseEventsArray(body.events) ?? (["job.completed", "job.failed"] as WebhookEvent[]);
+    const body = (await request.json().catch(() => ({}))) as {
+      url?: unknown;
+      events?: unknown;
+      active?: unknown;
+    };
 
-  const count = await db.webhook.count({ where: { userId } });
-  if (count >= MAX_WEBHOOKS_PER_USER) {
+    const url = typeof body.url === "string" ? body.url.trim() : "";
+    if (!url || url.length > MAX_URL_LENGTH) {
+      return NextResponse.json({ error: "url must be a non-empty https/http URL" }, { status: 400 });
+    }
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return NextResponse.json({ error: "url is not a valid URL" }, { status: 400 });
+    }
+    if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+      return NextResponse.json({ error: "url must be http or https" }, { status: 400 });
+    }
+
+    const events = parseEventsArray(body.events) ?? (["job.completed", "job.failed"] as WebhookEvent[]);
+
+    const count = await db.webhook.count({ where: { userId } });
+    if (count >= MAX_WEBHOOKS_PER_USER) {
+      return NextResponse.json(
+        { error: `Maximum of ${MAX_WEBHOOKS_PER_USER} webhooks per user` },
+        { status: 409 }
+      );
+    }
+
+    const secret = generateWebhookSecret();
+    const created = await db.webhook.create({
+      data: {
+        userId,
+        url,
+        secret,
+        events: serializeEventList(events),
+        active: body.active === false ? false : true,
+      },
+      select: { id: true, url: true, events: true, active: true, createdAt: true },
+    });
+
     return NextResponse.json(
-      { error: `Maximum of ${MAX_WEBHOOKS_PER_USER} webhooks per user` },
-      { status: 409 }
+      {
+        webhook: { ...created, events, secret },
+        warning:
+          "Store this signing secret now — it will not be shown again. Verify deliveries with the X-Extracto-Signature header.",
+      },
+      { status: 201 }
     );
+  } catch (error) {
+    return handleApiError(error);
   }
-
-  const secret = generateWebhookSecret();
-  const created = await db.webhook.create({
-    data: {
-      userId,
-      url,
-      secret,
-      events: serializeEventList(events),
-      active: body.active === false ? false : true,
-    },
-    select: { id: true, url: true, events: true, active: true, createdAt: true },
-  });
-
-  return NextResponse.json(
-    {
-      webhook: { ...created, events, secret },
-      warning:
-        "Store this signing secret now — it will not be shown again. Verify deliveries with the X-Extracto-Signature header.",
-    },
-    { status: 201 }
-  );
 }

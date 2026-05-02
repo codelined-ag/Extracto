@@ -7,28 +7,34 @@ import {
   normalizeHostEndpoint,
   resolveOllamaHostEndpoint,
 } from "@/lib/host-normalization";
+import {
+  DEFAULT_MISTRAL_API_URL,
+  DEFAULT_OPENAI_COMPAT_API_URL,
+  DEFAULT_OPENROUTER_API_URL,
+  OLLAMA_DEFAULT_HOST,
+} from "@/lib/ocr/provider-config";
 
 const DEFAULT_OLLAMA_HOST = normalizeHostEndpoint(
   process.env.OLLAMA_HOST || "",
-  "http://localhost:11434"
+  OLLAMA_DEFAULT_HOST
 );
 const DEFAULT_MISTRAL_OCR_ENDPOINT = normalizeHostEndpoint(
   process.env.MISTRAL_OCR_API_URL || "",
-  "https://api.mistral.ai/v1/ocr"
+  DEFAULT_MISTRAL_API_URL
 );
 const DEFAULT_OPENROUTER_API_ENDPOINT = normalizeHostEndpoint(
   process.env.OPENROUTER_API_URL || "",
-  "https://openrouter.ai/api/v1"
+  DEFAULT_OPENROUTER_API_URL
 );
 const DEFAULT_OPENAI_COMPAT_API_ENDPOINT = normalizeHostEndpoint(
   process.env.OPENAI_COMPAT_API_URL || "",
-  "https://api.openai.com/v1"
+  DEFAULT_OPENAI_COMPAT_API_URL
 );
 const SHOULD_PRESERVE_LOCALHOST =
   (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase() === "host";
 const FALLBACK_OLLAMA_HOST = resolveOllamaHostEndpoint(
   DEFAULT_OLLAMA_HOST,
-  "http://127.0.0.1:11434"
+  OLLAMA_DEFAULT_HOST
 );
 const DATA_ROOT = (() => {
   const envDatabaseUrl = process.env.DATABASE_URL?.trim();
@@ -134,19 +140,17 @@ function normalizeOpenAICompatEndpoint(rawEndpoint?: string): string {
   }
 }
 
+const PROVIDER_DEFAULT_ENDPOINTS: Record<ProviderKind, string> = {
+  mistral: DEFAULT_MISTRAL_OCR_ENDPOINT,
+  openrouter: DEFAULT_OPENROUTER_API_ENDPOINT,
+  openai_compat: DEFAULT_OPENAI_COMPAT_API_ENDPOINT,
+  ollama: FALLBACK_OLLAMA_HOST,
+};
+
 function normalizeApiEndpoint(rawEndpoint: string | undefined, provider: ProviderKind): string {
-  if (provider === "mistral") {
-    return normalizeMistralEndpoint(rawEndpoint);
-  }
-
-  if (provider === "openrouter") {
-    return normalizeOpenRouterEndpoint(rawEndpoint);
-  }
-
-  if (provider === "openai_compat") {
-    return normalizeOpenAICompatEndpoint(rawEndpoint);
-  }
-
+  if (provider === "mistral") return normalizeMistralEndpoint(rawEndpoint);
+  if (provider === "openrouter") return normalizeOpenRouterEndpoint(rawEndpoint);
+  if (provider === "openai_compat") return normalizeOpenAICompatEndpoint(rawEndpoint);
   return normalizeOllamaEndpoint(rawEndpoint);
 }
 
@@ -155,6 +159,8 @@ export interface ApiProviderSettings {
   apiEndpoint: string;
   apiKey: string;
 }
+
+export type ClientApiSettings = ApiProviderSettings & { hasApiKey: boolean };
 
 interface SaveApiSettingsInput extends Omit<Partial<ApiProviderSettings>, "provider"> {
   provider?: string;
@@ -173,14 +179,11 @@ const settingsCache = new Map<string, ApiProviderSettings>();
 const normalizeSettings = (settings: Partial<ApiProviderSettings>): ApiProviderSettings => {
   const provider = normalizeProvider(settings.provider);
   const normalizedEndpoint = normalizeApiEndpoint(settings.apiEndpoint, provider);
-  const safeEndpoint =
-    provider === "mistral"
-      ? enforceProviderEndpointPolicy("mistral", normalizedEndpoint, DEFAULT_MISTRAL_OCR_ENDPOINT)
-      : provider === "openrouter"
-        ? enforceProviderEndpointPolicy("openrouter", normalizedEndpoint, DEFAULT_OPENROUTER_API_ENDPOINT)
-        : provider === "openai_compat"
-          ? enforceProviderEndpointPolicy("openai_compat", normalizedEndpoint, DEFAULT_OPENAI_COMPAT_API_ENDPOINT)
-          : enforceProviderEndpointPolicy("ollama", normalizedEndpoint, FALLBACK_OLLAMA_HOST);
+  const safeEndpoint = enforceProviderEndpointPolicy(
+    provider,
+    normalizedEndpoint,
+    PROVIDER_DEFAULT_ENDPOINTS[provider]
+  );
 
   return {
     provider,
@@ -217,27 +220,23 @@ export async function getApiSettings(userId: string): Promise<ApiProviderSetting
   const settingsPath = getSettingsPath(safeUserId);
   try {
     const stored = await readFile(settingsPath, "utf8");
-    let parsed: any = null;
-    let parseOk = false;
+    let parsed: unknown;
     try {
       parsed = JSON.parse(stored);
-      parseOk = true;
-    } catch (parseErr) {
-      console.error(`[settings-store] Corrupt settings file for user ${safeUserId}, resetting to defaults:`, parseErr);
+    } catch {
+      throw new Error(`Settings file is corrupt: ${settingsPath}`);
     }
-    if (parseOk) {
-      try {
-        const normalized = normalizeSettings(parsed);
-        settingsCache.set(safeUserId, normalized);
-        return { ...normalized };
-      } catch (normalizeErr) {
-        console.error(`[settings-store] Settings invalid for user ${safeUserId}, resetting to defaults:`, normalizeErr);
-      }
+    try {
+      const normalized = normalizeSettings(parsed);
+      settingsCache.set(safeUserId, normalized);
+      return { ...normalized };
+    } catch (normalizeErr) {
+      console.error(`[settings-store] Settings invalid for user ${safeUserId}, resetting to defaults:`, normalizeErr);
     }
   } catch (readErr: unknown) {
     const code = (readErr as NodeJS.ErrnoException).code;
     if (code !== "ENOENT") {
-      console.error(`[settings-store] Failed to read settings for user ${safeUserId}:`, readErr);
+      throw readErr;
     }
   }
   const normalized = normalizeSettings(DEFAULT_API_SETTINGS);
@@ -256,13 +255,7 @@ export async function saveApiSettings(
     ? settings.apiEndpoint
     : provider === current.provider
       ? current.apiEndpoint
-      : provider === "mistral"
-        ? DEFAULT_MISTRAL_OCR_ENDPOINT
-        : provider === "openrouter"
-          ? DEFAULT_OPENROUTER_API_ENDPOINT
-          : provider === "openai_compat"
-            ? DEFAULT_OPENAI_COMPAT_API_ENDPOINT
-            : FALLBACK_OLLAMA_HOST;
+      : PROVIDER_DEFAULT_ENDPOINTS[provider];
   const normalized = normalizeSettings({
     ...current,
     ...settings,

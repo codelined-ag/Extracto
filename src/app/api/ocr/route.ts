@@ -30,6 +30,20 @@ import { getClientIpAddress } from "@/lib/request-security";
 import { AdvancedSettings, normalizeAdvancedSettings, PostProcessingSettings, PostProcessOutputFormat } from "@/lib/ocr/settings";
 import { ApiRouteError } from "@/lib/api-error";
 import { extractFirstBalancedJsonObject, extractMarkdownFromJsonLikeText } from "@/lib/ocr/text-extract";
+import {
+  DEFAULT_MISTRAL_API_URL,
+  DEFAULT_MISTRAL_MODELS,
+  DEFAULT_MISTRAL_OCR_MODEL,
+  DEFAULT_OPENAI_COMPAT_API_URL,
+  DEFAULT_OPENAI_COMPAT_FALLBACK_MODELS,
+  DEFAULT_OPENROUTER_API_URL,
+  DEFAULT_OPENROUTER_FALLBACK_MODELS,
+  OLLAMA_DEFAULT_HOST,
+  OLLAMA_DISCOVERY_PATHS,
+  OLLAMA_NETWORK_HINT,
+  OPENROUTER_REFERER,
+  OPENROUTER_TITLE,
+} from "@/lib/ocr/provider-config";
 
 interface OCRRequestBody {
   jobId?: unknown;
@@ -142,64 +156,14 @@ class OcrStopRequestedError extends Error {
 
 const DEFAULT_OLLAMA_HOST = normalizeHostEndpoint(
   process.env.OLLAMA_HOST || "",
-  "http://127.0.0.1:11434"
+  OLLAMA_DEFAULT_HOST
 );
 const FALLBACK_OLLAMA_HOST = resolveOllamaHostEndpoint(
   DEFAULT_OLLAMA_HOST,
-  "http://127.0.0.1:11434",
+  OLLAMA_DEFAULT_HOST,
 );
 const APP_NETWORK_MODE = (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase();
-const DEFAULT_MISTRAL_API_URL =
-  process.env.MISTRAL_OCR_API_URL?.trim() || "https://api.mistral.ai/v1/ocr";
-const DEFAULT_MISTRAL_OCR_MODEL = (process.env.MISTRAL_OCR_MODEL || "mistral-ocr-latest").trim();
-const DEFAULT_MISTRAL_MODELS = (() => {
-  const configured = (process.env.MISTRAL_MODELS || "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-  return configured.length > 0
-    ? configured
-    : [
-        "mistral-ocr-latest",
-        "mistral-ocr",
-        "pixtral-12b",
-      ];
-})();
-const DEFAULT_OPENROUTER_API_URL =
-  process.env.OPENROUTER_API_URL?.trim() || "https://openrouter.ai/api/v1";
-const DEFAULT_OPENROUTER_FALLBACK_MODELS = (() => {
-  const configured = (process.env.OPENROUTER_MODELS || "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-  return configured.length > 0
-    ? configured
-    : [
-        "anthropic/claude-3.5-sonnet",
-        "openai/gpt-4o",
-        "openai/gpt-4o-mini",
-        "google/gemini-2.0-flash-001",
-        "qwen/qwen-2-vl-72b-instruct",
-      ];
-})();
-const OPENROUTER_REFERER = (process.env.OPENROUTER_REFERER || "").trim();
-const OPENROUTER_TITLE = (process.env.OPENROUTER_TITLE || "Extracto").trim();
 const OPENROUTER_MODEL_CACHE_TTL_MS = 5 * 60_000;
-
-const DEFAULT_OPENAI_COMPAT_API_URL =
-  process.env.OPENAI_COMPAT_API_URL?.trim() || "https://api.openai.com/v1";
-const DEFAULT_OPENAI_COMPAT_FALLBACK_MODELS = (() => {
-  const configured = (process.env.OPENAI_COMPAT_MODELS || "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-  return configured.length > 0
-    ? configured
-    : [
-        "gpt-4o",
-        "gpt-4o-mini",
-      ];
-})();
 const OPENAI_COMPAT_MODEL_CACHE_TTL_MS = 5 * 60_000;
 const OPENAI_COMPAT_MODEL_CACHE_MAX_ENTRIES = 256;
 
@@ -210,10 +174,7 @@ const MAX_POST_PROCESS_INSTRUCTION_LENGTH = 6000;
 const OCR_RATE_LIMIT_WINDOW_MS = 60_000;
 const OCR_RATE_LIMIT_MAX = 6;
 const OLLAMA_DISCOVERY_FALLBACK_HOST =
-  APP_NETWORK_MODE === "host" ? "http://127.0.0.1:11434" : FALLBACK_OLLAMA_HOST;
-const OLLAMA_DISCOVERY_PATHS = ["/api/tags", "/v1/models"] as const;
-const OLLAMA_NETWORK_HINT =
-  "If Ollama runs on the host machine, ensure it is bound to 0.0.0.0:11434 (not only 127.0.0.1), and from the container use a host-reachable address.";
+  APP_NETWORK_MODE === "host" ? OLLAMA_DEFAULT_HOST : FALLBACK_OLLAMA_HOST;
 
 let ollamaModelCache: {
   values: string[];
@@ -338,6 +299,9 @@ function normalizeApiSettings(raw: ApiProviderSettings): ApiProviderSettings {
   };
 }
 
+// Runtime normalization (vs settings-store.ts which normalizes for persistence):
+// strips /chat/completions and /models suffixes the user may have pasted — not done
+// at save-time because those paths are valid endpoint components in other contexts.
 function normalizeOpenAICompatApiBase(rawEndpoint: string): string {
   // BYO endpoint: respect operator-supplied base path verbatim. We only
   // normalize scheme, drop trailing slash and any chat/completions or
@@ -1095,7 +1059,7 @@ async function runProviderPostProcessing(
   if (provider === "openai_compat") {
     return runCompatPostProcessing(OPENAI_COMPAT_CONFIG, settings.apiEndpoint, model, settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "", systemPrompt, userPrompt, outputFormat);
   }
-  return runMistralPostProcessing(model, settings.apiKey || process.env.MISTRAL_API_KEY || "", settings.apiEndpoint, systemPrompt, userPrompt, outputFormat);
+  return runMistralPostProcessing(settings.apiEndpoint, model, settings.apiKey || process.env.MISTRAL_API_KEY || "", systemPrompt, userPrompt, outputFormat);
 }
 
 
@@ -1243,7 +1207,7 @@ async function runOllamaPostProcessing(
   model: string,
   systemPrompt: string,
   userPrompt: string
-): Promise<{ text: string; metadata: Record<string, unknown> }> {
+): Promise<PostProcessResult> {
   const errors: string[] = [];
   const candidates = getOllamaCandidatesForOcr(endpoint);
   const chatEndpoints = ["/api/chat", "/v1/chat/completions"] as const;
@@ -1547,13 +1511,13 @@ async function runMistralOcr(
 }
 
 async function runMistralPostProcessing(
+  apiEndpoint: string,
   model: string,
   apiKey: string,
-  apiEndpoint: string,
   systemPrompt: string,
   userPrompt: string,
   outputFormat: PostProcessOutputFormat
-): Promise<{ text: string; metadata: Record<string, unknown> }> {
+): Promise<PostProcessResult> {
   if (!apiKey) {
     throw new ApiRouteError("MISTRAL_API_KEY is not configured", 500);
   }
@@ -1854,7 +1818,7 @@ async function runCompatPostProcessing(
   systemPrompt: string,
   userPrompt: string,
   outputFormat: PostProcessOutputFormat
-): Promise<{ text: string; metadata: Record<string, unknown> }> {
+): Promise<PostProcessResult> {
   if (!apiKey) {
     throw new ApiRouteError(`${cfg.label} API key is not configured`, 500);
   }

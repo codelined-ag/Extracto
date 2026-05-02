@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus } from "@prisma/client";
 
 import { authenticateMutation, authHasScope } from "@/lib/auth/request";
-import { buildOcrForwardHeaders } from "@/lib/ocr/forward";
+import { buildOcrForwardHeaders, resolveInternalOcrEndpoint } from "@/lib/ocr/forward";
 import { db } from "@/lib/db";
 import { readResultText } from "@/lib/result-store";
 
@@ -110,10 +110,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const origin = request.nextUrl.origin;
   const fetchHeaders = buildOcrForwardHeaders(request);
 
-  const submitResponse = await fetch(`${origin}/api/ocr`, {
+  const submitResponse = await fetch(resolveInternalOcrEndpoint(), {
     method: "POST",
     headers: fetchHeaders,
     body: JSON.stringify({

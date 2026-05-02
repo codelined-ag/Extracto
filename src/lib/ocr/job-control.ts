@@ -97,17 +97,17 @@ interface PriorityWaiter {
   resolve: () => void;
 }
 
-const DEFAULT_CONCURRENCY = (() => {
+function getConcurrencyLimit(): number {
   const raw = Number(process.env.OCR_WORKER_CONCURRENCY || "2");
   return Number.isFinite(raw) && raw >= 1 ? Math.min(raw, 16) : 2;
-})();
+}
 
 let activeJobs = 0;
 let waiterCounter = 0;
 const waiters: PriorityWaiter[] = [];
 
 function pumpWaiters(): void {
-  while (activeJobs < DEFAULT_CONCURRENCY && waiters.length > 0) {
+  while (activeJobs < getConcurrencyLimit() && waiters.length > 0) {
     waiters.sort((a, b) => {
       if (a.priority !== b.priority) return b.priority - a.priority;
       return a.enqueueOrder - b.enqueueOrder;
@@ -124,7 +124,7 @@ export async function withOcrJobSlot<T>(
   task: () => Promise<T>
 ): Promise<T> {
   await new Promise<void>((resolve) => {
-    if (activeJobs < DEFAULT_CONCURRENCY) {
+    if (activeJobs < getConcurrencyLimit()) {
       activeJobs++;
       resolve();
       return;
