@@ -34,7 +34,6 @@ import { PauseIcon } from"@/components/ui/pause";
 import { PlayIcon } from"@/components/ui/play";
 import { SettingsIcon } from"@/components/ui/settings";
 import { SparklesIcon } from"@/components/ui/sparkles";
-import { XIcon } from"@/components/ui/x";
 import { ZapIcon } from"@/components/ui/zap";
 import { useRouter } from"next/navigation";
 
@@ -90,7 +89,6 @@ import { normalizeProvider, type ProviderKind, type ClientApiSettings } from"@/l
 import { type AdvancedSettings, type PostProcessingSettings, type PostProcessOutputFormat } from"@/lib/ocr/settings";
 import {
   formatEta,
-  formatFileSize,
   formatTimestamp,
   getMarkdownFromJsonPayload,
   getStructuredJsonPayload,
@@ -102,45 +100,20 @@ import {
   SettingsSection,
   ToggleRow,
 } from "@/app/page-components/settings-primitives";
+import { FileListItem } from "@/app/page-components/file-list-item";
 import { Footer } from "@/app/page-components/footer";
 import { HeaderBar } from "@/app/page-components/header-bar";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
-import type { SettingsTab } from "@/app/page-components/types";
+import type {
+  OcrPageCheckpointView,
+  OcrProgressEventView,
+  ProcessingFile,
+  SettingsTab,
+  UiLanguage,
+} from "@/app/page-components/types";
 import ReactMarkdown from"react-markdown";
 
 // Types
-interface ProcessingFile {
- id: string;
- name: string;
- size: number;
- type: string;
- status:"pending"|"processing"|"paused"|"completed"|"error";
- progress: number;
- result?: {
- text: string;
- json: Record<string, unknown>;
- };
- error?: string;
- preview?: string;
- pagePreviews?: string[];
- pageCount?: number;
- processedPages?: number;
- etaSeconds?: number | null;
- stage?: string;
- stageMessage?: string;
- jobId?: string;
- checkpoints?: OcrPageCheckpointView[];
- events?: OcrProgressEventView[];
- file?: File;
- kbExport?: KbExportFileState;
-}
-
-interface KbExportFileState {
- status:"idle"|"pending"|"success"|"error";
- chunkCount?: number;
- collectionName?: string;
- error?: string;
-}
 
 type KbEmbeddingProvider ="ollama"|"openrouter"|"openai_compat";
 type KbChunkingStrategy ="fixed"|"sentence"|"paragraph";
@@ -196,18 +169,6 @@ const DEFAULT_KB_FORM: KbDefaultsForm = {
  collectionTemplate:"extracto-{jobId}",
 };
 
-interface OcrPageCheckpointView {
- pageNumber: number;
- previewText?: string;
- characterCount?: number;
- durationMs?: number;
-}
-
-interface OcrProgressEventView {
- at?: string;
- stage?: string;
- message?: string;
-}
 
 interface Model {
  id: string;
@@ -239,7 +200,6 @@ interface HistoryJobDetail extends HistoryJobSummary {
 }
 
 type ProviderModelSelections = Partial<Record<ProviderKind, string>>;
-type UiLanguage ="it"|"en"|"fr"|"es"|"de";
 
 const UI_LANGUAGES: UiLanguage[] = ["it","en","fr","es","de"];
 
@@ -2524,103 +2484,18 @@ export default function ExtractoPage() {
  <ScrollArea className="max-h-[220px]">
  <div className="p-2 space-y-1">
  <AnimatePresence initial={false}>
- {files.map((file, index) => (
- <motion.div
- key={file.id}
- initial={{ opacity: 0, y: 10, scale: 0.95 }}
- animate={{ opacity: 1, y: 0, scale: 1 }}
- exit={{ opacity: 0, x: -20 }}
- transition={{ duration: 0.2, delay: index * 0.05 }}
- className={cn(
-"flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors",
- selectedFileId === file.id
- ?"bg-primary/10":"hover:bg-muted/50")}
- onClick={() => setSelectedFileId(file.id)}
- >
- {/* Preview or Icon */}
- <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
- {file.preview ? (
- <img
- src={file.preview}
- alt={file.name}
- className="w-full h-full object-cover"/>
- ) : (
- <FileTextIcon size={20} className="inline-flex items-center justify-center text-muted-foreground"/>
- )}
- </div>
-
- {/* File Info */}
- <div className="flex-1 min-w-0">
- <p className="text-sm font-medium truncate">{file.name}</p>
- <div className="flex items-center gap-2">
- <span className="text-xs text-muted-foreground">
- {formatFileSize(file.size)}
- </span>
- {typeof file.pageCount ==="number"? (
- <span className="text-[11px] text-muted-foreground">
- {file.pageCount} {file.pageCount === 1
- ? t("pagina","page","page","página","Seite")
- : t("pagine","pages","pages","páginas","Seiten")}
- </span>
- ) : null}
- {file.status ==="processing"&& (
- <div className="flex items-center gap-1">
- <LoaderCircleIcon size={12} className="inline-flex items-center justify-center animate-spin text-primary"/>
- <span className="text-xs text-primary">{file.progress}%</span>
- </div>
- )}
- {file.status ==="paused"? (
- <div className="flex items-center gap-1">
- <PauseIcon size={12} className="inline-flex items-center justify-center text-accent-foreground"/>
- <span className="text-xs text-accent-foreground">{t("in pausa","paused","en pause","en pausa","pausiert")}</span>
- </div>
- ) : null}
- </div>
- {(file.status ==="processing"|| file.status ==="paused") && (
- <>
- <Progress value={file.progress} className="h-1 mt-1"/>
- <div className="flex items-center justify-between mt-1">
- <span className="text-[11px] text-muted-foreground truncate max-w-[150px]">
- {translatePipelineMessage(file.stageMessage, uiLanguage) || (file.status ==="paused"? t("In pausa","Paused","En pause","En pausa","Pausiert") : t("In lavorazione","Working","En cours","Trabajando","In Arbeit"))}
- </span>
- <span className="text-[11px] text-muted-foreground">
- {t("ETA","ETA","ETA","ETA","ETA")} {formatEta(file.etaSeconds)}
- </span>
- </div>
- </>
- )}
- </div>
-
- {/* Status Icon */}
- <div className="flex-shrink-0">
- {file.status ==="completed"&& (
- <motion.div
- initial={{ scale: 0 }}
- animate={{ scale: 1 }}
- transition={{ type:"spring", stiffness: 400 }}
- >
- <CircleCheckIcon size={16} className="inline-flex items-center justify-center text-[oklch(0.55_0.13_150)]"/>
- </motion.div>
- )}
- {file.status ==="error"&& (
- <AlertCircle className="h-4 w-4 text-destructive"/>
- )}
- {file.status ==="paused"&& (
- <PauseIcon size={16} className="inline-flex items-center justify-center text-accent-foreground"/>
- )}
- {file.status ==="pending"&& (
- <Button
- variant="ghost"size="icon"className="h-6 w-6"onClick={(e) => {
- e.stopPropagation();
- removeFile(file.id);
- }}
- >
- <XIcon size={12} className="inline-flex items-center justify-center"/>
- </Button>
- )}
- </div>
- </motion.div>
- ))}
+                  {files.map((file, index) => (
+                    <FileListItem
+                      key={file.id}
+                      file={file}
+                      index={index}
+                      isSelected={selectedFileId === file.id}
+                      onSelect={setSelectedFileId}
+                      onRemove={removeFile}
+                      t={t}
+                      uiLanguage={uiLanguage}
+                    />
+                  ))}
  </AnimatePresence>
  </div>
  </ScrollArea>

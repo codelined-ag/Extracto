@@ -8,6 +8,54 @@ export type Translator = (
 
 export type SettingsTab = "model" | "provider" | "kb" | "general" | "account";
 
+export type UiLanguage = "it" | "en" | "fr" | "es" | "de";
+
+export interface OcrPageCheckpointView {
+  pageNumber: number;
+  previewText?: string;
+  characterCount?: number;
+  durationMs?: number;
+}
+
+export interface OcrProgressEventView {
+  at?: string;
+  stage?: string;
+  message?: string;
+}
+
+export interface KbExportFileState {
+  status: "idle" | "pending" | "success" | "error";
+  chunkCount?: number;
+  collectionName?: string;
+  error?: string;
+}
+
+export interface ProcessingFile {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  status: "pending" | "processing" | "paused" | "completed" | "error";
+  progress: number;
+  result?: {
+    text: string;
+    json: Record<string, unknown>;
+  };
+  error?: string;
+  preview?: string;
+  pagePreviews?: string[];
+  pageCount?: number;
+  processedPages?: number;
+  etaSeconds?: number | null;
+  stage?: string;
+  stageMessage?: string;
+  jobId?: string;
+  checkpoints?: OcrPageCheckpointView[];
+  events?: OcrProgressEventView[];
+  file?: File;
+  kbExport?: KbExportFileState;
+}
+
 export interface HistoryJobSummary {
   id: string;
   status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
