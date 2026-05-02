@@ -192,4 +192,48 @@ describe("parseJsonBody", () => {
     const body = await parseJsonBody<{ required: string }>(mkRequest(async () => ({})));
     expect(body.required).toBeUndefined();
   });
+
+  it("returns empty object when json() resolves to undefined", async () => {
+    const body = await parseJsonBody(mkRequest(async () => undefined));
+    expect(body).toEqual({});
+  });
+
+  it("returns empty object for number primitives (0)", async () => {
+    expect(await parseJsonBody(mkRequest(async () => 0))).toEqual({});
+  });
+
+  it("returns empty object for boolean primitives (false)", async () => {
+    expect(await parseJsonBody(mkRequest(async () => false))).toEqual({});
+  });
+
+  it("returns empty object for NaN", async () => {
+    expect(await parseJsonBody(mkRequest(async () => NaN))).toEqual({});
+  });
+
+  it("preserves valid empty object as-is", async () => {
+    // distinguishes 'parse failed' from 'parsed but empty' — both end up as {}
+    // but the distinction is preserved by returning the parsed value when it's
+    // a plain object.
+    const body = await parseJsonBody(mkRequest(async () => ({})));
+    expect(body).toEqual({});
+  });
+
+  it("returns empty object when json() rejects with a non-Error value", async () => {
+    expect(await parseJsonBody(mkRequest(async () => { throw "string-not-error"; }))).toEqual({});
+  });
+
+  it("preserves nested objects verbatim", async () => {
+    const nested = { a: { b: { c: 1 } } };
+    const body = await parseJsonBody<{ a: unknown }>(mkRequest(async () => nested));
+    expect(body.a).toEqual({ b: { c: 1 } });
+  });
+
+  it("does NOT sanitize __proto__ / constructor keys (callers must validate)", async () => {
+    const body = await parseJsonBody<Record<string, unknown>>(
+      mkRequest(async () => ({ __proto__: { polluted: true }, constructor: "x" })),
+    );
+    // The helper preserves keys verbatim; downstream code is responsible for
+    // not blindly merging them into trusted objects.
+    expect("constructor" in body).toBe(true);
+  });
 });

@@ -35,7 +35,7 @@ async function findWatchUser(): Promise<UserRef | null> {
   });
 }
 
-function isSupportedFile(name: string): boolean {
+export function isSupportedFile(name: string): boolean {
   const lowered = name.toLowerCase();
   if (lowered.startsWith(".")) return false;
   if (lowered.endsWith(WATCH_RESULT_SUFFIX)) return false;
