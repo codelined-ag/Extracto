@@ -53,10 +53,9 @@ import {
 } from"@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from"@/components/ui/tabs";
 import { Progress } from"@/components/ui/progress";
-import { Card, CardContent, CardHeader, CardTitle } from"@/components/ui/card";
+import { Card, CardContent } from"@/components/ui/card";
 import { ScrollArea } from"@/components/ui/scroll-area";
 import { Badge } from"@/components/ui/badge";
-import { Separator } from"@/components/ui/separator";
 import { Switch } from"@/components/ui/switch";
 import { Label } from"@/components/ui/label";
 import { Input } from"@/components/ui/input";
@@ -100,8 +99,6 @@ import {
   formatTimestamp,
   getMarkdownFromJsonPayload,
   getStructuredJsonPayload,
-  normalizeMarkdownCandidate,
-  parseLooseJsonObject,
   sleep,
   translatePipelineMessage,
 } from "@/app/page-utils";
@@ -597,7 +594,7 @@ export default function ExtractoPage() {
  // KB" on a completed file.
  const [kbDefaults, setKbDefaults] = React.useState<KbDefaultsForm>(DEFAULT_KB_FORM);
  const [kbDefaultsDraft, setKbDefaultsDraft] = React.useState<KbDefaultsForm>(DEFAULT_KB_FORM);
- const [kbDefaultsOpen, setKbDefaultsOpen] = React.useState(false);
+ const [, setKbDefaultsOpen] = React.useState(false);
  const [kbEmbeddingKeyDirty, setKbEmbeddingKeyDirty] = React.useState(false);
  const [kbStoreKeyDirty, setKbStoreKeyDirty] = React.useState(false);
  const [isSavingKbDefaults, setIsSavingKbDefaults] = React.useState(false);

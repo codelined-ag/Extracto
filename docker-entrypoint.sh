@@ -70,7 +70,11 @@ if [ ! -f "$DB_PATH" ]; then
 fi
 
 if [ "$MIGRATE_ON_START" = "1" ] || [ "$MIGRATE_ON_START" = "true" ]; then
-  bun run db:push
+  if [ -d /app/prisma/migrations ] && [ "$(ls -A /app/prisma/migrations 2>/dev/null | grep -v migration_lock.toml | wc -l)" -gt 0 ]; then
+    bunx prisma migrate deploy
+  else
+    bun run db:push
+  fi
 fi
 
 echo "Starting Next.js from server.js"

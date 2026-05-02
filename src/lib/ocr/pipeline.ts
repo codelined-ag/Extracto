@@ -58,13 +58,10 @@ import {
 } from "@/lib/ocr/providers/mistral";
 import {
   OcrStopRequestedError,
-  type OcrRunResult,
-  type PostProcessResult,
 } from "@/lib/ocr/providers/shared";
 import {
   type AdvancedSettings,
   type PostProcessingSettings,
-  type PostProcessOutputFormat,
 } from "@/lib/ocr/settings";
 import {
   maybeUploadResultJson,
@@ -99,6 +96,8 @@ import type {
 import {
   appendProgressEvent,
   buildProgressMetadata,
+  createProgressSnapshotter,
+  ocrStageProgressPct,
 } from "@/lib/ocr/pipeline-progress";
 import type {
   OcrJsonResult,
@@ -294,39 +293,31 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
     selectedPostProcessModel,
   );
 
-  let latestMetadata = buildProgressMetadata({
+  const snapshotMetadata = createProgressSnapshotter({
+    pageCount: input.inputPreviews.length,
+    startedAt: startedAtIso,
+    getProcessedPages: () => pageOutputs.length,
+    getEvents: () => progressEvents,
+    getCheckpoints: () => checkpoints,
+    getPostProcessing: () => postProcessingMeta,
+  });
+  const ocrPct = (): number =>
+    ocrStageProgressPct(pageOutputs.length, input.inputPreviews.length, input.postProcessingPayload.enabled);
+
+  let latestMetadata = snapshotMetadata({
     stage: "analyzing",
     message: input.resumed
       ? `Resuming OCR from checkpoint (${pageOutputs.length}/${input.inputPreviews.length} pages complete)`
       : `Prepared ${input.inputPreviews.length} page(s) for OCR`,
     progressPct: 2,
-    pageCount: input.inputPreviews.length,
-    processedPages: pageOutputs.length,
-    currentPage: null,
-    etaSeconds: null,
-    startedAt: startedAtIso,
-    events: progressEvents,
-    checkpoints,
-    postProcessing: postProcessingMeta,
   });
 
   const pauseAtCheckpoint = async (stageMessage: string, eventMessage: string): Promise<void> => {
     progressEvents = appendProgressEvent(progressEvents, "paused", eventMessage);
-    latestMetadata = buildProgressMetadata({
+    latestMetadata = snapshotMetadata({
       stage: "paused",
       message: stageMessage,
-      progressPct:
-        input.postProcessingPayload.enabled
-          ? (pageOutputs.length / input.inputPreviews.length) * 85
-          : (pageOutputs.length / input.inputPreviews.length) * 100,
-      pageCount: input.inputPreviews.length,
-      processedPages: pageOutputs.length,
-      currentPage: null,
-      etaSeconds: null,
-      startedAt: startedAtIso,
-      events: progressEvents,
-      checkpoints,
-      postProcessing: postProcessingMeta,
+      progressPct: ocrPct(),
     });
 
     await unloadAllOllamaModels(input.settings.apiEndpoint, usedOllamaModels);
@@ -423,29 +414,18 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       const remainingPages = input.inputPreviews.length - pageOutputs.length;
       const etaSeconds =
         remainingPages > 0 ? Math.max(1, Math.round((averagePageMs * remainingPages) / 1000)) : 0;
-      const ocrProgress =
-        input.postProcessingPayload.enabled
-          ? (pageOutputs.length / input.inputPreviews.length) * 85
-          : (pageOutputs.length / input.inputPreviews.length) * 100;
-
       progressEvents = appendProgressEvent(
         progressEvents,
         "ocr",
         `Completed page ${pageNumber}/${input.inputPreviews.length} in ${Math.round(durationMs / 100) / 10}s`,
       );
 
-      latestMetadata = buildProgressMetadata({
+      latestMetadata = snapshotMetadata({
         stage: "ocr",
         message: `Completed page ${pageNumber}/${input.inputPreviews.length}`,
-        progressPct: ocrProgress,
-        pageCount: input.inputPreviews.length,
-        processedPages: pageOutputs.length,
+        progressPct: ocrPct(),
         currentPage: pageNumber,
         etaSeconds,
-        startedAt: startedAtIso,
-        events: progressEvents,
-        checkpoints,
-        postProcessing: postProcessingMeta,
       });
 
       await db.ocrJob.update({
@@ -486,18 +466,11 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
         "post_processing",
         `Running post-processing with ${postProcessingModel}`,
       );
-      latestMetadata = buildProgressMetadata({
+      latestMetadata = snapshotMetadata({
         stage: "post_processing",
         message: `Applying post-processing with ${postProcessingModel}`,
         progressPct: 90,
-        pageCount: input.inputPreviews.length,
-        processedPages: pageOutputs.length,
-        currentPage: null,
         etaSeconds: 2,
-        startedAt: startedAtIso,
-        events: progressEvents,
-        checkpoints,
-        postProcessing: postProcessingMeta,
       });
       await db.ocrJob.update({
         where: { id: input.jobId },
@@ -595,18 +568,11 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
     }
 
     progressEvents = appendProgressEvent(progressEvents, "completed", "OCR job completed");
-    latestMetadata = buildProgressMetadata({
+    latestMetadata = snapshotMetadata({
       stage: "completed",
       message: "Completed",
       progressPct: 100,
-      pageCount: input.inputPreviews.length,
-      processedPages: pageOutputs.length,
-      currentPage: null,
       etaSeconds: 0,
-      startedAt: startedAtIso,
-      events: progressEvents,
-      checkpoints,
-      postProcessing: postProcessingMeta,
     });
     extractedMetadata.progress = latestMetadata;
 
@@ -617,18 +583,10 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       "failed",
       errorMessage(error, "OCR processing failed"),
     );
-    latestMetadata = buildProgressMetadata({
+    latestMetadata = snapshotMetadata({
       stage: "failed",
       message: errorMessage(error, "OCR processing failed"),
       progressPct: latestMetadata.progressPct,
-      pageCount: input.inputPreviews.length,
-      processedPages: pageOutputs.length,
-      currentPage: null,
-      etaSeconds: null,
-      startedAt: startedAtIso,
-      events: progressEvents,
-      checkpoints,
-      postProcessing: postProcessingMeta,
     });
 
     await persistFailedJob(

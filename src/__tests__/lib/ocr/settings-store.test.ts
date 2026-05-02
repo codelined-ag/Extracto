@@ -45,7 +45,7 @@ import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 const mockedReadFile = readFile as ReturnType<typeof vi.fn>;
 const mockedWriteFile = writeFile as ReturnType<typeof vi.fn>;
 const mockedMkdir = mkdir as ReturnType<typeof vi.fn>;
-const mockedEnforcePolicy = enforceProviderEndpointPolicy as ReturnType<typeof vi.fn>;
+const _mockedEnforcePolicy = enforceProviderEndpointPolicy as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------
 // Helpers

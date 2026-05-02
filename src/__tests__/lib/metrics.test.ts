@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 
 // The module-level `counters` Map is shared state. We use vi.resetModules() +
 // dynamic import so each describe block (or test) gets a freshly-initialized

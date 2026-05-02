@@ -90,3 +90,44 @@ export function buildProgressMetadata(input: {
     postProcessing: input.postProcessing,
   };
 }
+
+export function ocrStageProgressPct(
+  processedPages: number,
+  totalPages: number,
+  hasPostProcessing: boolean,
+): number {
+  if (totalPages <= 0) return 0;
+  return (processedPages / totalPages) * (hasPostProcessing ? 85 : 100);
+}
+
+export interface ProgressSnapshotInput {
+  stage: OcrProgressStage;
+  message: string;
+  progressPct: number;
+  currentPage?: number | null;
+  etaSeconds?: number | null;
+}
+
+export function createProgressSnapshotter(stable: {
+  pageCount: number;
+  startedAt: string;
+  getProcessedPages: () => number;
+  getEvents: () => OcrProgressEvent[];
+  getCheckpoints: () => OcrPageCheckpoint[];
+  getPostProcessing: () => OcrProgressMetadata["postProcessing"];
+}): (snap: ProgressSnapshotInput) => OcrProgressMetadata {
+  return (snap) =>
+    buildProgressMetadata({
+      stage: snap.stage,
+      message: snap.message,
+      progressPct: snap.progressPct,
+      currentPage: snap.currentPage ?? null,
+      etaSeconds: snap.etaSeconds ?? null,
+      pageCount: stable.pageCount,
+      processedPages: stable.getProcessedPages(),
+      startedAt: stable.startedAt,
+      events: stable.getEvents(),
+      checkpoints: stable.getCheckpoints(),
+      postProcessing: stable.getPostProcessing(),
+    });
+}

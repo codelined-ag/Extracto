@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiRouteError } from "@/lib/api-error";
+
 import {
   runOllamaOcr,
   runOllamaPostProcessing,
