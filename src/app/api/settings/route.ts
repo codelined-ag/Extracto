@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
+import { ApiRouteError, errorMessage, parseJsonBody } from "@/lib/api-error";
 import { withAuth, withMutationAuth } from "@/lib/auth/request";
 import { getApiSettings, saveApiSettings, toClientApiSettings } from "@/lib/settings-store";
 
@@ -11,25 +11,22 @@ export const GET = withAuth("settings:read", async (_request: NextRequest, { aut
 
 export const POST = withMutationAuth("settings:write", async (request: NextRequest, { auth }) => {
   const body = await parseJsonBody<{
-    provider: string;
-    apiEndpoint: string;
-    apiKey: string;
-    replaceApiKey: boolean;
+    provider?: unknown;
+    apiEndpoint?: unknown;
+    apiKey?: unknown;
+    replaceApiKey?: unknown;
   }>(request);
 
   try {
     const updated = await saveApiSettings(auth.userId, {
-      provider: body.provider,
-      apiEndpoint: body.apiEndpoint?.trim(),
-      apiKey: body.apiKey,
+      provider: typeof body.provider === "string" ? body.provider : "",
+      apiEndpoint: typeof body.apiEndpoint === "string" ? body.apiEndpoint.trim() : "",
+      apiKey: typeof body.apiKey === "string" ? body.apiKey : "",
       replaceApiKey: body.replaceApiKey === true,
     });
     return NextResponse.json(toClientApiSettings(updated));
   } catch (saveErr) {
     // Save validation errors are 400 (user input), not 500 (server fault).
-    throw new ApiRouteError(
-      saveErr instanceof Error ? saveErr.message : "Unable to save settings",
-      400
-    );
+    throw new ApiRouteError(errorMessage(saveErr, "Unable to save settings"), 400);
   }
 });

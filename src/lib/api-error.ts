@@ -9,11 +9,21 @@ export function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-// Helper for the common pattern of parsing a request body that may fail.
-// Returns a Partial<T> so the call site narrows individual fields with
-// typeof guards. Centralizing this in one place lets us swap the parsing
-// strategy (e.g. add Zod validation) without touching every handler.
-export async function parseJsonBody<T extends Record<string, unknown>>(
+/**
+ * Parse the JSON body of a request, returning {} for invalid/non-object
+ * payloads instead of throwing. The `T` generic is a SHAPE HINT, not a
+ * runtime guarantee — call sites MUST declare fields as `?: unknown` and
+ * narrow them with `typeof` guards before use:
+ *
+ *   const body = await parseJsonBody<{ foo?: unknown; bar?: unknown }>(req);
+ *   const foo = typeof body.foo === "string" ? body.foo.trim() : "";
+ *
+ * The function returns Partial<T> after an unchecked cast; using `?: unknown`
+ * fields forces callers to narrow honestly rather than trusting a fake type.
+ * Centralizing this in one place lets us swap the parsing strategy (e.g. add
+ * Zod validation) without touching every handler.
+ */
+export async function parseJsonBody<T extends Record<string, unknown> = Record<string, unknown>>(
   request: { json: () => Promise<unknown> },
 ): Promise<Partial<T>> {
   try {
