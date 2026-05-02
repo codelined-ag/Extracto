@@ -1068,10 +1068,10 @@ async function runProviderOcr(
     return runOllamaOcr(settings.apiEndpoint, model, prompt, preview, signal);
   }
   if (provider === "openrouter") {
-    return runOpenRouterOcr(settings.apiEndpoint, model, settings.apiKey || process.env.OPENROUTER_API_KEY || "", prompt, preview, signal);
+    return runCompatOcr(OPENROUTER_CONFIG, settings.apiEndpoint, model, settings.apiKey || process.env.OPENROUTER_API_KEY || "", prompt, preview, signal);
   }
   if (provider === "openai_compat") {
-    return runOpenAICompatOcr(settings.apiEndpoint, model, settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "", prompt, preview, signal);
+    return runCompatOcr(OPENAI_COMPAT_CONFIG, settings.apiEndpoint, model, settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "", prompt, preview, signal);
   }
   return runMistralOcr(settings.apiEndpoint, model, settings.apiKey || process.env.MISTRAL_API_KEY || "", preview, signal);
 }
@@ -1090,10 +1090,10 @@ async function runProviderPostProcessing(
     return runOllamaPostProcessing(settings.apiEndpoint, model, systemPrompt, userPrompt);
   }
   if (provider === "openrouter") {
-    return runOpenRouterPostProcessing(settings.apiEndpoint, model, settings.apiKey || process.env.OPENROUTER_API_KEY || "", systemPrompt, userPrompt, outputFormat);
+    return runCompatPostProcessing(OPENROUTER_CONFIG, settings.apiEndpoint, model, settings.apiKey || process.env.OPENROUTER_API_KEY || "", systemPrompt, userPrompt, outputFormat);
   }
   if (provider === "openai_compat") {
-    return runOpenAICompatPostProcessing(settings.apiEndpoint, model, settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "", systemPrompt, userPrompt, outputFormat);
+    return runCompatPostProcessing(OPENAI_COMPAT_CONFIG, settings.apiEndpoint, model, settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "", systemPrompt, userPrompt, outputFormat);
   }
   return runMistralPostProcessing(model, settings.apiKey || process.env.MISTRAL_API_KEY || "", settings.apiEndpoint, systemPrompt, userPrompt, outputFormat);
 }
@@ -1626,277 +1626,78 @@ function normalizeMistralModels(): string[] {
   return [...new Set(DEFAULT_MISTRAL_MODELS)];
 }
 
-function buildOpenRouterEndpoint(rawEndpoint: string, suffix: "/chat/completions" | "/models"): string {
-  const base = normalizeOpenRouterApiBase(rawEndpoint || DEFAULT_OPENROUTER_API_URL);
-  return enforceProviderEndpointPolicy(
-    "openrouter",
-    `${base}${suffix}`,
-    `${DEFAULT_OPENROUTER_API_URL}${suffix}`
-  );
+interface CompatProviderConfig {
+  provider: Extract<ProviderKind, "openrouter" | "openai_compat">;
+  label: string;
+  defaultUrl: string;
+  normalizeBase: (raw: string) => string;
+  buildHeaders: (apiKey: string) => Record<string, string>;
+  buildDiscoveryHeaders: (apiKey: string) => Record<string, string>;
+  modelCache: Map<string, { values: string[]; expiresAt: number }>;
+  cacheTtlMs: number;
+  cacheMaxEntries: number;
 }
 
-function buildOpenRouterCacheKey(endpoint: string, apiKey: string): string {
-  if (!apiKey) {
-    return `${endpoint}|anonymous`;
-  }
-  const digest = createHash("sha256")
-    .update(endpoint, "utf8")
-    .update("|", "utf8")
-    .update(apiKey, "utf8")
-    .digest("hex");
-  return `${endpoint}|${digest}`;
-}
+const OPENROUTER_CONFIG: CompatProviderConfig = {
+  provider: "openrouter",
+  label: "OpenRouter",
+  defaultUrl: DEFAULT_OPENROUTER_API_URL,
+  normalizeBase: normalizeOpenRouterApiBase,
+  buildHeaders: (apiKey) => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "X-Title": OPENROUTER_TITLE,
+    };
+    if (OPENROUTER_REFERER) headers["HTTP-Referer"] = OPENROUTER_REFERER;
+    return headers;
+  },
+  buildDiscoveryHeaders: (apiKey) => {
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "X-Title": OPENROUTER_TITLE,
+    };
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    if (OPENROUTER_REFERER) headers["HTTP-Referer"] = OPENROUTER_REFERER;
+    return headers;
+  },
+  modelCache: openRouterModelCache,
+  cacheTtlMs: OPENROUTER_MODEL_CACHE_TTL_MS,
+  cacheMaxEntries: OPENROUTER_MODEL_CACHE_MAX_ENTRIES,
+};
 
-function pruneOpenRouterModelCache() {
-  const now = Date.now();
-  for (const [key, entry] of openRouterModelCache) {
-    if (entry.expiresAt <= now) {
-      openRouterModelCache.delete(key);
-    }
-  }
-  while (openRouterModelCache.size > OPENROUTER_MODEL_CACHE_MAX_ENTRIES) {
-    const oldestKey = openRouterModelCache.keys().next().value;
-    if (oldestKey === undefined) break;
-    openRouterModelCache.delete(oldestKey);
-  }
-}
-
-function getCachedOpenRouterModels(endpoint: string, apiKey: string): string[] | null {
-  const cacheKey = buildOpenRouterCacheKey(endpoint, apiKey);
-  const entry = openRouterModelCache.get(cacheKey);
-  if (!entry) return null;
-  if (entry.expiresAt <= Date.now()) {
-    openRouterModelCache.delete(cacheKey);
-    return null;
-  }
-  openRouterModelCache.delete(cacheKey);
-  openRouterModelCache.set(cacheKey, entry);
-  return entry.values.length > 0 ? entry.values : null;
-}
-
-function setOpenRouterModelCache(endpoint: string, apiKey: string, values: string[]) {
-  openRouterModelCache.set(buildOpenRouterCacheKey(endpoint, apiKey), {
-    values,
-    expiresAt: Date.now() + OPENROUTER_MODEL_CACHE_TTL_MS,
-  });
-  pruneOpenRouterModelCache();
-}
-
-
-function buildOpenRouterHeaders(apiKey: string): Record<string, string> {
-  const headers: Record<string, string> = {
+const OPENAI_COMPAT_CONFIG: CompatProviderConfig = {
+  provider: "openai_compat",
+  label: "OpenAI-compatible",
+  defaultUrl: DEFAULT_OPENAI_COMPAT_API_URL,
+  normalizeBase: normalizeOpenAICompatApiBase,
+  // Vanilla OpenAI shape: just Bearer auth + JSON. No X-Title, no HTTP-Referer
+  // (those are OpenRouter-specific and confuse strict OpenAI servers).
+  buildHeaders: (apiKey) => ({
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
-    "X-Title": OPENROUTER_TITLE,
-  };
-  if (OPENROUTER_REFERER) {
-    headers["HTTP-Referer"] = OPENROUTER_REFERER;
-  }
-  return headers;
-}
+  }),
+  buildDiscoveryHeaders: (apiKey) => {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    return headers;
+  },
+  modelCache: openAICompatModelCache,
+  cacheTtlMs: OPENAI_COMPAT_MODEL_CACHE_TTL_MS,
+  cacheMaxEntries: OPENAI_COMPAT_MODEL_CACHE_MAX_ENTRIES,
+};
 
-async function discoverOpenRouterModels(
-  apiEndpoint: string,
-  apiKey: string
-): Promise<string[]> {
-  const endpoint = buildOpenRouterEndpoint(apiEndpoint, "/models");
-  const cached = getCachedOpenRouterModels(endpoint, apiKey);
-  if (cached) {
-    return cached;
-  }
-
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "X-Title": OPENROUTER_TITLE,
-  };
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
-  if (OPENROUTER_REFERER) {
-    headers["HTTP-Referer"] = OPENROUTER_REFERER;
-  }
-
-  const response = await fetchWithTimeout(endpoint, { headers });
-  const payload = await parseResponseText(response);
-  if (!response.ok) {
-    throw new ApiRouteError(
-      `OpenRouter model discovery failed (${response.status}): ${parseServiceError(response, payload)}`,
-      response.status
-    );
-  }
-
-  if (!payload || typeof payload !== "object") {
-    throw new ApiRouteError("Invalid OpenRouter model response", 502);
-  }
-
-  const data = (payload as { data?: unknown }).data;
-  if (!Array.isArray(data)) {
-    return [];
-  }
-
-  const models = data
-    .map((entry) => {
-      if (!entry || typeof entry !== "object") return "";
-      const id = (entry as { id?: unknown }).id;
-      return typeof id === "string" ? id.trim() : "";
-    })
-    .filter(Boolean);
-
-  const unique = Array.from(new Set(models));
-  setOpenRouterModelCache(endpoint, apiKey, unique);
-  return unique;
-}
-
-async function runOpenRouterOcr(
-  apiEndpoint: string,
-  model: string,
-  apiKey: string,
-  prompt: string,
-  preview: string,
-  signal?: AbortSignal
-): Promise<OcrRunResult> {
-  if (!apiKey) {
-    throw new ApiRouteError("OpenRouter API key is not configured", 500);
-  }
-
-  const imageData = parsePreviewImageData(preview);
-  if (!imageData.dataUrl) {
-    throw new ApiRouteError("Invalid image data for OpenRouter OCR", 400);
-  }
-
-  const endpoint = buildOpenRouterEndpoint(apiEndpoint, "/chat/completions");
-  const response = await fetchWithTimeout(
-    endpoint,
-    {
-      method: "POST",
-      headers: buildOpenRouterHeaders(apiKey),
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: imageData.dataUrl } },
-            ],
-          },
-        ],
-        temperature: 0,
-        stream: false,
-      }),
-    },
-    REQUEST_TIMEOUT_MS,
-    signal
-  );
-
-  const payload = await parseResponseText(response);
-  if (!response.ok) {
-    throw new ApiRouteError(
-      `OpenRouter OCR failed (${response.status}): ${parseServiceError(response, payload)}`,
-      response.status
-    );
-  }
-
-  if (!payload || typeof payload !== "object") {
-    throw new ApiRouteError("Invalid OCR response from OpenRouter", 502);
-  }
-
-  const choices = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices;
-  const message = Array.isArray(choices) ? choices[0]?.message : undefined;
-  const text = extractChatContentText(message?.content);
-  if (!text) {
-    throw new ApiRouteError("OpenRouter OCR response had no text", 502);
-  }
-
-  const parsed = parseJsonCandidate(text);
-  const normalized = normalizeStructuredMarkdownPayload(parsed, text);
-  if (!normalized.markdown) {
-    throw new ApiRouteError("OpenRouter OCR response markdown was empty", 502);
-  }
-
-  const usage = (payload as { usage?: Record<string, unknown> }).usage;
-  return {
-    text: normalized.markdown,
-    structured: normalized.structured,
-    metadata: {
-      endpoint,
-      outputFormat: normalized.parseMode,
-      usage,
-    },
-  };
-}
-
-async function runOpenRouterPostProcessing(
-  apiEndpoint: string,
-  model: string,
-  apiKey: string,
-  systemPrompt: string,
-  userPrompt: string,
-  outputFormat: PostProcessOutputFormat
-): Promise<{ text: string; metadata: Record<string, unknown> }> {
-  if (!apiKey) {
-    throw new ApiRouteError("OpenRouter API key is not configured", 500);
-  }
-
-  const endpoint = buildOpenRouterEndpoint(apiEndpoint, "/chat/completions");
-  const response = await fetchWithTimeout(endpoint, {
-    method: "POST",
-    headers: buildOpenRouterHeaders(apiKey),
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      ...(outputFormat === "json"
-        ? { response_format: { type: "json_object" } }
-        : {}),
-      temperature: 0,
-      stream: false,
-    }),
-  });
-
-  const payload = await parseResponseText(response);
-  if (!response.ok) {
-    throw new ApiRouteError(
-      `OpenRouter post-processing failed (${response.status}): ${parseServiceError(response, payload)}`,
-      response.status
-    );
-  }
-
-  if (!payload || typeof payload !== "object") {
-    throw new ApiRouteError("Invalid post-processing response from OpenRouter", 502);
-  }
-
-  const choices = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices;
-  const message = Array.isArray(choices) ? choices[0]?.message : undefined;
-  const text = extractChatContentText(message?.content);
-  if (!text) {
-    throw new ApiRouteError("OpenRouter post-processing returned empty output", 502);
-  }
-
-  return {
-    text,
-    metadata: { endpoint },
-  };
-}
-
-function buildOpenAICompatEndpoint(
+function buildCompatEndpoint(
+  cfg: CompatProviderConfig,
   rawEndpoint: string,
   suffix: "/chat/completions" | "/models"
 ): string {
-  const base = normalizeOpenAICompatApiBase(rawEndpoint || DEFAULT_OPENAI_COMPAT_API_URL);
-  return enforceProviderEndpointPolicy(
-    "openai_compat",
-    `${base}${suffix}`,
-    `${DEFAULT_OPENAI_COMPAT_API_URL}${suffix}`
-  );
+  const base = cfg.normalizeBase(rawEndpoint || cfg.defaultUrl);
+  return enforceProviderEndpointPolicy(cfg.provider, `${base}${suffix}`, `${cfg.defaultUrl}${suffix}`);
 }
 
-function buildOpenAICompatCacheKey(endpoint: string, apiKey: string): string {
-  if (!apiKey) {
-    return `${endpoint}|anonymous`;
-  }
+function buildCompatCacheKey(endpoint: string, apiKey: string): string {
+  if (!apiKey) return `${endpoint}|anonymous`;
   const digest = createHash("sha256")
     .update(endpoint, "utf8")
     .update("|", "utf8")
@@ -1905,82 +1706,56 @@ function buildOpenAICompatCacheKey(endpoint: string, apiKey: string): string {
   return `${endpoint}|${digest}`;
 }
 
-function pruneOpenAICompatModelCache() {
+function pruneCompatModelCache(cfg: CompatProviderConfig): void {
   const now = Date.now();
-  for (const [key, entry] of openAICompatModelCache) {
-    if (entry.expiresAt <= now) {
-      openAICompatModelCache.delete(key);
-    }
+  for (const [key, entry] of cfg.modelCache) {
+    if (entry.expiresAt <= now) cfg.modelCache.delete(key);
   }
-  while (openAICompatModelCache.size > OPENAI_COMPAT_MODEL_CACHE_MAX_ENTRIES) {
-    const oldestKey = openAICompatModelCache.keys().next().value;
+  while (cfg.modelCache.size > cfg.cacheMaxEntries) {
+    const oldestKey = cfg.modelCache.keys().next().value;
     if (oldestKey === undefined) break;
-    openAICompatModelCache.delete(oldestKey);
+    cfg.modelCache.delete(oldestKey);
   }
 }
 
-function getCachedOpenAICompatModels(endpoint: string, apiKey: string): string[] | null {
-  const cacheKey = buildOpenAICompatCacheKey(endpoint, apiKey);
-  const entry = openAICompatModelCache.get(cacheKey);
+function getCachedCompatModels(cfg: CompatProviderConfig, endpoint: string, apiKey: string): string[] | null {
+  const key = buildCompatCacheKey(endpoint, apiKey);
+  const entry = cfg.modelCache.get(key);
   if (!entry) return null;
   if (entry.expiresAt <= Date.now()) {
-    openAICompatModelCache.delete(cacheKey);
+    cfg.modelCache.delete(key);
     return null;
   }
-  openAICompatModelCache.delete(cacheKey);
-  openAICompatModelCache.set(cacheKey, entry);
+  cfg.modelCache.delete(key);
+  cfg.modelCache.set(key, entry);
   return entry.values.length > 0 ? entry.values : null;
 }
 
-function setOpenAICompatModelCache(endpoint: string, apiKey: string, values: string[]) {
-  openAICompatModelCache.set(buildOpenAICompatCacheKey(endpoint, apiKey), {
-    values,
-    expiresAt: Date.now() + OPENAI_COMPAT_MODEL_CACHE_TTL_MS,
-  });
-  pruneOpenAICompatModelCache();
+function setCompatModelCache(cfg: CompatProviderConfig, endpoint: string, apiKey: string, values: string[]): void {
+  cfg.modelCache.set(buildCompatCacheKey(endpoint, apiKey), { values, expiresAt: Date.now() + cfg.cacheTtlMs });
+  pruneCompatModelCache(cfg);
 }
 
-function buildOpenAICompatHeaders(apiKey: string): Record<string, string> {
-  // Vanilla OpenAI shape: just Bearer auth + JSON. No X-Title, no HTTP-Referer
-  // (those are OpenRouter-specific and confuse strict OpenAI servers).
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${apiKey}`,
-  };
-}
+async function discoverCompatModels(cfg: CompatProviderConfig, apiEndpoint: string, apiKey: string): Promise<string[]> {
+  const endpoint = buildCompatEndpoint(cfg, apiEndpoint, "/models");
+  const cached = getCachedCompatModels(cfg, endpoint, apiKey);
+  if (cached) return cached;
 
-async function discoverOpenAICompatModels(
-  apiEndpoint: string,
-  apiKey: string
-): Promise<string[]> {
-  const endpoint = buildOpenAICompatEndpoint(apiEndpoint, "/models");
-  const cached = getCachedOpenAICompatModels(endpoint, apiKey);
-  if (cached) {
-    return cached;
-  }
-
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
-
-  const response = await fetchWithTimeout(endpoint, { headers });
+  const response = await fetchWithTimeout(endpoint, { headers: cfg.buildDiscoveryHeaders(apiKey) });
   const payload = await parseResponseText(response);
   if (!response.ok) {
     throw new ApiRouteError(
-      `OpenAI-compatible model discovery failed (${response.status}): ${parseServiceError(response, payload)}`,
+      `${cfg.label} model discovery failed (${response.status}): ${parseServiceError(response, payload)}`,
       response.status
     );
   }
 
   if (!payload || typeof payload !== "object") {
-    throw new ApiRouteError("Invalid OpenAI-compatible model response", 502);
+    throw new ApiRouteError(`Invalid ${cfg.label} model response`, 502);
   }
 
   const data = (payload as { data?: unknown }).data;
-  if (!Array.isArray(data)) {
-    return [];
-  }
+  if (!Array.isArray(data)) return [];
 
   const models = data
     .map((entry) => {
@@ -1991,11 +1766,12 @@ async function discoverOpenAICompatModels(
     .filter(Boolean);
 
   const unique = Array.from(new Set(models));
-  setOpenAICompatModelCache(endpoint, apiKey, unique);
+  setCompatModelCache(cfg, endpoint, apiKey, unique);
   return unique;
 }
 
-async function runOpenAICompatOcr(
+async function runCompatOcr(
+  cfg: CompatProviderConfig,
   apiEndpoint: string,
   model: string,
   apiKey: string,
@@ -2004,20 +1780,20 @@ async function runOpenAICompatOcr(
   signal?: AbortSignal
 ): Promise<OcrRunResult> {
   if (!apiKey) {
-    throw new ApiRouteError("OpenAI-compatible API key is not configured", 500);
+    throw new ApiRouteError(`${cfg.label} API key is not configured`, 500);
   }
 
   const imageData = parsePreviewImageData(preview);
   if (!imageData.dataUrl) {
-    throw new ApiRouteError("Invalid image data for OpenAI-compatible OCR", 400);
+    throw new ApiRouteError(`Invalid image data for ${cfg.label} OCR`, 400);
   }
 
-  const endpoint = buildOpenAICompatEndpoint(apiEndpoint, "/chat/completions");
+  const endpoint = buildCompatEndpoint(cfg, apiEndpoint, "/chat/completions");
   const response = await fetchWithTimeout(
     endpoint,
     {
       method: "POST",
-      headers: buildOpenAICompatHeaders(apiKey),
+      headers: cfg.buildHeaders(apiKey),
       body: JSON.stringify({
         model,
         messages: [
@@ -2040,41 +1816,38 @@ async function runOpenAICompatOcr(
   const payload = await parseResponseText(response);
   if (!response.ok) {
     throw new ApiRouteError(
-      `OpenAI-compatible OCR failed (${response.status}): ${parseServiceError(response, payload)}`,
+      `${cfg.label} OCR failed (${response.status}): ${parseServiceError(response, payload)}`,
       response.status
     );
   }
 
   if (!payload || typeof payload !== "object") {
-    throw new ApiRouteError("Invalid OCR response from OpenAI-compatible endpoint", 502);
+    throw new ApiRouteError(`Invalid OCR response from ${cfg.label}`, 502);
   }
 
   const choices = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices;
   const message = Array.isArray(choices) ? choices[0]?.message : undefined;
   const text = extractChatContentText(message?.content);
   if (!text) {
-    throw new ApiRouteError("OpenAI-compatible OCR response had no text", 502);
+    throw new ApiRouteError(`${cfg.label} OCR response had no text`, 502);
   }
 
   const parsed = parseJsonCandidate(text);
   const normalized = normalizeStructuredMarkdownPayload(parsed, text);
   if (!normalized.markdown) {
-    throw new ApiRouteError("OpenAI-compatible OCR response markdown was empty", 502);
+    throw new ApiRouteError(`${cfg.label} OCR response markdown was empty`, 502);
   }
 
   const usage = (payload as { usage?: Record<string, unknown> }).usage;
   return {
     text: normalized.markdown,
     structured: normalized.structured,
-    metadata: {
-      endpoint,
-      outputFormat: normalized.parseMode,
-      usage,
-    },
+    metadata: { endpoint, outputFormat: normalized.parseMode, usage },
   };
 }
 
-async function runOpenAICompatPostProcessing(
+async function runCompatPostProcessing(
+  cfg: CompatProviderConfig,
   apiEndpoint: string,
   model: string,
   apiKey: string,
@@ -2083,22 +1856,20 @@ async function runOpenAICompatPostProcessing(
   outputFormat: PostProcessOutputFormat
 ): Promise<{ text: string; metadata: Record<string, unknown> }> {
   if (!apiKey) {
-    throw new ApiRouteError("OpenAI-compatible API key is not configured", 500);
+    throw new ApiRouteError(`${cfg.label} API key is not configured`, 500);
   }
 
-  const endpoint = buildOpenAICompatEndpoint(apiEndpoint, "/chat/completions");
+  const endpoint = buildCompatEndpoint(cfg, apiEndpoint, "/chat/completions");
   const response = await fetchWithTimeout(endpoint, {
     method: "POST",
-    headers: buildOpenAICompatHeaders(apiKey),
+    headers: cfg.buildHeaders(apiKey),
     body: JSON.stringify({
       model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      ...(outputFormat === "json"
-        ? { response_format: { type: "json_object" } }
-        : {}),
+      ...(outputFormat === "json" ? { response_format: { type: "json_object" } } : {}),
       temperature: 0,
       stream: false,
     }),
@@ -2107,26 +1878,23 @@ async function runOpenAICompatPostProcessing(
   const payload = await parseResponseText(response);
   if (!response.ok) {
     throw new ApiRouteError(
-      `OpenAI-compatible post-processing failed (${response.status}): ${parseServiceError(response, payload)}`,
+      `${cfg.label} post-processing failed (${response.status}): ${parseServiceError(response, payload)}`,
       response.status
     );
   }
 
   if (!payload || typeof payload !== "object") {
-    throw new ApiRouteError("Invalid post-processing response from OpenAI-compatible endpoint", 502);
+    throw new ApiRouteError(`Invalid post-processing response from ${cfg.label}`, 502);
   }
 
   const choices = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices;
   const message = Array.isArray(choices) ? choices[0]?.message : undefined;
   const text = extractChatContentText(message?.content);
   if (!text) {
-    throw new ApiRouteError("OpenAI-compatible post-processing returned empty output", 502);
+    throw new ApiRouteError(`${cfg.label} post-processing returned empty output`, 502);
   }
 
-  return {
-    text,
-    metadata: { endpoint },
-  };
+  return { text, metadata: { endpoint } };
 }
 
 async function tryDiscover(discover: () => Promise<string[]>, label: string): Promise<string[]> {
@@ -2154,7 +1922,7 @@ async function getModelCatalog(settings: ApiProviderSettings): Promise<ModelCata
       : process.env.OPENROUTER_API_KEY || "";
   const openRouterModels = openRouterKey
     ? await tryDiscover(
-        () => discoverOpenRouterModels(openRouterEndpoint, openRouterKey),
+        () => discoverCompatModels(OPENROUTER_CONFIG, openRouterEndpoint, openRouterKey),
         "OpenRouter model catalog"
       )
     : [];
@@ -2171,7 +1939,7 @@ async function getModelCatalog(settings: ApiProviderSettings): Promise<ModelCata
       : process.env.OPENAI_COMPAT_API_KEY || "";
   const openAICompatModels = openAICompatKey
     ? await tryDiscover(
-        () => discoverOpenAICompatModels(openAICompatEndpoint, openAICompatKey),
+        () => discoverCompatModels(OPENAI_COMPAT_CONFIG, openAICompatEndpoint, openAICompatKey),
         "OpenAI-compatible model catalog"
       )
     : [];
