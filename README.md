@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="extracto-banner.png" alt="Extracto" width="100%">
+</p>
+
 # Extracto
 
 Extracto is a self-hosted OCR web app with a proper backend, persistent settings, authentication, OCR history, and Docker-first operations.
