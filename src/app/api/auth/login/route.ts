@@ -9,38 +9,11 @@ import {
   getSessionMaxAgeSeconds,
   shouldUseSecureCookie,
 } from "@/lib/auth/token";
+import { badRequest, isRequestSecure, normalizeEmail, tooManyRequests } from "@/app/api/auth/helpers";
 
 const LOGIN_IP_LIMIT_MAX = 20;
 const LOGIN_EMAIL_LIMIT_MAX = 10;
 const LOGIN_WINDOW_MS = 60_000;
-
-function normalizeEmail(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function badRequest(message: string, status = 400) {
-  return NextResponse.json({ error: message }, { status });
-}
-
-function isRequestSecure(request: NextRequest): boolean {
-  const forwardedProto = request.headers.get("x-forwarded-proto");
-  const protocol = (forwardedProto ? forwardedProto.split(",")[0].trim() : request.nextUrl.protocol)
-    .replace(":", "");
-
-  return protocol === "https";
-}
-
-function tooManyRequests(retryAfterSeconds: number) {
-  return NextResponse.json(
-    { error: "Too many requests. Please try again shortly." },
-    {
-      status: 429,
-      headers: {
-        "Retry-After": `${retryAfterSeconds}`,
-      },
-    }
-  );
-}
 
 export async function POST(request: NextRequest) {
   try {

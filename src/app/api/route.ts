@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 
-export async function GET() {
-  return NextResponse.json({ message: "Hello, world!" });
+export function GET() {
+  return NextResponse.json({
+    name: "ocr-webapp",
+    docs: "/api/health",
+  });
 }

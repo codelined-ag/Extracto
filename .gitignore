@@ -55,6 +55,7 @@ obsidian-vaults/
 # Docker/tooling
 .docker/
 .vercel/
+.desloppify/
 
 # OS/editor
 .DS_Store

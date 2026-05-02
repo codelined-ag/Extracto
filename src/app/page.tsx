@@ -69,7 +69,7 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { normalizeProvider, type ProviderKind } from "@/lib/endpoint-policy";
-import { type AdvancedSettings } from "@/lib/ocr/settings";
+import { type AdvancedSettings, type PostProcessingSettings, type PostProcessOutputFormat } from "@/lib/ocr/settings";
 import ReactMarkdown from "react-markdown";
 
 // Types
@@ -122,15 +122,6 @@ interface ApiSettings {
   apiEndpoint: string;
   apiKey: string;
   hasApiKey?: boolean;
-}
-
-type PostProcessOutputFormat = "markdown" | "json";
-
-interface PostProcessingSettings {
-  enabled: boolean;
-  instruction: string;
-  outputFormat: PostProcessOutputFormat;
-  model: string;
 }
 
 interface HistoryJobSummary {

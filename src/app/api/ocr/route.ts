@@ -27,17 +27,8 @@ import {
 } from "@/lib/host-normalization";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
-import { AdvancedSettings, normalizeAdvancedSettings } from "@/lib/ocr/settings";
+import { AdvancedSettings, normalizeAdvancedSettings, PostProcessingSettings, PostProcessOutputFormat } from "@/lib/ocr/settings";
 import { ApiRouteError } from "@/lib/api-error";
-
-type PostProcessOutputFormat = "markdown" | "json";
-
-interface PostProcessingSettings {
-  enabled: boolean;
-  instruction: string;
-  outputFormat: PostProcessOutputFormat;
-  model: string;
-}
 
 interface OCRRequestBody {
   jobId?: unknown;
@@ -181,8 +172,6 @@ const DEFAULT_MISTRAL_MODELS = (() => {
         "pixtral-12b",
       ];
 })();
-const DEFAULT_MISTRAL_MODEL_SET = new Set(DEFAULT_MISTRAL_MODELS.map((id) => id.toLowerCase()));
-
 const DEFAULT_OPENROUTER_API_URL =
   process.env.OPENROUTER_API_URL?.trim() || "https://openrouter.ai/api/v1";
 const DEFAULT_OPENROUTER_FALLBACK_MODELS = (() => {
@@ -508,15 +497,6 @@ function sanitizePostProcessing(
   };
 }
 
-function isLikelyMistralModel(model: string): boolean {
-  const normalized = model.toLowerCase();
-  return (
-    normalized.startsWith("mistral") ||
-    normalized.includes("pixtral") ||
-    normalized.includes("ocr")
-  );
-}
-
 function isLikelyMistralOcrModel(model: string): boolean {
   const normalized = model.trim().toLowerCase();
   return normalized.includes("ocr");
@@ -524,16 +504,6 @@ function isLikelyMistralOcrModel(model: string): boolean {
 
 function resolveMistralOcrModel(selectedModel: string): string {
   return isLikelyMistralOcrModel(selectedModel) ? selectedModel : DEFAULT_MISTRAL_OCR_MODEL;
-}
-
-function isLikelyOllamaModel(model: string): boolean {
-  const normalized = model.toLowerCase();
-  return (
-    normalized.includes(":") ||
-    normalized.startsWith("llava") ||
-    normalized.includes("llama") ||
-    normalized.includes("minicpm")
-  );
 }
 
 function parsePreviewImageData(preview: string): {
@@ -1823,16 +1793,6 @@ function setOpenRouterModelCache(endpoint: string, apiKey: string, values: strin
   pruneOpenRouterModelCache();
 }
 
-function isLikelyOpenRouterModel(model: string): boolean {
-  const lowered = model.trim().toLowerCase();
-  if (!lowered) return false;
-  return (
-    lowered.includes("/") &&
-    /^[a-z0-9_.+-]+\/[a-z0-9_.+:-]+$/i.test(lowered) &&
-    !lowered.startsWith("ollama/") &&
-    !lowered.startsWith("mistral/")
-  );
-}
 
 function buildOpenRouterHeaders(apiKey: string): Record<string, string> {
   const headers: Record<string, string> = {

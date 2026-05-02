@@ -40,7 +40,6 @@ const DATA_ROOT = (() => {
   return path.dirname(databaseFile);
 })();
 
-export type { ProviderKind as ProviderId };
 
 function normalizeMistralEndpoint(rawEndpoint?: string): string {
   const normalized = normalizeHostEndpoint(rawEndpoint || "", DEFAULT_MISTRAL_OCR_ENDPOINT);

@@ -1,3 +1,12 @@
+export type PostProcessOutputFormat = "markdown" | "json";
+
+export interface PostProcessingSettings {
+  enabled: boolean;
+  instruction: string;
+  outputFormat: PostProcessOutputFormat;
+  model: string;
+}
+
 export interface AdvancedSettings {
   language: string;
   tableDetection: boolean;

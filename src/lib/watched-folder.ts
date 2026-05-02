@@ -28,13 +28,10 @@ interface UserRef {
 
 async function findWatchUser(): Promise<UserRef | null> {
   if (!WATCH_FOLDER_USER_EMAIL) return null;
-  const user = await db.authUser
-    .findUnique({
-      where: { email: WATCH_FOLDER_USER_EMAIL },
-      select: { id: true, email: true },
-    })
-    .catch(() => null);
-  return user;
+  return db.authUser.findUnique({
+    where: { email: WATCH_FOLDER_USER_EMAIL },
+    select: { id: true, email: true },
+  });
 }
 
 function isSupportedFile(name: string): boolean {
