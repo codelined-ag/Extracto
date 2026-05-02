@@ -37,7 +37,7 @@ import {
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
 import { AdvancedSettings, normalizeAdvancedSettings, PostProcessingSettings, PostProcessOutputFormat } from "@/lib/ocr/settings";
-import { ApiRouteError } from "@/lib/api-error";
+import { ApiRouteError, handleApiError, pipelineStatusFor } from "@/lib/api-error";
 import { extractFirstBalancedJsonObject, extractMarkdownFromJsonLikeText } from "@/lib/ocr/text-extract";
 import {
   DEFAULT_MISTRAL_API_URL,
@@ -2663,21 +2663,9 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("OCR processing error:", error);
-    const status = error instanceof ApiRouteError
-      ? error.status
-      : error instanceof Error && error.name === "AbortError"
-        ? 504
-        : error instanceof TypeError
-          ? 502
-          : 500;
-    const message =
-      error instanceof Error ? error.message : "OCR processing failed";
-    return NextResponse.json(
-      {
-        error: message,
-        success: false,
-      },
-      { status }
-    );
+    return handleApiError(error, {
+      statusFor: pipelineStatusFor,
+      extra: { success: false },
+    });
   }
 }

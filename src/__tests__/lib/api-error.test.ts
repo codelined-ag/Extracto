@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ApiRouteError, handleApiError, parseJsonBody } from "@/lib/api-error";
+import { ApiRouteError, handleApiError, parseJsonBody, pipelineStatusFor } from "@/lib/api-error";
 
 describe("ApiRouteError", () => {
   it("is an instance of Error", () => {
@@ -150,6 +150,85 @@ describe("handleApiError", () => {
   it("returns content-type application/json", async () => {
     const response = handleApiError(new ApiRouteError("test", 400));
     expect(response.headers.get("content-type")).toMatch(/application\/json/);
+  });
+});
+
+describe("handleApiError options.statusFor", () => {
+  const abortMapper = (e: unknown) => (e instanceof Error && e.name === "AbortError" ? 504 : undefined);
+
+  it("uses statusFor when provided and the result is a number", async () => {
+    const err = Object.assign(new Error("aborted"), { name: "AbortError" });
+    const response = handleApiError(err, { statusFor: abortMapper });
+    expect(response.status).toBe(504);
+  });
+
+  it("falls back to 500 when statusFor returns undefined", async () => {
+    const response = handleApiError(new Error("boom"), { statusFor: () => undefined });
+    expect(response.status).toBe(500);
+  });
+
+  it("ApiRouteError.status wins over statusFor", async () => {
+    const response = handleApiError(new ApiRouteError("nope", 422), {
+      statusFor: () => 504,
+    });
+    expect(response.status).toBe(422);
+  });
+});
+
+describe("handleApiError options.extra", () => {
+  it("merges extra fields into the response body", async () => {
+    const response = handleApiError(new Error("boom"), { extra: { success: false, requestId: "r1" } });
+    const body = await response.json();
+    expect(body).toEqual({ error: "boom", success: false, requestId: "r1" });
+  });
+
+  it("does NOT let extra overwrite the error field", async () => {
+    const response = handleApiError(new Error("real msg"), { extra: { error: "fake msg" } });
+    const body = await response.json();
+    expect(body.error).toBe("real msg");
+  });
+
+  it("preserves status from ApiRouteError when extra is also passed", async () => {
+    const response = handleApiError(new ApiRouteError("forbidden", 403), {
+      extra: { hint: "log in again" },
+    });
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body.error).toBe("forbidden");
+    expect(body.hint).toBe("log in again");
+  });
+});
+
+describe("pipelineStatusFor", () => {
+  it("maps AbortError to 504", () => {
+    const err = Object.assign(new Error("aborted"), { name: "AbortError" });
+    expect(pipelineStatusFor(err)).toBe(504);
+  });
+
+  it("maps TypeError to 502", () => {
+    expect(pipelineStatusFor(new TypeError("invalid"))).toBe(502);
+  });
+
+  it("returns undefined for plain Error so handleApiError falls back to 500", () => {
+    expect(pipelineStatusFor(new Error("regular"))).toBeUndefined();
+  });
+
+  it("returns undefined for ApiRouteError (not its job to map)", () => {
+    expect(pipelineStatusFor(new ApiRouteError("x", 400))).toBeUndefined();
+  });
+
+  it("returns undefined for non-Error values", () => {
+    expect(pipelineStatusFor("string error")).toBeUndefined();
+    expect(pipelineStatusFor(null)).toBeUndefined();
+    expect(pipelineStatusFor({ message: "x" })).toBeUndefined();
+  });
+
+  it("composes correctly with handleApiError", async () => {
+    const err = Object.assign(new Error("upstream timed out"), { name: "AbortError" });
+    const response = handleApiError(err, { statusFor: pipelineStatusFor, extra: { success: false } });
+    expect(response.status).toBe(504);
+    const body = await response.json();
+    expect(body).toEqual({ error: "upstream timed out", success: false });
   });
 });
 

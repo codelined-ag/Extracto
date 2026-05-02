@@ -25,10 +25,49 @@ export class ApiRouteError extends Error {
   }
 }
 
-export function handleApiError(error: unknown): NextResponse {
-  const status = error instanceof ApiRouteError ? error.status : 500;
+export interface HandleApiErrorOptions {
+  /**
+   * Optional mapper from a non-ApiRouteError to an HTTP status code. The
+   * default is 500. ApiRouteError always wins (its `.status` is honored
+   * regardless of this mapper). Return `undefined` to fall back to 500.
+   *
+   * Useful for routes that want to map specific error classes to specific
+   * statuses — e.g. AbortError -> 504, TypeError -> 502 — without a wide
+   * try/catch ladder at every call site.
+   */
+  statusFor?: (error: unknown) => number | undefined;
+  /**
+   * Extra fields merged into the JSON response body. Useful when a route
+   * has a domain-specific error envelope (e.g. `success: false`,
+   * `attemptedHosts: [...]`).
+   */
+  extra?: Record<string, unknown>;
+}
+
+export function handleApiError(error: unknown, options: HandleApiErrorOptions = {}): NextResponse {
+  const status =
+    error instanceof ApiRouteError
+      ? error.status
+      : options.statusFor?.(error) ?? 500;
+  const message = error instanceof Error ? error.message : "Internal server error";
+  // Spread `extra` first so the canonical `error` field cannot be overwritten
+  // by a caller-supplied entry — the message must always reflect the real
+  // exception, never a fake.
   return NextResponse.json(
-    { error: error instanceof Error ? error.message : "Internal server error" },
+    { ...options.extra, error: message },
     { status }
   );
+}
+
+/**
+ * Status mapper used by long-running pipelines (OCR, KB export) where
+ * upstream timeouts and TypeErrors carry domain meaning beyond a generic
+ * 500. Pass via { statusFor } to handleApiError.
+ */
+export function pipelineStatusFor(error: unknown): number | undefined {
+  if (error instanceof Error) {
+    if (error.name === "AbortError") return 504;
+    if (error instanceof TypeError) return 502;
+  }
+  return undefined;
 }
