@@ -121,6 +121,7 @@ export type {
 export {
   appendProgressEvent,
   buildProgressMetadata,
+  ocrStageProgressPct,
   buildJsonResult,
   toJsonValue,
   buildPostProcessingPrompt,

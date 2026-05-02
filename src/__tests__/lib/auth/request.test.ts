@@ -59,7 +59,7 @@ import {
 // Typed mock helpers
 // ---------------------------------------------------------------------------
 
-const mockDb = db as {
+const mockDb = db as unknown as {
   apiKey: { findUnique: ReturnType<typeof vi.fn> };
   $executeRaw: ReturnType<typeof vi.fn>;
 };
@@ -298,7 +298,7 @@ describe("authHasScope", () => {
     userId: "u1",
     method: "api-key",
     apiKeyId: "k1",
-    scopes,
+    scopes: scopes as AuthContext["scopes"],
     rateLimitPerMinute: null,
   });
 
@@ -335,7 +335,7 @@ describe("requireScope", () => {
     userId: "u1",
     method: "api-key",
     apiKeyId: "k1",
-    scopes,
+    scopes: scopes as AuthContext["scopes"],
     rateLimitPerMinute: null,
   });
 
@@ -451,7 +451,7 @@ describe("withAuth higher-order wrapper", () => {
     setupSessionAuth();
     const handler = vi.fn(async (_req, _ctx) => new Response("ok"));
     const wrapped = withAuth("ocr:read", handler);
-    const req = makeRequest({ cookie: "estracto_session=valid" });
+    const req = makeRequest({ cookieName: "estracto_session", cookieValue: "valid" });
     const resp = await wrapped(req);
 
     expect(resp.status).toBe(200);
@@ -499,7 +499,7 @@ describe("withAuth higher-order wrapper", () => {
     const wrapped = withAuth("ocr:read", async () => {
       throw new Error("boom");
     });
-    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    const resp = await wrapped(makeRequest({ cookieName: "estracto_session", cookieValue: "v" }));
     expect(resp.status).toBe(500);
     const body = await resp.json();
     expect(body.error).toBe("boom");
@@ -512,7 +512,7 @@ describe("withAuth higher-order wrapper", () => {
       return Response.json({ id: (params as { id: string }).id });
     });
     const wrapped = withAuth<{ id: string }>("ocr:read", handler);
-    const req = makeRequest({ cookie: "estracto_session=v" });
+    const req = makeRequest({ cookieName: "estracto_session", cookieValue: "v" });
     const resp = await wrapped(req, { params: Promise.resolve({ id: "abc" }) });
     const body = await resp.json();
     expect(body.id).toBe("abc");
@@ -532,7 +532,7 @@ describe("withMutationAuth higher-order wrapper", () => {
     const handler = vi.fn(async () => new Response("ok"));
     const wrapped = withMutationAuth("settings:write", handler);
 
-    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    const resp = await wrapped(makeRequest({ cookieName: "estracto_session", cookieValue: "v" }));
     expect(resp.status).toBe(200);
     expect(handler).toHaveBeenCalledOnce();
   });
@@ -543,7 +543,7 @@ describe("withMutationAuth higher-order wrapper", () => {
     const handler = vi.fn();
     const wrapped = withMutationAuth("settings:write", handler);
 
-    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    const resp = await wrapped(makeRequest({ cookieName: "estracto_session", cookieValue: "v" }));
     expect(resp.status).toBe(403);
     expect(handler).not.toHaveBeenCalled();
   });
@@ -577,7 +577,7 @@ describe("withMutationAuth higher-order wrapper", () => {
     const wrapped = withMutationAuth("settings:write", async () => {
       throw new Error("write failed");
     });
-    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    const resp = await wrapped(makeRequest({ cookieName: "estracto_session", cookieValue: "v" }));
     expect(resp.status).toBe(500);
     const body = await resp.json();
     expect(body.error).toBe("write failed");
@@ -592,7 +592,7 @@ describe("withSessionAuth (read mode)", () => {
     const handler = vi.fn(async () => new Response("ok"));
     const wrapped = withSessionAuth("read", "API keys", handler);
 
-    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    const resp = await wrapped(makeRequest({ cookieName: "estracto_session", cookieValue: "v" }));
     expect(resp.status).toBe(200);
     expect(handler).toHaveBeenCalledOnce();
   });
@@ -642,7 +642,7 @@ describe("withSessionAuth (mutation mode)", () => {
     const handler = vi.fn(async () => new Response("ok"));
     const wrapped = withSessionAuth("mutation", "API keys", handler);
 
-    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    const resp = await wrapped(makeRequest({ cookieName: "estracto_session", cookieValue: "v" }));
     expect(resp.status).toBe(200);
   });
 
@@ -678,7 +678,7 @@ describe("withSessionAuth (mutation mode)", () => {
     const handler = vi.fn();
     const wrapped = withSessionAuth("mutation", "API keys", handler);
 
-    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    const resp = await wrapped(makeRequest({ cookieName: "estracto_session", cookieValue: "v" }));
     expect(resp.status).toBe(403);
     expect(handler).not.toHaveBeenCalled();
   });

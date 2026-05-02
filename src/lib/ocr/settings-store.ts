@@ -108,11 +108,13 @@ interface SaveApiSettingsInput extends Omit<Partial<ApiProviderSettings>, "provi
   replaceApiKey?: boolean;
 }
 
-const DEFAULT_API_SETTINGS: ApiProviderSettings = {
-  provider: "ollama",
-  apiEndpoint: normalizeApiEndpoint(getDefaultOllamaHost(), "ollama"),
-  apiKey: "",
-};
+function getDefaultApiSettings(): ApiProviderSettings {
+  return {
+    provider: "ollama",
+    apiEndpoint: normalizeApiEndpoint(getDefaultOllamaHost(), "ollama"),
+    apiKey: "",
+  };
+}
 
 function getSettingsDir(): string { return path.join(getDataRoot(), "api-settings"); }
 const settingsCache = new Map<string, ApiProviderSettings>();
@@ -182,7 +184,7 @@ export async function getApiSettings(userId: string): Promise<ApiProviderSetting
       throw readErr;
     }
   }
-  const normalized = normalizeSettings(DEFAULT_API_SETTINGS);
+  const normalized = normalizeSettings(getDefaultApiSettings());
   settingsCache.set(safeUserId, normalized);
   return { ...normalized };
 }

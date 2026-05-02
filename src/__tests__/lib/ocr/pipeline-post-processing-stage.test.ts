@@ -63,7 +63,7 @@ function snapshotStub(snap: ProgressSnapshotInput): OcrProgressMetadata {
 function makeDeps(overrides: Partial<Parameters<typeof runPostProcessingStage>[1]> = {}) {
   return {
     jobId: "job-1",
-    settings: { provider: "ollama", apiEndpoint: "http://o", apiKey: "" },
+    settings: { provider: "ollama" as const, apiEndpoint: "http://o", apiKey: "" },
     postProcessingPayload: {
       enabled: true,
       outputFormat: "markdown" as const,

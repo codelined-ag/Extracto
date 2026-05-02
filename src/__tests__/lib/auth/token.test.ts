@@ -235,46 +235,45 @@ describe("getSessionMaxAgeSeconds", () => {
 // ---------------------------------------------------------------------------
 
 describe("shouldUseSecureCookie", () => {
-  const originalNodeEnv = process.env.NODE_ENV;
+  const env = process.env as Record<string, string | undefined>;
+  const originalNodeEnv = env.NODE_ENV;
 
   afterEach(() => {
-    // Restore NODE_ENV after each test that mutates it.
     if (originalNodeEnv === undefined) {
-      delete process.env.NODE_ENV;
+      delete env.NODE_ENV;
     } else {
-      process.env.NODE_ENV = originalNodeEnv;
+      env.NODE_ENV = originalNodeEnv;
     }
-    delete process.env.COOKIE_SECURE;
+    delete env.COOKIE_SECURE;
   });
 
   it("always returns false in non-production regardless of arg", () => {
-    // vitest sets NODE_ENV to 'test', which is not 'production'
     expect(shouldUseSecureCookie(true)).toBe(false);
     expect(shouldUseSecureCookie(false)).toBe(false);
   });
 
   it("returns true in production when COOKIE_SECURE=true", () => {
-    process.env.NODE_ENV = "production";
-    process.env.COOKIE_SECURE = "true";
+    env.NODE_ENV = "production";
+    env.COOKIE_SECURE = "true";
     expect(shouldUseSecureCookie(false)).toBe(true);
   });
 
   it("returns false in production when COOKIE_SECURE=false", () => {
-    process.env.NODE_ENV = "production";
-    process.env.COOKIE_SECURE = "false";
+    env.NODE_ENV = "production";
+    env.COOKIE_SECURE = "false";
     expect(shouldUseSecureCookie(true)).toBe(false);
   });
 
   it("falls back to the arg in production when COOKIE_SECURE is unset", () => {
-    process.env.NODE_ENV = "production";
-    delete process.env.COOKIE_SECURE;
+    env.NODE_ENV = "production";
+    delete env.COOKIE_SECURE;
     expect(shouldUseSecureCookie(true)).toBe(true);
     expect(shouldUseSecureCookie(false)).toBe(false);
   });
 
   it("falls back to the arg in production when COOKIE_SECURE is an unrecognized value", () => {
-    process.env.NODE_ENV = "production";
-    process.env.COOKIE_SECURE = "yes";
+    env.NODE_ENV = "production";
+    env.COOKIE_SECURE = "yes";
     expect(shouldUseSecureCookie(true)).toBe(true);
     expect(shouldUseSecureCookie(false)).toBe(false);
   });

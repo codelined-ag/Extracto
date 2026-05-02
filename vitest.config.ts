@@ -7,7 +7,7 @@ export default defineConfig({
     environment: "node",
     coverage: {
       provider: "v8",
-      include: ["src/lib/**/*.ts"],
+      include: ["src/lib/**/*.ts", "src/app/api/**/*.ts"],
       exclude: ["src/lib/db.ts", "src/lib/prisma.ts"],
     },
   },

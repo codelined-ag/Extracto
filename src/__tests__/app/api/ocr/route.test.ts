@@ -51,6 +51,7 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/lib/ocr/pipeline", () => ({
   buildProgressMetadata: vi.fn().mockReturnValue({}),
   buildPrompt: vi.fn().mockReturnValue("PROMPT"),
+  ocrStageProgressPct: vi.fn().mockReturnValue(0),
   getModelCatalog: vi.fn(),
   normalizePreviewForHistory: vi.fn().mockReturnValue("data:preview"),
   getOllamaDiscoveryFallbackHost: vi.fn().mockReturnValue("http://localhost:11434"),

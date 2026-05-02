@@ -90,6 +90,8 @@ import { PreviewHeader } from "@/app/page-components/preview-header";
 import { NoSelectionCard } from "@/app/page-components/no-selection-card";
 import { UploadArea } from "@/app/page-components/upload-area";
 import type {
+  HistoryJobDetail,
+  HistoryJobSummary,
   OcrPageCheckpointView,
   OcrProgressEventView,
   ProcessingFile,
@@ -166,23 +168,6 @@ interface Model {
 // local-only extension so the network shape and the form shape don't drift.
 type ApiSettings = ClientApiSettings & { apiKey: string };
 
-interface HistoryJobSummary {
- id: string;
- status:"QUEUED"|"PROCESSING"|"COMPLETED"|"FAILED";
- fileName: string;
- sourcePreview?: string | null;
- model: string;
- createdAt: string;
- completedAt?: string | null;
- processingMs?: number | null;
- metadata?: unknown;
- errorMessage?: string | null;
-}
-
-interface HistoryJobDetail extends HistoryJobSummary {
- extractedText?: string | null;
- result?: unknown;
-}
 
 type ProviderModelSelections = Partial<Record<ProviderKind, string>>;
 
@@ -1349,7 +1334,6 @@ export default function ExtractoPage() {
  }
  };
 
- // Handle file selection
  const handleFiles = async (fileList: FileList | File[]) => {
  const newFiles: ProcessingFile[] = [];
 
@@ -1392,7 +1376,6 @@ export default function ExtractoPage() {
  });
  };
 
- // Drag and drop handlers
  const handleDragOver = (e: React.DragEvent) => {
  e.preventDefault();
  setIsDragOver(true);
@@ -1411,7 +1394,6 @@ export default function ExtractoPage() {
  }
  };
 
- // Remove file
  const removeFile = (id: string) => {
  setFiles((prev) => prev.filter((f) => f.id !== id));
  if (selectedFileId === id) {
@@ -1420,13 +1402,11 @@ export default function ExtractoPage() {
  }
  };
 
- // Clear all files
  const clearAllFiles = () => {
  setFiles([]);
  setSelectedFileId(null);
  };
 
- // Copy to clipboard
  const copyToClipboard = async (type:"md"|"json") => {
  if (!selectedFile?.result) return;
 
@@ -1448,7 +1428,6 @@ export default function ExtractoPage() {
  });
  };
 
- // Download result
  const downloadResult = (type:"md"|"json") => {
  if (!selectedFile?.result) return;
 
@@ -1474,7 +1453,6 @@ export default function ExtractoPage() {
  });
  };
 
- // Export all as zip
  const exportAllAsZip = async () => {
  const completedFiles = files.filter((f) => f.status ==="completed"&& f.result);
  if (completedFiles.length === 0) {
@@ -1769,7 +1747,6 @@ export default function ExtractoPage() {
  return pollJobUntilStopped(file.id, startPayload.jobId);
  };
 
- // Process files with OCR
  const processFiles = async () => {
  if (files.length === 0) return;
  if (!selectedModel.trim()) {

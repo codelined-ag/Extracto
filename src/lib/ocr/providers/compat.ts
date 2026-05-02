@@ -36,10 +36,15 @@ const OPENAI_COMPAT_MODEL_CACHE_TTL_MS = 5 * 60_000;
 const OPENROUTER_MODEL_CACHE_MAX_ENTRIES = 256;
 const OPENAI_COMPAT_MODEL_CACHE_MAX_ENTRIES = 256;
 
+/**
+ * `defaultUrl` is read at call time so env-driven defaults
+ * (OPENROUTER_API_URL, OPENAI_COMPAT_API_URL) are not snapshotted at
+ * import time — see provider-config.ts for the lazy-getter contract.
+ */
 export interface CompatProviderConfig {
   provider: Extract<ProviderKind, "openrouter" | "openai_compat">;
   label: string;
-  defaultUrl: string;
+  defaultUrl: () => string;
   normalizeBase: (raw: string) => string;
   buildHeaders: (apiKey: string) => Record<string, string>;
   buildDiscoveryHeaders: (apiKey: string) => Record<string, string>;
@@ -97,7 +102,7 @@ const openAICompatModelCache = new Map<string, { values: string[]; expiresAt: nu
 export const OPENROUTER_CONFIG: CompatProviderConfig = {
   provider: "openrouter",
   label: "OpenRouter",
-  defaultUrl: getDefaultOpenRouterApiUrl(),
+  defaultUrl: getDefaultOpenRouterApiUrl,
   normalizeBase: normalizeOpenRouterApiBase,
   buildHeaders: (apiKey) => {
     const headers: Record<string, string> = {
@@ -125,7 +130,7 @@ export const OPENROUTER_CONFIG: CompatProviderConfig = {
 export const OPENAI_COMPAT_CONFIG: CompatProviderConfig = {
   provider: "openai_compat",
   label: "OpenAI-compatible",
-  defaultUrl: getDefaultOpenAICompatApiUrl(),
+  defaultUrl: getDefaultOpenAICompatApiUrl,
   normalizeBase: normalizeOpenAICompatApiBase,
   // Vanilla OpenAI shape: just Bearer auth + JSON. No X-Title, no HTTP-Referer
   // (those are OpenRouter-specific and confuse strict OpenAI servers).
@@ -148,8 +153,9 @@ export function buildCompatEndpoint(
   rawEndpoint: string,
   suffix: "/chat/completions" | "/models",
 ): string {
-  const base = cfg.normalizeBase(rawEndpoint || cfg.defaultUrl);
-  return enforceProviderEndpointPolicy(cfg.provider, `${base}${suffix}`, `${cfg.defaultUrl}${suffix}`);
+  const defaultUrl = cfg.defaultUrl();
+  const base = cfg.normalizeBase(rawEndpoint || defaultUrl);
+  return enforceProviderEndpointPolicy(cfg.provider, `${base}${suffix}`, `${defaultUrl}${suffix}`);
 }
 
 function buildCompatCacheKey(endpoint: string, apiKey: string): string {

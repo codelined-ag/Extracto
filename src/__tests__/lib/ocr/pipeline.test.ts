@@ -88,6 +88,7 @@ import {
   sanitizePostProcessing,
   submitOcrJob,
   toJsonValue,
+  type OcrProgressEvent,
 } from "@/lib/ocr/pipeline";
 
 const PREVIEW =
@@ -332,7 +333,7 @@ describe("appendProgressEvent", () => {
   });
 
   it("trims to the most recent 60 events when over the cap", () => {
-    let events = Array.from({ length: 70 }, (_, i) => ({
+    let events: OcrProgressEvent[] = Array.from({ length: 70 }, (_, i) => ({
       at: `t${i}`,
       stage: "queued" as const,
       message: `m${i}`,

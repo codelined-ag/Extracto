@@ -68,7 +68,7 @@ function makeDeps(overrides: Partial<Parameters<typeof runOcrPages>[1]> = {}) {
   return {
     jobId: "job-1",
     provider: "ollama" as const,
-    settings: { provider: "ollama", apiEndpoint: "http://o", apiKey: "" },
+    settings: { provider: "ollama" as const, apiEndpoint: "http://o", apiKey: "" },
     ocrModel: "llama-vision",
     prompt: "extract",
     inputPreviews: ["data:image/png;base64,p1", "data:image/png;base64,p2"],

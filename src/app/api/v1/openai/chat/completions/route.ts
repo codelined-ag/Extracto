@@ -93,7 +93,13 @@ export async function POST(request: NextRequest) {
   }
   const limited = enforceOcrSubmitRateLimit(result.auth, getClientIpAddress(request));
   if (limited) {
-    return openAiError("Too many OCR jobs requested. Please retry shortly.", "rate_limit_error", 429);
+    const retryAfter = limited.headers.get("Retry-After");
+    const body = JSON.stringify({
+      error: { message: "Too many OCR jobs requested. Please retry shortly.", type: "rate_limit_error" },
+    });
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (retryAfter) headers["Retry-After"] = retryAfter;
+    return new NextResponse(body, { status: 429, headers });
   }
 
   const body = (await request.json().catch(() => null)) as OpenAIChatRequest | null;

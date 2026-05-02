@@ -29,6 +29,7 @@ import {
 import {
   buildProgressMetadata,
   buildPrompt,
+  ocrStageProgressPct,
   getModelCatalog,
   normalizePreviewForHistory,
   getOllamaDiscoveryFallbackHost,
@@ -193,10 +194,7 @@ export async function POST(request: NextRequest) {
       const resumeMetadata = buildProgressMetadata({
         stage: "queued",
         message: `Resume requested from page ${startIndex + 1}/${inputPreviews.length}`,
-        progressPct:
-          postProcessingPayload.enabled
-            ? (startIndex / inputPreviews.length) * 85
-            : (startIndex / inputPreviews.length) * 100,
+        progressPct: ocrStageProgressPct(startIndex, inputPreviews.length, postProcessingPayload.enabled),
         pageCount: inputPreviews.length,
         processedPages: startIndex,
         currentPage: null,
