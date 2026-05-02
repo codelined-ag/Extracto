@@ -73,9 +73,11 @@ Thumbs.db
 *.p12
 *.pfx
 
-# Docs policy: ignore all markdown except README
+# Docs policy: ignore all markdown except README and a few opted-in files
 *.md
 !README.md
+!SKILL.md
+!CLAUDE.md
 
 # Local dev SQLite created when running bunx prisma db push outside docker
 prisma/db/

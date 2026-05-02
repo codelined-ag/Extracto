@@ -221,6 +221,232 @@ cmd_api_key() {
   compose exec -T app bun run scripts/api-key-cli.ts "$sub" "$@"
 }
 
+# ----------------------------------------------------------------------
+# HTTP API helpers — talk to the running Extracto instance
+# ----------------------------------------------------------------------
+
+EXTRACTO_URL_DEFAULT="${EXTRACTO_URL:-http://127.0.0.1:3000}"
+
+resolve_token() {
+  if [ -n "${EXTRACTO_TOKEN:-}" ]; then
+    printf "%s" "$EXTRACTO_TOKEN"
+    return
+  fi
+  if [ -f "${HOME}/.extracto/config" ]; then
+    grep -E "^EXTRACTO_TOKEN=" "${HOME}/.extracto/config" 2>/dev/null \
+      | tail -1 | cut -d= -f2- | tr -d '"'
+  fi
+}
+
+require_token() {
+  local tok
+  tok="$(resolve_token)"
+  if [ -z "$tok" ]; then
+    die "no API token found. Set EXTRACTO_TOKEN, or run 'extracto api-key create <email> <name>' and store the result in ~/.extracto/config as EXTRACTO_TOKEN=<key>."
+  fi
+  printf "%s" "$tok"
+}
+
+api_get() {
+  # api_get <path> [query]
+  local path="$1"
+  local token
+  token="$(require_token)"
+  curl -fsS \
+    -H "Authorization: Bearer ${token}" \
+    -H "Accept: application/json" \
+    "${EXTRACTO_URL_DEFAULT}${path}"
+}
+
+api_post_json() {
+  # api_post_json <path> <json-body>
+  local path="$1"
+  local body="$2"
+  local token
+  token="$(require_token)"
+  curl -fsS -X POST \
+    -H "Authorization: Bearer ${token}" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json" \
+    -d "$body" \
+    "${EXTRACTO_URL_DEFAULT}${path}"
+}
+
+api_delete() {
+  local path="$1"
+  local token
+  token="$(require_token)"
+  curl -fsS -X DELETE \
+    -H "Authorization: Bearer ${token}" \
+    "${EXTRACTO_URL_DEFAULT}${path}"
+}
+
+# ----------------------------------------------------------------------
+# New commands
+# ----------------------------------------------------------------------
+
+cmd_status() {
+  ensure_project
+  compose ps
+}
+
+cmd_logs() {
+  ensure_project
+  compose logs -f app
+}
+
+cmd_jobs() {
+  local sub="${1:-list}"
+  shift || true
+  case "$sub" in
+    list)
+      local limit="${1:-20}"
+      api_get "/api/jobs?limit=${limit}"
+      ;;
+    get)
+      [ -n "${1:-}" ] || die "usage: extracto jobs get <job-id>"
+      api_get "/api/jobs/${1}"
+      ;;
+    delete)
+      [ -n "${1:-}" ] || die "usage: extracto jobs delete <job-id>"
+      api_delete "/api/jobs/${1}"
+      ;;
+    cancel)
+      [ -n "${1:-}" ] || die "usage: extracto jobs cancel <job-id>"
+      api_post_json "/api/jobs/${1}/control" '{"action":"stop"}'
+      ;;
+    wait)
+      [ -n "${1:-}" ] || die "usage: extracto jobs wait <job-id>"
+      local id="$1"
+      local status="QUEUED"
+      while [ "$status" = "QUEUED" ] || [ "$status" = "RUNNING" ]; do
+        sleep 2
+        local body
+        body="$(api_get "/api/jobs/${id}")" || die "failed to fetch job ${id}"
+        status="$(printf "%s" "$body" | grep -oE '"status":"[A-Z]+"' | head -1 | cut -d'"' -f4)"
+        info "  status=${status}"
+      done
+      printf "%s\n" "$body"
+      ;;
+    *)
+      die "usage: extracto jobs <list|get|delete|cancel|wait> [args...]"
+      ;;
+  esac
+}
+
+cmd_presets() {
+  local sub="${1:-list}"
+  shift || true
+  case "$sub" in
+    list)
+      api_get "/api/v1/presets"
+      ;;
+    create)
+      local name="${1:-}"
+      local instruction="${2:-}"
+      local format="${3:-markdown}"
+      [ -n "$name" ] && [ -n "$instruction" ] || \
+        die "usage: extracto presets create <name> <instruction> [markdown|json]"
+      api_post_json "/api/v1/presets" \
+        "$(printf '{"name":%s,"instruction":%s,"outputFormat":%s}' \
+          "$(printf '%s' "$name" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" \
+          "$(printf '%s' "$instruction" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" \
+          "$(printf '%s' "$format" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")"
+      ;;
+    delete)
+      [ -n "${1:-}" ] || die "usage: extracto presets delete <preset-id>"
+      api_delete "/api/v1/presets/${1}"
+      ;;
+    *)
+      die "usage: extracto presets <list|create|delete> [args...]"
+      ;;
+  esac
+}
+
+cmd_settings() {
+  local sub="${1:-get}"
+  shift || true
+  case "$sub" in
+    get)
+      api_get "/api/settings"
+      ;;
+    *)
+      die "usage: extracto settings get   (use the web UI to change settings)"
+      ;;
+  esac
+}
+
+cmd_ocr() {
+  local file="${1:-}"
+  [ -n "$file" ] || die "usage: extracto ocr <file> [--model NAME] [--out PATH]"
+  [ -f "$file" ] || die "file not found: $file"
+  local out="" model="" wait_flag=1
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --model)
+        model="${2:-}"; shift 2
+        ;;
+      --out)
+        out="${2:-}"; shift 2
+        ;;
+      --no-wait)
+        wait_flag=0; shift
+        ;;
+      *)
+        die "unknown ocr flag: $1"
+        ;;
+    esac
+  done
+
+  local mime
+  case "${file##*.}" in
+    pdf|PDF) mime="application/pdf" ;;
+    png|PNG) mime="image/png" ;;
+    jpg|jpeg|JPG|JPEG) mime="image/jpeg" ;;
+    webp|WEBP) mime="image/webp" ;;
+    *) die "unsupported file type: ${file##*.}" ;;
+  esac
+
+  local data_url
+  data_url="data:${mime};base64,$(base64 -w 0 < "$file")"
+  local file_basename
+  file_basename="$(basename "$file")"
+
+  local body
+  body="$(python3 -c '
+import json, sys
+print(json.dumps({
+  "fileName": sys.argv[1],
+  "model": sys.argv[2] or None,
+  "preview": sys.argv[3],
+}, separators=(",", ":")))
+' "$file_basename" "$model" "$data_url")"
+
+  info "submitting OCR for ${file_basename}..."
+  local response
+  response="$(api_post_json "/api/v1/ocr/batch" \
+    "$(printf '{"files":[{"fileName":%s,"data":%s}]}' \
+      "$(printf '%s' "$file_basename" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" \
+      "$(printf '%s' "$data_url" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")")"
+
+  if [ -n "$out" ]; then
+    printf "%s" "$response" > "$out"
+    ok "saved response to ${out}"
+  else
+    printf "%s\n" "$response"
+  fi
+
+  if [ $wait_flag -eq 1 ]; then
+    local job_id
+    job_id="$(printf "%s" "$response" | grep -oE '"jobId":"[^"]+"' | head -1 | cut -d'"' -f4)"
+    if [ -n "$job_id" ]; then
+      info "waiting for job ${job_id}..."
+      cmd_jobs wait "$job_id"
+    fi
+  fi
+}
+
 cmd_uninstall() {
   ensure_project
   run_step "Removing Extracto containers and volumes..." compose down -v --remove-orphans
@@ -240,15 +466,36 @@ cmd_uninstall() {
 
 print_help() {
   cat <<EOF
-Usage: extracto <command>
+Usage: extracto <command> [args...]
 
-Commands:
-  on                            Start Extracto (quiet mode with animated status)
-  off                           Stop Extracto (quiet mode with animated status)
-  api-key create <email> <name> Create an API key for a user (headless)
+Lifecycle:
+  on                            Start Extracto (animated status)
+  off                           Stop Extracto (animated status)
+  status                        Show running container state
+  logs                          Tail app logs (docker compose logs -f app)
+  uninstall                     Remove Extracto command and app resources (keeps Ollama)
+
+API keys (require running container):
+  api-key create <email> <name> Create an API key for a user
   api-key list <email>          List API keys for a user
   api-key revoke <key-id>       Revoke an API key by id
-  uninstall                     Remove Extracto command and app resources (keeps Ollama)
+
+Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
+  ocr <file> [--model N] [--out P] [--no-wait]
+                                Submit a file for OCR (pdf/png/jpg/webp)
+  jobs list [limit]             List recent OCR jobs (default 20)
+  jobs get <id>                 Show one job
+  jobs delete <id>              Delete a job
+  jobs cancel <id>              Request a job stop
+  jobs wait <id>                Poll until the job leaves QUEUED/RUNNING
+  presets list                  List output presets
+  presets create <name> <inst> [markdown|json]
+  presets delete <id>
+  settings get                  Show current API provider settings
+
+Environment:
+  EXTRACTO_URL                  Base URL (default http://127.0.0.1:3000)
+  EXTRACTO_TOKEN                Bearer token for /api/v1/* requests
 
 Logs:
   Internal command logs are saved to: ${LOG_DIR}
@@ -258,19 +505,16 @@ EOF
 main() {
   local command="${1:-}"
   case "$command" in
-    on)
-      cmd_on
-      ;;
-    off)
-      cmd_off
-      ;;
-    api-key)
-      shift
-      cmd_api_key "$@"
-      ;;
-    uninstall)
-      cmd_uninstall
-      ;;
+    on)        cmd_on ;;
+    off)       cmd_off ;;
+    status)    cmd_status ;;
+    logs)      cmd_logs ;;
+    api-key)   shift; cmd_api_key "$@" ;;
+    uninstall) cmd_uninstall ;;
+    ocr)       shift; cmd_ocr "$@" ;;
+    jobs)      shift; cmd_jobs "$@" ;;
+    presets)   shift; cmd_presets "$@" ;;
+    settings)  shift; cmd_settings "$@" ;;
     -h|--help|help|"")
       print_help
       ;;
