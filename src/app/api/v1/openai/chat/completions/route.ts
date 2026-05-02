@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
   try {
   const result = await authenticateMutation(request);
   if (!result.ok) {
-    return openAiError(result.error, "auth_error", result.status);
+    return openAiError(result.error, "authentication_error", result.status);
   }
   if (!authHasScope(result.auth, "ocr:submit")) {
     return openAiError("Missing required scope: ocr:submit", "permission_error", 403);
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     });
     jobId = created.jobId;
   } catch (error) {
-    return openAiError(errorMessage(error, "OCR submission failed"), "upstream_error", 502);
+    return openAiError(errorMessage(error, "OCR submission failed"), "api_error", 502);
   }
   const startedAt = Date.now();
   while (Date.now() - startedAt < MAX_WAIT_MS) {
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
     }
     if (job.status === OcrJobStatus.FAILED) {
       return NextResponse.json(
-        { error: { message: job.errorMessage || "OCR job failed", type: "upstream_error" }, extracto: { jobId } },
+        { error: { message: job.errorMessage || "OCR job failed", type: "api_error" }, extracto: { jobId } },
         { status: 502 },
       );
     }
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json(
-    { error: { message: "Timed out waiting for OCR completion", type: "timeout_error" }, extracto: { jobId } },
+    { error: { message: "Timed out waiting for OCR completion", type: "api_error" }, extracto: { jobId } },
     { status: 504 },
   );
   } catch (error) {
@@ -204,10 +204,10 @@ export async function POST(request: NextRequest) {
 
 function openAiErrorTypeFromStatus(status: number): string {
   if (status === 400) return "invalid_request_error";
-  if (status === 401 || status === 403) return "permission_error";
-  if (status === 404) return "not_found_error";
+  if (status === 401) return "authentication_error";
+  if (status === 403) return "permission_error";
+  if (status === 404) return "invalid_request_error";
   if (status === 429) return "rate_limit_error";
-  if (status === 504) return "timeout_error";
   if (status >= 400 && status < 500) return "invalid_request_error";
-  return "internal_error";
+  return "api_error";
 }

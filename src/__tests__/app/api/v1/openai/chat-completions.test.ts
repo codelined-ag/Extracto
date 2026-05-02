@@ -93,12 +93,12 @@ afterEach(() => {
 });
 
 describe("POST /api/v1/openai/chat/completions", () => {
-  it("returns auth_error when authenticateMutation rejects", async () => {
+  it("returns authentication_error when authenticateMutation rejects", async () => {
     mockedAuth.mockResolvedValueOnce({ ok: false, error: "missing token", status: 401 });
     const res = await POST(makeRequest({ model: "x", messages: [] }));
     expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error).toEqual({ message: "missing token", type: "auth_error" });
+    expect(body.error).toEqual({ message: "missing token", type: "authentication_error" });
   });
 
   it("returns permission_error when the API key lacks the ocr:submit scope", async () => {
@@ -206,7 +206,7 @@ describe("POST /api/v1/openai/chat/completions", () => {
     expect(body.extracto.jobId).toBe("job-stub");
   });
 
-  it("returns 502 when submitOcrJob throws (upstream_error)", async () => {
+  it("returns 502 when submitOcrJob throws (api_error)", async () => {
     mockedSubmit.mockRejectedValueOnce(new Error("queue full"));
     const res = await POST(
       makeRequest({
@@ -218,6 +218,6 @@ describe("POST /api/v1/openai/chat/completions", () => {
     );
     expect(res.status).toBe(502);
     const body = await res.json();
-    expect(body.error.type).toBe("upstream_error");
+    expect(body.error.type).toBe("api_error");
   });
 });

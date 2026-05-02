@@ -8,7 +8,7 @@ import {
   normalizeOpenAICompatApiBase,
   normalizeOpenRouterApiBase,
 } from "@/lib/ocr/providers/compat";
-import { authenticateMutation, requireScope, withAuth } from "@/lib/auth/request";
+import { withAuth, withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { enforceProviderEndpointPolicy, normalizeProvider, ProviderKind } from "@/lib/ocr/endpoint-policy";
 import { withOcrJobSlot } from "@/lib/ocr/job-control";
@@ -98,17 +98,11 @@ export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) =
   return NextResponse.json({ models: catalog[provider] });
 });
 
-export async function POST(request: NextRequest) {
+export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, { auth }) => {
   const startedAtMs = Date.now();
   try {
-    const authResult = await authenticateMutation(request);
-    if (!authResult.ok) {
-      throw new ApiRouteError(authResult.error, authResult.status);
-    }
-    const auth = authResult.auth;
-    const submitScopeError = requireScope(auth, "ocr:submit");
-    if (submitScopeError) return submitScopeError;
     const userId = auth.userId;
+    const authResult = { auth };
 
     const limited = enforceOcrSubmitRateLimit(auth, getClientIpAddress(request));
     if (limited) return limited;
@@ -302,7 +296,6 @@ export async function POST(request: NextRequest) {
       { status: 202 },
     );
   } catch (error) {
-    console.error("OCR processing error:", error);
     return handleApiError(error, { statusFor: pipelineStatusFor });
   }
-}
+});

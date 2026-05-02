@@ -2,10 +2,36 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
 vi.mock("@/lib/auth/request", () => ({
-  authenticateMutation: vi.fn(),
-  requireScope: vi.fn().mockReturnValue(null),
   withAuth: vi.fn(),
+  withMutationAuth: <P,>(_scope: string, handler: (req: NextRequest, ctx: { auth: unknown; params: Promise<P> }) => Promise<Response>) => {
+    return async (req: NextRequest) => {
+      const auth = currentAuthOverride ?? {
+        method: "api-key",
+        userId: "user-1",
+        apiKeyId: "key-1",
+        scopes: ["*"],
+      };
+      if (auth instanceof Response) return auth;
+      try {
+        return await handler(req, { auth, params: Promise.resolve({} as P) });
+      } catch (error) {
+        if (error instanceof Error && "status" in error) {
+          const status = (error as { status?: number }).status ?? 500;
+          return new Response(JSON.stringify({ error: error.message }), {
+            status,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ error: "Internal Server Error" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+    };
+  },
 }));
+
+let currentAuthOverride: unknown = null;
 
 vi.mock("@/lib/ocr/rate-limit", () => ({
   enforceOcrSubmitRateLimit: vi.fn().mockReturnValue(null),
@@ -87,7 +113,6 @@ vi.mock("@/lib/ocr/provider-config", () => ({
   getDefaultOpenRouterApiUrl: () => "http://or",
 }));
 
-import { authenticateMutation, requireScope } from "@/lib/auth/request";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { db } from "@/lib/db";
 import {
@@ -97,21 +122,12 @@ import {
 } from "@/lib/ocr/pipeline";
 import { POST } from "@/app/api/ocr/route";
 
-const mockedAuth = authenticateMutation as ReturnType<typeof vi.fn>;
-const mockedScope = requireScope as ReturnType<typeof vi.fn>;
 const mockedRateLimit = enforceOcrSubmitRateLimit as ReturnType<typeof vi.fn>;
 const mockedFindFirst = db.ocrJob.findFirst as ReturnType<typeof vi.fn>;
 const mockedJobUpdate = db.ocrJob.update as ReturnType<typeof vi.fn>;
 const mockedSubmit = submitOcrJob as ReturnType<typeof vi.fn>;
 const mockedParseCheckpoints = parseCheckpointPages as ReturnType<typeof vi.fn>;
 const mockedBackground = processOcrJobInBackground as ReturnType<typeof vi.fn>;
-
-const fakeAuth = {
-  method: "api-key" as const,
-  userId: "user-1",
-  apiKeyId: "key-1",
-  scopes: ["*"],
-};
 
 function makeRequest(body: unknown): NextRequest {
   return new Request("http://localhost/api/ocr", {
@@ -122,8 +138,7 @@ function makeRequest(body: unknown): NextRequest {
 }
 
 beforeEach(() => {
-  mockedAuth.mockReset().mockResolvedValue({ ok: true, auth: fakeAuth });
-  mockedScope.mockReset().mockReturnValue(null);
+  currentAuthOverride = null;
   mockedRateLimit.mockReset().mockReturnValue(null);
   mockedFindFirst.mockReset();
   mockedJobUpdate.mockReset().mockResolvedValue({});
@@ -134,8 +149,8 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("POST /api/ocr", () => {
-  it("returns the auth error when authenticateMutation rejects", async () => {
-    mockedAuth.mockResolvedValueOnce({ ok: false, error: "no session", status: 401 });
+  it("returns the auth error when authentication fails (wrapper short-circuits)", async () => {
+    currentAuthOverride = new Response(JSON.stringify({ error: "no session" }), { status: 401 });
     const res = await POST(
       makeRequest({ model: "m", preview: "data:image/png;base64,x" }),
     );
