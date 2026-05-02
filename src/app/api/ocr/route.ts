@@ -28,6 +28,7 @@ import {
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
 import { AdvancedSettings, normalizeAdvancedSettings } from "@/lib/ocr/settings";
+import { ApiRouteError } from "@/lib/api-error";
 
 type PostProcessOutputFormat = "markdown" | "json";
 
@@ -147,15 +148,6 @@ interface OcrProgressMetadata {
 }
 
 
-class ApiRouteError extends Error {
-  public status: number;
-
-  constructor(message: string, status = 500) {
-    super(message);
-    this.name = "ApiRouteError";
-    this.status = status;
-  }
-}
 
 class OcrStopRequestedError extends Error {
   constructor(message = "OCR stop requested") {

@@ -217,16 +217,24 @@ export async function getApiSettings(userId: string): Promise<ApiProviderSetting
   const settingsPath = getSettingsPath(safeUserId);
   try {
     const stored = await readFile(settingsPath, "utf8");
-    const parsed = JSON.parse(stored);
-    const normalized = normalizeSettings(parsed);
-    settingsCache.set(safeUserId, normalized);
-    return { ...normalized };
-  } catch {
-    await ensureSettingsDirectory();
-    const normalized = normalizeSettings(DEFAULT_API_SETTINGS);
-    settingsCache.set(safeUserId, normalized);
-    return { ...normalized };
+    try {
+      const parsed = JSON.parse(stored);
+      const normalized = normalizeSettings(parsed);
+      settingsCache.set(safeUserId, normalized);
+      return { ...normalized };
+    } catch (parseErr) {
+      console.error(`[settings-store] Corrupt settings file for user ${safeUserId}, resetting to defaults:`, parseErr);
+    }
+  } catch (readErr: unknown) {
+    const code = (readErr as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") {
+      console.error(`[settings-store] Failed to read settings for user ${safeUserId}:`, readErr);
+    }
   }
+  await ensureSettingsDirectory();
+  const normalized = normalizeSettings(DEFAULT_API_SETTINGS);
+  settingsCache.set(safeUserId, normalized);
+  return { ...normalized };
 }
 
 export async function saveApiSettings(

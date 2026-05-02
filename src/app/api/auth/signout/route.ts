@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthCookieName, shouldUseSecureCookie } from "@/lib/auth/token";
 import { isTrustedMutationRequest } from "@/lib/request-security";
 
-export async function POST(_request: NextRequest) {
+export function POST(_request: NextRequest) {
   if (!isTrustedMutationRequest(_request)) {
     return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
   }
