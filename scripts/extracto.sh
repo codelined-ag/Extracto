@@ -464,6 +464,78 @@ print(json.dumps({
   fi
 }
 
+cmd_kb() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    export)
+      local job_id="${1:-}"
+      [ -n "$job_id" ] || die "usage: extracto kb export <job-id> --collection NAME --store-url URL --embed-model MODEL [--strategy fixed|sentence|paragraph] [--chunk-size N] [--overlap N]"
+      shift
+      local collection="" store_url="" store_kind="chroma" store_key="" \
+            embed_model="" embed_provider="ollama" embed_endpoint="http://127.0.0.1:11434" embed_key="" \
+            strategy="paragraph" chunk_size=512 overlap=64 min_chunk_size=0
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --collection)     collection="${2:-}"; shift 2 ;;
+          --store)          store_kind="${2:-}"; shift 2 ;;
+          --store-url)      store_url="${2:-}"; shift 2 ;;
+          --store-key)      store_key="${2:-}"; shift 2 ;;
+          --embed-model)    embed_model="${2:-}"; shift 2 ;;
+          --embed-provider) embed_provider="${2:-}"; shift 2 ;;
+          --embed-endpoint) embed_endpoint="${2:-}"; shift 2 ;;
+          --embed-key)      embed_key="${2:-}"; shift 2 ;;
+          --strategy)       strategy="${2:-}"; shift 2 ;;
+          --chunk-size)     chunk_size="${2:-}"; shift 2 ;;
+          --overlap)        overlap="${2:-}"; shift 2 ;;
+          --min-chunk-size) min_chunk_size="${2:-}"; shift 2 ;;
+          *) die "unknown kb export flag: $1" ;;
+        esac
+      done
+      [ -n "$collection" ]   || die "--collection is required"
+      [ -n "$store_url" ]    || die "--store-url is required"
+      [ -n "$embed_model" ]  || die "--embed-model is required"
+
+      local body
+      body="$(python3 -c '
+import json, sys
+parts = sys.stdin.read().split("\x1f")
+(job_id, collection, store_kind, store_url, store_key,
+ embed_provider, embed_endpoint, embed_key, embed_model,
+ strategy, chunk_size, overlap, min_chunk_size) = parts
+
+payload = {
+  "jobId": job_id,
+  "collectionName": collection,
+  "vectorStore": {"kind": store_kind, "baseUrl": store_url},
+  "embedding": {
+    "provider": embed_provider,
+    "apiEndpoint": embed_endpoint,
+    "model": embed_model,
+  },
+  "chunking": {"strategy": strategy, "maxChunkSize": int(chunk_size)},
+}
+if store_key:
+  payload["vectorStore"]["apiKey"] = store_key
+if embed_key:
+  payload["embedding"]["apiKey"] = embed_key
+if int(overlap) > 0:
+  payload["chunking"]["overlap"] = int(overlap)
+if int(min_chunk_size) > 0:
+  payload["chunking"]["minChunkSize"] = int(min_chunk_size)
+
+print(json.dumps(payload, separators=(",", ":")))
+' <<<"${job_id}"$'\x1f'"${collection}"$'\x1f'"${store_kind}"$'\x1f'"${store_url}"$'\x1f'"${store_key}"$'\x1f'"${embed_provider}"$'\x1f'"${embed_endpoint}"$'\x1f'"${embed_key}"$'\x1f'"${embed_model}"$'\x1f'"${strategy}"$'\x1f'"${chunk_size}"$'\x1f'"${overlap}"$'\x1f'"${min_chunk_size}")"
+
+      info "exporting job ${job_id} to ${store_kind}://${store_url}/${collection}..."
+      api_post_json "/api/v1/export/kb" "$body"
+      ;;
+    *)
+      die "usage: extracto kb export <job-id> [flags]"
+      ;;
+  esac
+}
+
 cmd_uninstall() {
   ensure_project
   run_step "Removing Extracto containers and volumes..." compose down -v --remove-orphans
@@ -509,6 +581,9 @@ Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
   presets create <name> <inst> [markdown|json]
   presets delete <id>
   settings get                  Show current API provider settings
+  kb export <job-id> --collection N --store-url URL --embed-model M
+                                Export an OCR job's text to a vector store
+                                (requires KB_EXPORT_ENABLED=1 on the server)
 
 Environment:
   EXTRACTO_URL                  Base URL (default http://127.0.0.1:3000)
@@ -532,6 +607,7 @@ main() {
     jobs)      shift; cmd_jobs "$@" ;;
     presets)   shift; cmd_presets "$@" ;;
     settings)  shift; cmd_settings "$@" ;;
+    kb)        shift; cmd_kb "$@" ;;
     -h|--help|help|"")
       print_help
       ;;
