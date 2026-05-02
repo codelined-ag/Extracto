@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from"react";
-import { motion, AnimatePresence } from"framer-motion";
+import { motion } from"framer-motion";
 import {
  Code,
  AlertCircle,
@@ -12,11 +12,9 @@ import {
 import { ArchiveIcon } from"@/components/ui/archive";
 import { ArrowRightIcon } from"@/components/ui/arrow-right";
 import { ChevronDownIcon } from"@/components/ui/chevron-down";
-import { CircleCheckIcon } from"@/components/ui/circle-check";
 import { ClipboardCheckIcon } from"@/components/ui/clipboard-check";
 import { ClockIcon } from"@/components/ui/clock";
 import { DatabaseBackupIcon } from"@/components/ui/database-backup";
-import { DeleteIcon } from"@/components/ui/delete";
 import { FileTextIcon } from"@/components/ui/file-text";
 import { HistoryIcon } from"@/components/ui/history";
 import { LanguagesIcon } from"@/components/ui/languages";
@@ -84,7 +82,7 @@ import {
   SettingsSection,
   ToggleRow,
 } from "@/app/page-components/settings-primitives";
-import { FileListItem } from "@/app/page-components/file-list-item";
+import { FileListCard } from "@/app/page-components/file-list-card";
 import { Footer } from "@/app/page-components/footer";
 import { HeaderBar } from "@/app/page-components/header-bar";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
@@ -2402,129 +2400,116 @@ export default function ExtractoPage() {
               t={t}
             />
 
- {/* File List */}
- <Card className="min-h-[220px] overflow-hidden">
- <CardContent className="p-0 flex flex-col">
- {/* File List Header */}
- <div className="flex items-center justify-between p-3">
- <div className="flex items-center gap-2">
- <FileTextIcon size={16} className="inline-flex items-center justify-center text-primary"/>
- <span className="text-sm font-medium">
- {files.length} {files.length === 1
- ? t("file","file","fichier","archivo","Datei")
- : t("file","files","fichiers","archivos","Dateien")}
- </span>
- {completedCount > 0 && (
- <Badge variant="secondary"className="text-xs">
- <CircleCheckIcon size={12} className="inline-flex items-center justify-center mr-1"/>
- {t(`${completedCount} completati`,`${completedCount} done`,`${completedCount} terminés`,`${completedCount} listos`,`${completedCount} fertig`)}
- </Badge>
- )}
- {errorCount > 0 && (
- <Badge variant="destructive"className="text-xs">
- <AlertCircle className="h-3 w-3 mr-1"/>
- {t(`${errorCount} falliti`,`${errorCount} failed`,`${errorCount} échoués`,`${errorCount} fallidos`,`${errorCount} fehlgeschlagen`)}
- </Badge>
- )}
- </div>
- {files.length > 0 && (
- <Button
- variant="ghost"size="sm"className="h-7 text-xs text-muted-foreground hover:text-destructive group"onClick={clearAllFiles}
- >
- <DeleteIcon size={12} className="inline-flex items-center justify-center mr-1 transition-transform duration-200 group-hover:scale-110"/>
- {t("Pulisci","Clear","Effacer","Limpiar","Leeren")}
- </Button>
- )}
- </div>
-
- {/* File List Items or Empty State */}
- {files.length > 0 ? (
- <ScrollArea className="max-h-[220px]">
- <div className="p-2 space-y-1">
- <AnimatePresence initial={false}>
-                  {files.map((file, index) => (
-                    <FileListItem
-                      key={file.id}
-                      file={file}
-                      index={index}
-                      isSelected={selectedFileId === file.id}
-                      onSelect={setSelectedFileId}
-                      onRemove={removeFile}
-                      t={t}
-                      uiLanguage={uiLanguage}
-                    />
-                  ))}
- </AnimatePresence>
- </div>
- </ScrollArea>
- ) : (
- <div className="flex items-center justify-center py-8 min-h-[120px]">
- <div className="text-center">
- <div className="mx-auto mb-3 flex items-center justify-center text-muted-foreground/70">
- <FileTextIcon size={32} className="inline-flex items-center justify-center"/>
- </div>
- <p className="text-sm font-medium">{t("Nessun file","No files yet","Aucun fichier","Sin archivos aún","Noch keine Dateien")}</p>
- <p className="text-xs text-muted-foreground">
- {t("Carica documenti per iniziare","Upload documents to start","Téléversez des documents pour commencer","Sube documentos para empezar","Dokumente hochladen, um zu starten")}
- </p>
- </div>
- </div>
- )}
-
- <div className="p-3 space-y-2 bg-card">
- {activeProcessingFile ? (
- <Button
- variant="destructive"className="w-full group"onClick={() => stopProcessingFile(activeProcessingFile)}
- >
- <PauseIcon size={16} className="inline-flex items-center justify-center mr-2 transition-transform duration-200 group-hover:scale-110"/>
- {t("Ferma OCR corrente","Stop current OCR","Arrêter l'OCR en cours","Detener OCR actual","Aktuelle OCR stoppen")}
- </Button>
- ) : (
- <Button
- className="w-full group"onClick={processFiles}
- disabled={isProcessing || pendingCount === 0 || !selectedModel.trim() || !isRunReady}
- >
- {isProcessing ? (
- <>
- <LoaderCircleIcon size={16} className="inline-flex items-center justify-center mr-2 animate-spin"/>
- {t("Avvio in corso...","Starting...","Démarrage...","Iniciando...","Wird gestartet...")}
- </>
- ) : (
- <>
- <ZapIcon size={16} className="inline-flex items-center justify-center mr-2 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6"/>
- {t(`Avvia OCR (${pendingCount} in attesa)`, `Run OCR (${pendingCount} pending)`,`Lancer OCR (${pendingCount} en attente)`,`Iniciar OCR (${pendingCount} pendientes)`,`OCR starten (${pendingCount} ausstehend)`)}
- </>
- )}
- </Button>
- )}
- {resumableSelectedFile && !activeProcessingFile ? (
- <Button
- variant="secondary"className="w-full group"onClick={() => resumeProcessingFile(resumableSelectedFile)}
- >
- <PlayIcon size={16} className="inline-flex items-center justify-center mr-2 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:scale-110"/>
- {t("Riprendi dal checkpoint","Resume from checkpoint","Reprendre depuis le checkpoint","Reanudar desde checkpoint","Vom Checkpoint fortsetzen")}
- </Button>
- ) : null}
- <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-muted-foreground min-w-0">
- <div className="flex items-baseline gap-1.5 min-w-0 flex-1">
- <span className="text-muted-foreground/70 shrink-0">{t("Modello","Model","Modèle","Modelo","Modell")}</span>
- <span className="text-foreground/90 font-medium tabular truncate min-w-0">{models.find((m) => m.id === selectedModel)?.name || selectedModel || "none"}</span>
- </div>
- {canExportZip ? (
- <Tooltip>
- <TooltipTrigger asChild>
- <button type="button"onClick={exportAllAsZip} className="inline-flex items-center gap-1 text-foreground/70 hover:text-primary transition-colors shrink-0">
- <ArchiveIcon size={12} className="inline-flex items-center justify-center"/>
- <span>ZIP</span>
- </button>
- </TooltipTrigger>
- <TooltipContent>{t("Esporta tutti i risultati","Export all results","Exporter tous les résultats","Exportar todos los resultados","Alle Ergebnisse exportieren")}</TooltipContent>
- </Tooltip>
- ) : null}
- </div>
- </div>
- </CardContent>
- </Card>
+            <FileListCard
+              files={files}
+              selectedFileId={selectedFileId}
+              onSelectFile={setSelectedFileId}
+              onRemoveFile={removeFile}
+              onClearAll={clearAllFiles}
+              completedCount={completedCount}
+              errorCount={errorCount}
+              t={t}
+              uiLanguage={uiLanguage}
+              footer={
+                <div className="p-3 space-y-2 bg-card">
+                  {activeProcessingFile ? (
+                    <Button
+                      variant="destructive"
+                      className="w-full group"
+                      onClick={() => stopProcessingFile(activeProcessingFile)}
+                    >
+                      <PauseIcon
+                        size={16}
+                        className="inline-flex items-center justify-center mr-2 transition-transform duration-200 group-hover:scale-110"
+                      />
+                      {t("Ferma OCR corrente", "Stop current OCR", "Arrêter l'OCR en cours", "Detener OCR actual", "Aktuelle OCR stoppen")}
+                    </Button>
+                  ) : (
+                    <Button
+                      className="w-full group"
+                      onClick={processFiles}
+                      disabled={isProcessing || pendingCount === 0 || !selectedModel.trim() || !isRunReady}
+                    >
+                      {isProcessing ? (
+                        <>
+                          <LoaderCircleIcon
+                            size={16}
+                            className="inline-flex items-center justify-center mr-2 animate-spin"
+                          />
+                          {t("Avvio in corso...", "Starting...", "Démarrage...", "Iniciando...", "Wird gestartet...")}
+                        </>
+                      ) : (
+                        <>
+                          <ZapIcon
+                            size={16}
+                            className="inline-flex items-center justify-center mr-2 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6"
+                          />
+                          {t(
+                            `Avvia OCR (${pendingCount} in attesa)`,
+                            `Run OCR (${pendingCount} pending)`,
+                            `Lancer OCR (${pendingCount} en attente)`,
+                            `Iniciar OCR (${pendingCount} pendientes)`,
+                            `OCR starten (${pendingCount} ausstehend)`,
+                          )}
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  {resumableSelectedFile && !activeProcessingFile ? (
+                    <Button
+                      variant="secondary"
+                      className="w-full group"
+                      onClick={() => resumeProcessingFile(resumableSelectedFile)}
+                    >
+                      <PlayIcon
+                        size={16}
+                        className="inline-flex items-center justify-center mr-2 text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:scale-110"
+                      />
+                      {t(
+                        "Riprendi dal checkpoint",
+                        "Resume from checkpoint",
+                        "Reprendre depuis le checkpoint",
+                        "Reanudar desde checkpoint",
+                        "Vom Checkpoint fortsetzen",
+                      )}
+                    </Button>
+                  ) : null}
+                  <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-muted-foreground min-w-0">
+                    <div className="flex items-baseline gap-1.5 min-w-0 flex-1">
+                      <span className="text-muted-foreground/70 shrink-0">
+                        {t("Modello", "Model", "Modèle", "Modelo", "Modell")}
+                      </span>
+                      <span className="text-foreground/90 font-medium tabular truncate min-w-0">
+                        {models.find((m) => m.id === selectedModel)?.name || selectedModel || "none"}
+                      </span>
+                    </div>
+                    {canExportZip ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={exportAllAsZip}
+                            className="inline-flex items-center gap-1 text-foreground/70 hover:text-primary transition-colors shrink-0"
+                          >
+                            <ArchiveIcon size={12} className="inline-flex items-center justify-center" />
+                            <span>ZIP</span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {t(
+                            "Esporta tutti i risultati",
+                            "Export all results",
+                            "Exporter tous les résultats",
+                            "Exportar todos los resultados",
+                            "Alle Ergebnisse exportieren",
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : null}
+                  </div>
+                </div>
+              }
+            />
 
  <Collapsible defaultOpen={false}>
  <Card>
