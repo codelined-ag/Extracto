@@ -1170,13 +1170,36 @@ async function runProviderOcr(
   return runMistralOcr(settings.apiEndpoint, model, settings.apiKey || process.env.MISTRAL_API_KEY || "", preview, signal);
 }
 
+type PostProcessResult = { text: string; metadata: Record<string, unknown> };
+
+async function runProviderPostProcessing(
+  provider: ProviderKind,
+  settings: ApiProviderSettings,
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  outputFormat: PostProcessOutputFormat
+): Promise<PostProcessResult> {
+  if (provider === "ollama") {
+    return runOllamaPostProcessing(settings.apiEndpoint, model, systemPrompt, userPrompt);
+  }
+  if (provider === "openrouter") {
+    return runOpenRouterPostProcessing(settings.apiEndpoint, model, settings.apiKey || process.env.OPENROUTER_API_KEY || "", systemPrompt, userPrompt, outputFormat);
+  }
+  if (provider === "openai_compat") {
+    return runOpenAICompatPostProcessing(settings.apiEndpoint, model, settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "", systemPrompt, userPrompt, outputFormat);
+  }
+  return runMistralPostProcessing(model, settings.apiKey || process.env.MISTRAL_API_KEY || "", settings.apiEndpoint, systemPrompt, userPrompt, outputFormat);
+}
+
+
 async function runOllamaOcr(
   endpoint: string,
   model: string,
   prompt: string,
   preview: string,
   signal?: AbortSignal
-): Promise<{ text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> }> {
+): Promise<OcrRunResult> {
   const imageData = parsePreviewImageData(preview);
   if (!imageData.base64) {
     throw new ApiRouteError("Invalid image data for Ollama OCR", 400);
@@ -1472,7 +1495,7 @@ async function runMistralOcr(
   apiKey: string,
   preview: string,
   signal?: AbortSignal
-): Promise<{ text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> }> {
+): Promise<OcrRunResult> {
   if (!apiKey) {
     throw new ApiRouteError("MISTRAL_API_KEY is not configured", 500);
   }
@@ -1825,7 +1848,7 @@ async function runOpenRouterOcr(
   prompt: string,
   preview: string,
   signal?: AbortSignal
-): Promise<{ text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> }> {
+): Promise<OcrRunResult> {
   if (!apiKey) {
     throw new ApiRouteError("OpenRouter API key is not configured", 500);
   }
@@ -2073,7 +2096,7 @@ async function runOpenAICompatOcr(
   prompt: string,
   preview: string,
   signal?: AbortSignal
-): Promise<{ text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> }> {
+): Promise<OcrRunResult> {
   if (!apiKey) {
     throw new ApiRouteError("OpenAI-compatible API key is not configured", 500);
   }
@@ -2622,47 +2645,14 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
 
       try {
         let postProcessResult: { text: string; metadata: Record<string, unknown> };
-        if (postProcessingProvider === "ollama") {
-          postProcessResult = await runOllamaPostProcessing(
-            input.settings.apiEndpoint,
-            postProcessingModel,
-            systemPrompt,
-            postProcessRequestText
-          );
-        } else if (postProcessingProvider === "openrouter") {
-          postProcessResult = await runOpenRouterPostProcessing(
-            input.settings.provider === "openrouter"
-              ? input.settings.apiEndpoint
-              : DEFAULT_OPENROUTER_API_URL,
-            postProcessingModel,
-            input.settings.apiKey || process.env.OPENROUTER_API_KEY || "",
-            systemPrompt,
-            postProcessRequestText,
-            input.postProcessingPayload.outputFormat
-          );
-        } else if (postProcessingProvider === "openai_compat") {
-          postProcessResult = await runOpenAICompatPostProcessing(
-            input.settings.provider === "openai_compat"
-              ? input.settings.apiEndpoint
-              : DEFAULT_OPENAI_COMPAT_API_URL,
-            postProcessingModel,
-            input.settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "",
-            systemPrompt,
-            postProcessRequestText,
-            input.postProcessingPayload.outputFormat
-          );
-        } else {
-          postProcessResult = await runMistralPostProcessing(
-            postProcessingModel,
-            input.settings.apiKey || process.env.MISTRAL_API_KEY || "",
-            input.settings.provider === "mistral"
-              ? input.settings.apiEndpoint
-              : DEFAULT_MISTRAL_API_URL,
-            systemPrompt,
-            postProcessRequestText,
-            input.postProcessingPayload.outputFormat
-          );
-        }
+        postProcessResult = await runProviderPostProcessing(
+          postProcessingProvider,
+          input.settings,
+          postProcessingModel,
+          systemPrompt,
+          postProcessRequestText,
+          input.postProcessingPayload.outputFormat
+        );
 
         const normalizedPostProcessed = normalizePostProcessedText(
           postProcessResult.text,

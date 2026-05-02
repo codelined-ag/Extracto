@@ -86,11 +86,7 @@ export function abortOcrJobRequests(jobId: string): void {
   }
 
   for (const controller of existing) {
-    try {
-      controller.abort();
-    } catch {
-      // noop
-    }
+    controller.abort();
   }
   ocrAbortControllers.delete(jobId);
 }

@@ -135,11 +135,6 @@ export async function authenticateRequest(
   };
 }
 
-export async function getAuthenticatedUserId(request: NextRequest): Promise<string | null> {
-  const auth = await authenticateRequest(request);
-  return auth?.userId ?? null;
-}
-
 export function authHasScope(auth: AuthContext, scope: Scope): boolean {
   return scopeListGrants(auth.scopes, scope);
 }
