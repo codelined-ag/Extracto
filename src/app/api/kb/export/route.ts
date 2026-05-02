@@ -12,11 +12,21 @@ import { withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { runKbExport } from "@/lib/kb/export";
 import { ChromaAdapter } from "@/lib/kb/stores/chroma";
+import { QdrantAdapter } from "@/lib/kb/stores/qdrant";
+import { WeaviateAdapter } from "@/lib/kb/stores/weaviate";
+import type { VectorStoreAdapter } from "@/lib/kb/types";
 import {
   getKbDefaults,
   renderCollectionName,
   type KbDefaults,
+  type VectorStoreKind,
 } from "@/lib/kb/defaults-store";
+
+function buildVectorStore(kind: VectorStoreKind, baseUrl: string, apiKey: string | undefined, dimensions?: number): VectorStoreAdapter {
+  if (kind === "qdrant") return new QdrantAdapter({ baseUrl, apiKey, dimensions });
+  if (kind === "weaviate") return new WeaviateAdapter({ baseUrl, apiKey, dimensions });
+  return new ChromaAdapter({ baseUrl, apiKey, dimensions });
+}
 
 const KB_EXPORT_ENABLED = (process.env.KB_EXPORT_ENABLED || "")
   .trim()
@@ -94,11 +104,7 @@ export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { 
     language,
     chunking,
     embedding,
-    store: new ChromaAdapter({
-      baseUrl: vectorStore.baseUrl,
-      apiKey: vectorStore.apiKey || undefined,
-      dimensions: vectorStore.dimensions,
-    }),
+    store: buildVectorStore(vectorStore.kind, vectorStore.baseUrl, vectorStore.apiKey || undefined, vectorStore.dimensions),
     collectionName,
   });
 

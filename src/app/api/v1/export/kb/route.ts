@@ -25,6 +25,8 @@ import { withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { runKbExport } from "@/lib/kb/export";
 import { ChromaAdapter } from "@/lib/kb/stores/chroma";
+import { QdrantAdapter } from "@/lib/kb/stores/qdrant";
+import { WeaviateAdapter } from "@/lib/kb/stores/weaviate";
 import type {
   ChunkingOptions,
   ChunkingStrategy,
@@ -39,7 +41,8 @@ const KB_EXPORT_ENABLED = (process.env.KB_EXPORT_ENABLED || "")
 
 const VALID_STRATEGIES: readonly ChunkingStrategy[] = ["fixed", "sentence", "paragraph"];
 const VALID_PROVIDERS: readonly EmbeddingProviderKind[] = ["ollama", "openrouter", "openai_compat"];
-const VALID_STORES = ["chroma"] as const;
+const VALID_STORES = ["chroma", "qdrant", "weaviate"] as const;
+type StoreKind = (typeof VALID_STORES)[number];
 
 interface KbExportRequest extends Record<string, unknown> {
   jobId?: unknown;
@@ -163,7 +166,7 @@ function parseVectorStore(raw: unknown): VectorStoreAdapter {
   }
   const r = raw as Record<string, unknown>;
   const kind = r.kind;
-  if (kind !== "chroma") {
+  if (typeof kind !== "string" || !(VALID_STORES as readonly string[]).includes(kind)) {
     throw new ApiRouteError(
       `vectorStore.kind must be one of: ${VALID_STORES.join(", ")} (got ${String(kind)})`,
       400,
@@ -174,6 +177,9 @@ function parseVectorStore(raw: unknown): VectorStoreAdapter {
   const dimensions = typeof r.dimensions === "number" && Number.isInteger(r.dimensions) && r.dimensions > 0
     ? r.dimensions
     : undefined;
+  const k = kind as StoreKind;
+  if (k === "qdrant") return new QdrantAdapter({ baseUrl, apiKey, dimensions });
+  if (k === "weaviate") return new WeaviateAdapter({ baseUrl, apiKey, dimensions });
   return new ChromaAdapter({ baseUrl, apiKey, dimensions });
 }
 

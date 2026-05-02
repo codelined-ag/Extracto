@@ -15,12 +15,22 @@ import type {
   EmbeddingProviderKind,
 } from "@/lib/kb/types";
 
+export type VectorStoreKind = "chroma" | "qdrant" | "weaviate";
+
 export interface VectorStoreDefaults {
-  kind: "chroma";
+  kind: VectorStoreKind;
   baseUrl: string;
   apiKey: string;
   dimensions?: number;
 }
+
+const VALID_STORE_KINDS: ReadonlySet<VectorStoreKind> = new Set(["chroma", "qdrant", "weaviate"]);
+
+const DEFAULT_BASE_URL_BY_KIND: Record<VectorStoreKind, string> = {
+  chroma: "http://127.0.0.1:8000",
+  qdrant: "http://127.0.0.1:6333",
+  weaviate: "http://127.0.0.1:8080",
+};
 
 export interface KbDefaults {
   embedding: EmbeddingProviderConfig;
@@ -105,6 +115,10 @@ function normalize(raw: Partial<KbDefaults>): KbDefaults {
   const overlap = intOrUndef(cRaw.overlap, 0, maxChunkSize - 1);
   const minChunkSize = intOrUndef(cRaw.minChunkSize, 0, maxChunkSize);
 
+  const storeKind: VectorStoreKind = typeof sRaw.kind === "string" && VALID_STORE_KINDS.has(sRaw.kind as VectorStoreKind)
+    ? (sRaw.kind as VectorStoreKind)
+    : DEFAULTS.vectorStore.kind;
+
   return {
     embedding: {
       provider,
@@ -117,10 +131,10 @@ function normalize(raw: Partial<KbDefaults>): KbDefaults {
     },
     chunking: { strategy, maxChunkSize, overlap, minChunkSize },
     vectorStore: {
-      kind: "chroma",
+      kind: storeKind,
       baseUrl: typeof sRaw.baseUrl === "string" && sRaw.baseUrl.trim()
         ? sRaw.baseUrl.trim()
-        : DEFAULTS.vectorStore.baseUrl,
+        : DEFAULT_BASE_URL_BY_KIND[storeKind],
       apiKey: typeof sRaw.apiKey === "string" ? sRaw.apiKey : "",
       dimensions: intOrUndef(sRaw.dimensions, 1, 32_768) ?? DEFAULTS.vectorStore.dimensions,
     },
@@ -129,6 +143,10 @@ function normalize(raw: Partial<KbDefaults>): KbDefaults {
         ? raw.collectionNameTemplate.trim().slice(0, 200)
         : DEFAULTS.collectionNameTemplate,
   };
+}
+
+export function defaultBaseUrlForStoreKind(kind: VectorStoreKind): string {
+  return DEFAULT_BASE_URL_BY_KIND[kind];
 }
 
 export async function getKbDefaults(userId: string): Promise<KbDefaults> {
@@ -180,7 +198,9 @@ export async function saveKbDefaults(
     vectorStore: {
       ...current.vectorStore,
       ...input.vectorStore,
-      kind: "chroma",
+      kind: (input.vectorStore?.kind && VALID_STORE_KINDS.has(input.vectorStore.kind))
+        ? input.vectorStore.kind
+        : current.vectorStore.kind,
       apiKey: input.vectorStore?.replaceApiKey
         ? (input.vectorStore.apiKey ?? "")
         : current.vectorStore.apiKey,

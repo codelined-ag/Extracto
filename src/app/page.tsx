@@ -86,6 +86,7 @@ import {
  DropdownMenuSeparator,
  DropdownMenuTrigger,
 } from"@/components/ui/dropdown-menu";
+import { Combobox } from"@/components/ui/combobox";
 import { ThemeToggle } from"@/components/theme-toggle";
 import { useToast } from"@/hooks/use-toast";
 import { normalizeProvider, type ProviderKind, type ClientApiSettings } from"@/lib/api-types";
@@ -139,6 +140,19 @@ interface KbExportFileState {
 
 type KbEmbeddingProvider ="ollama"|"openrouter"|"openai_compat";
 type KbChunkingStrategy ="fixed"|"sentence"|"paragraph";
+type KbStoreKind ="chroma"|"qdrant"|"weaviate";
+
+const STORE_DEFAULT_BASE_URLS: Record<KbStoreKind, string> = {
+ chroma:"http://127.0.0.1:8000",
+ qdrant:"http://127.0.0.1:6333",
+ weaviate:"http://127.0.0.1:8080",
+};
+
+const STORE_LABELS: Record<KbStoreKind, string> = {
+ chroma:"Chroma",
+ qdrant:"Qdrant",
+ weaviate:"Weaviate",
+};
 
 interface KbDefaultsForm {
  embeddingProvider: KbEmbeddingProvider;
@@ -151,6 +165,7 @@ interface KbDefaultsForm {
  chunkingMaxSize: string;
  chunkingOverlap: string;
  chunkingMinSize: string;
+ storeKind: KbStoreKind;
  storeBaseUrl: string;
  storeApiKey: string;
  storeHasApiKey: boolean;
@@ -169,6 +184,7 @@ const DEFAULT_KB_FORM: KbDefaultsForm = {
  chunkingMaxSize:"1200",
  chunkingOverlap:"100",
  chunkingMinSize:"200",
+ storeKind:"chroma",
  storeBaseUrl:"http://127.0.0.1:8000",
  storeApiKey:"",
  storeHasApiKey: false,
@@ -583,6 +599,41 @@ export default function ExtractoPage() {
  const [kbStoreKeyDirty, setKbStoreKeyDirty] = React.useState(false);
  const [isSavingKbDefaults, setIsSavingKbDefaults] = React.useState(false);
  const kbDefaultsLoadedRef = React.useRef(false);
+ const [embeddingModelOptions, setEmbeddingModelOptions] = React.useState<{ value: string; label: string; hint?: string }[]>([]);
+ const [embeddingModelsLoading, setEmbeddingModelsLoading] = React.useState(false);
+
+ const fetchEmbeddingModels = React.useCallback(async () => {
+ setEmbeddingModelsLoading(true);
+ try {
+ const resp = await fetch("/api/kb/embedding-models", {
+ method:"POST",
+ headers:{"Content-Type":"application/json"},
+ body: JSON.stringify({
+ provider: kbDefaultsDraft.embeddingProvider,
+ apiEndpoint: kbDefaultsDraft.embeddingEndpoint.trim() || undefined,
+ ...(kbEmbeddingKeyDirty && kbDefaultsDraft.embeddingApiKey ? { apiKey: kbDefaultsDraft.embeddingApiKey } : {}),
+ }),
+ });
+ if (!resp.ok) {
+ const payload = await resp.json().catch(() => ({})) as { error?: string };
+ throw new Error(payload.error || `Discovery failed (${resp.status})`);
+ }
+ const payload = await resp.json() as { embeddings: string[]; others: string[] };
+ const opts: { value: string; label: string; hint?: string }[] = [
+ ...payload.embeddings.map((id) => ({ value: id, label: id, hint:"embedding"})),
+ ...payload.others.map((id) => ({ value: id, label: id })),
+ ];
+ setEmbeddingModelOptions(opts);
+ } catch (error) {
+ toast({
+ title:"Model discovery failed",
+ description: error instanceof Error ? error.message :"",
+ variant:"destructive",
+ });
+ } finally {
+ setEmbeddingModelsLoading(false);
+ }
+ }, [kbDefaultsDraft.embeddingProvider, kbDefaultsDraft.embeddingEndpoint, kbDefaultsDraft.embeddingApiKey, kbEmbeddingKeyDirty, toast]);
 
  const selectedFile = files.find((f) => f.id === selectedFileId);
  const selectedFileMarkdown = selectedFile?.result
@@ -1108,7 +1159,7 @@ export default function ExtractoPage() {
  const payload = await resp.json() as {
  embedding?: { provider?: KbEmbeddingProvider; apiEndpoint?: string; model?: string; dimensions?: number; hasApiKey?: boolean };
  chunking?: { strategy?: KbChunkingStrategy; maxChunkSize?: number; overlap?: number; minChunkSize?: number };
- vectorStore?: { baseUrl?: string; dimensions?: number; hasApiKey?: boolean };
+ vectorStore?: { kind?: KbStoreKind; baseUrl?: string; dimensions?: number; hasApiKey?: boolean };
  collectionNameTemplate?: string;
  };
  const next: KbDefaultsForm = {
@@ -1122,6 +1173,7 @@ export default function ExtractoPage() {
  chunkingMaxSize: String(payload.chunking?.maxChunkSize ?? DEFAULT_KB_FORM.chunkingMaxSize),
  chunkingOverlap: payload.chunking?.overlap != null ? String(payload.chunking.overlap) : DEFAULT_KB_FORM.chunkingOverlap,
  chunkingMinSize: payload.chunking?.minChunkSize != null ? String(payload.chunking.minChunkSize) : DEFAULT_KB_FORM.chunkingMinSize,
+ storeKind: payload.vectorStore?.kind ?? DEFAULT_KB_FORM.storeKind,
  storeBaseUrl: payload.vectorStore?.baseUrl ?? DEFAULT_KB_FORM.storeBaseUrl,
  storeApiKey:"",
  storeHasApiKey: payload.vectorStore?.hasApiKey === true,
@@ -1158,7 +1210,7 @@ export default function ExtractoPage() {
  minChunkSize: parseInt10(kbDefaultsDraft.chunkingMinSize),
  },
  vectorStore: {
- kind:"chroma"as const,
+ kind: kbDefaultsDraft.storeKind,
  baseUrl: kbDefaultsDraft.storeBaseUrl.trim(),
  dimensions: parseInt10(kbDefaultsDraft.storeDimensions),
  ...(kbStoreKeyDirty ? { apiKey: kbDefaultsDraft.storeApiKey, replaceApiKey: true } : {}),
@@ -1903,16 +1955,20 @@ export default function ExtractoPage() {
  title={t("Modello OCR","OCR model","Modèle OCR","Modelo OCR","OCR-Modell")}
  hint={t("Modello usato per leggere ogni pagina del documento.","Model used to read each page of the document.","Modèle utilisé pour lire chaque page.","Modelo usado para leer cada página.","Modell, das jede Seite liest.")}
  >
- <Select value={selectedModel} onValueChange={setSelectedModel} disabled={isLoadingModels || models.length === 0}>
- <SelectTrigger className="w-full">
- <SelectValue placeholder={isLoadingModels ? t("Caricamento modelli...","Loading models...","Chargement...","Cargando...","Wird geladen...") : t("Seleziona modello","Select model","Choisir","Seleccionar","Wählen")} />
- </SelectTrigger>
- <SelectContent>
- {models.map((model) => (
- <SelectItem key={model.id} value={model.id}>{model.name}</SelectItem>
- ))}
- </SelectContent>
- </Select>
+ <Combobox
+ options={models.map((m) => ({ value: m.id, label: m.name, hint: m.provider }))}
+ value={selectedModel}
+ onValueChange={setSelectedModel}
+ placeholder={isLoadingModels ? t("Caricamento modelli...","Loading models...","Chargement...","Cargando...","Wird geladen...") : t("Seleziona modello","Select model","Choisir","Seleccionar","Wählen")}
+ searchPlaceholder={t("Cerca modello...","Search model...","Rechercher un modèle...","Buscar modelo...","Modell suchen...")}
+ emptyText={t("Nessun modello disponibile","No models available","Aucun modèle","Sin modelos","Keine Modelle")}
+ loading={isLoadingModels}
+ onRefresh={() => { void fetchAvailableModels(apiSettings); }}
+ refreshLabel={t("AGGIORNA","REFRESH","ACTUALISER","ACTUALIZAR","AKTUALISIEREN")}
+ disabled={models.length === 0 && !isLoadingModels}
+ allowCustom
+ ariaLabel={t("Modello OCR","OCR model","Modèle OCR","Modelo OCR","OCR-Modell")}
+ />
  {modelError ? <p className="text-[11px] text-destructive">{modelError}</p> : null}
  </SettingsSection>
 
@@ -2072,7 +2128,20 @@ export default function ExtractoPage() {
  </div>
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Modello","Model","Modèle","Modelo","Modell")}</Label>
- <Input value={kbDefaultsDraft.embeddingModel} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, embeddingModel: e.target.value }))} placeholder="nomic-embed-text"/>
+ <Combobox
+ options={embeddingModelOptions}
+ value={kbDefaultsDraft.embeddingModel}
+ onValueChange={(value) => setKbDefaultsDraft((p) => ({ ...p, embeddingModel: value }))}
+ placeholder="nomic-embed-text"
+ searchPlaceholder={t("Cerca modello embedding...","Search embedding model...","Rechercher...","Buscar...","Suchen...")}
+ emptyText={embeddingModelOptions.length === 0
+ ? t("Premi AGGIORNA per recuperare i modelli","Press REFRESH to fetch models","Cliquez ACTUALISER","Pulsa ACTUALIZAR","REFRESH drücken")
+ : t("Nessun risultato","No results","Aucun résultat","Sin resultados","Keine Treffer")}
+ loading={embeddingModelsLoading}
+ onRefresh={() => { void fetchEmbeddingModels(); }}
+ refreshLabel={t("AGGIORNA","REFRESH","ACTUALISER","ACTUALIZAR","AKTUALISIEREN")}
+ allowCustom
+ />
  </div>
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">API key</Label>
@@ -2131,7 +2200,24 @@ export default function ExtractoPage() {
  <div className="grid grid-cols-2 gap-3">
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Tipo","Kind","Type","Tipo","Typ")}</Label>
- <Input value="chroma"disabled />
+ <Select
+ value={kbDefaultsDraft.storeKind}
+ onValueChange={(value) => {
+ const nextKind = value as KbStoreKind;
+ setKbDefaultsDraft((p) => ({
+ ...p,
+ storeKind: nextKind,
+ storeBaseUrl: p.storeBaseUrl === STORE_DEFAULT_BASE_URLS[p.storeKind] ? STORE_DEFAULT_BASE_URLS[nextKind] : p.storeBaseUrl,
+ }));
+ }}
+ >
+ <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ <SelectItem value="chroma">Chroma</SelectItem>
+ <SelectItem value="qdrant">Qdrant</SelectItem>
+ <SelectItem value="weaviate">Weaviate</SelectItem>
+ </SelectContent>
+ </Select>
  </div>
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Dimensioni","Dimensions","Dimensions","Dimensiones","Dimensionen")}</Label>
@@ -2140,7 +2226,15 @@ export default function ExtractoPage() {
  </div>
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">Base URL</Label>
- <Input value={kbDefaultsDraft.storeBaseUrl} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, storeBaseUrl: e.target.value }))} placeholder="http://127.0.0.1:8000"/>
+ <Input
+ value={kbDefaultsDraft.storeBaseUrl}
+ onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, storeBaseUrl: e.target.value }))}
+ placeholder={STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind]}
+ />
+ <p className="text-[11px] text-muted-foreground/70">
+ {t(`Default per ${STORE_LABELS[kbDefaultsDraft.storeKind]}: ${STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind]}`,
+ `${STORE_LABELS[kbDefaultsDraft.storeKind]} default: ${STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind]}`)}
+ </p>
  </div>
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">API key</Label>

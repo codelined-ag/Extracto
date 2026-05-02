@@ -10,6 +10,7 @@
 //   POST   /api/v1/collections/<id>/upsert     — push documents+embeddings
 
 import type { Chunk, VectorStoreAdapter } from "@/lib/kb/types";
+import { VectorStoreError } from "@/lib/kb/stores/error";
 
 export interface ChromaAdapterConfig {
   baseUrl: string;
@@ -148,18 +149,4 @@ export class ChromaAdapter implements VectorStoreAdapter {
   }
 }
 
-/**
- * Symmetric typed error for vector-store failures — mirrors EmbeddingError
- * from lib/kb/embedding.ts so callers can catch a single shape and read
- * provider + status without parsing the message.
- */
-export class VectorStoreError extends Error {
-  constructor(
-    public readonly store: string,
-    message: string,
-    public readonly status?: number,
-  ) {
-    super(`${store}: ${message}`);
-    this.name = "VectorStoreError";
-  }
-}
+export { VectorStoreError } from "@/lib/kb/stores/error";
