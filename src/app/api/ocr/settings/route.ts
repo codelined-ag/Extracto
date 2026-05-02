@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { handleApiError } from "@/lib/api-error";
+import { handleApiError, parseJsonBody } from "@/lib/api-error";
 import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
 import {
   AdvancedSettings,
@@ -44,7 +44,7 @@ export async function PUT(request: NextRequest) {
     const scopeError = requireScope(result.auth, "settings:write");
     if (scopeError) return scopeError;
 
-    const body = await request.json().catch(() => ({}));
+    const body = await parseJsonBody(request);
     const normalized = normalizeAdvancedSettings(body);
 
     const settings = await db.ocrSetting.upsert({

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { handleApiError } from "@/lib/api-error";
+import { handleApiError, parseJsonBody } from "@/lib/api-error";
 import { authenticateMutation, requireScope } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 
@@ -25,11 +25,11 @@ export async function PATCH(
       return NextResponse.json({ error: "Preset id is required" }, { status: 400 });
     }
 
-    const body = (await request.json().catch(() => ({}))) as {
+    const body = await parseJsonBody<{
       name?: unknown;
       instruction?: unknown;
       outputFormat?: unknown;
-    };
+    }>(request);
 
     const data: Record<string, string> = {};
     if (typeof body.name === "string") {

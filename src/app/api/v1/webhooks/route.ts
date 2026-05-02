@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
-import { handleApiError } from "@/lib/api-error";
+import { handleApiError, parseJsonBody } from "@/lib/api-error";
 import { db } from "@/lib/db";
 import {
   generateWebhookSecret,
@@ -78,11 +78,11 @@ export async function POST(request: NextRequest) {
     if (scopeError) return scopeError;
     const userId = result.auth.userId;
 
-    const body = (await request.json().catch(() => ({}))) as {
+    const body = await parseJsonBody<{
       url?: unknown;
       events?: unknown;
       active?: unknown;
-    };
+    }>(request);
 
     const url = typeof body.url === "string" ? body.url.trim() : "";
     if (!url || url.length > MAX_URL_LENGTH) {

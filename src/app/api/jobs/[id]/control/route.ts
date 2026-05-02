@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
-import { handleApiError } from "@/lib/api-error";
+import { handleApiError, parseJsonBody } from "@/lib/api-error";
 import { authenticateMutation, requireScope } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { abortOcrJobRequests, isOcrJobRunning, requestOcrJobStop } from "@/lib/ocr/job-control";
@@ -24,12 +24,8 @@ export async function POST(
       return NextResponse.json({ error: "Job id is required" }, { status: 400 });
     }
 
-    const body = (await request.json().catch(() => null)) as
-      | {
-          action?: unknown;
-        }
-      | null;
-    const action = typeof body?.action === "string" ? body.action.trim().toLowerCase() : "";
+    const body = await parseJsonBody<{ action?: unknown }>(request);
+    const action = typeof body.action === "string" ? body.action.trim().toLowerCase() : "";
     if (action !== "stop") {
       return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
     }

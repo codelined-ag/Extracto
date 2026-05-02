@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { ApiRouteError, handleApiError } from "@/lib/api-error";
+import { ApiRouteError, handleApiError, parseJsonBody } from "@/lib/api-error";
 import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
 import { getApiSettings, saveApiSettings, toClientApiSettings } from "@/lib/settings-store";
 
@@ -31,12 +31,12 @@ export async function POST(request: NextRequest) {
     if (scopeError) return scopeError;
     const userId = result.auth.userId;
 
-    const body = (await request.json().catch(() => ({}))) as Partial<{
+    const body = await parseJsonBody<{
       provider: string;
       apiEndpoint: string;
       apiKey: string;
       replaceApiKey: boolean;
-    }>;
+    }>(request);
 
     try {
       const updated = await saveApiSettings(userId, {

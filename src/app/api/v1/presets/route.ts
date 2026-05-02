@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-import { handleApiError } from "@/lib/api-error";
+import { handleApiError, parseJsonBody } from "@/lib/api-error";
 
 const MAX_NAME_LENGTH = 80;
 const MAX_INSTRUCTION_LENGTH = 6000;
@@ -51,11 +51,11 @@ export async function POST(request: NextRequest) {
     if (scopeError) return scopeError;
     const userId = result.auth.userId;
 
-    const body = (await request.json().catch(() => ({}))) as {
+    const body = await parseJsonBody<{
       name?: unknown;
       instruction?: unknown;
       outputFormat?: unknown;
-    };
+    }>(request);
 
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const instruction = typeof body.instruction === "string" ? body.instruction.trim() : "";

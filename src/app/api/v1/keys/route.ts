@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { handleApiError } from "@/lib/api-error";
+import { handleApiError, parseJsonBody } from "@/lib/api-error";
 import { generateApiKey } from "@/lib/auth/api-key";
 import { authenticateMutation, authenticateRequest } from "@/lib/auth/request";
 import {
@@ -72,11 +72,11 @@ export async function POST(request: NextRequest) {
     }
     const userId = result.auth.userId;
 
-    const body = (await request.json().catch(() => ({}))) as {
+    const body = await parseJsonBody<{
       name?: unknown;
       scopes?: unknown;
       rateLimitPerMinute?: unknown;
-    };
+    }>(request);
     const rawName = typeof body.name === "string" ? body.name.trim() : "";
     if (!rawName) {
       return NextResponse.json({ error: "Key name is required" }, { status: 400 });

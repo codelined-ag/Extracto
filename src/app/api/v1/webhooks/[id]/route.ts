@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { authenticateMutation, requireScope } from "@/lib/auth/request";
-import { handleApiError } from "@/lib/api-error";
+import { handleApiError, parseJsonBody } from "@/lib/api-error";
 import { db } from "@/lib/db";
 
 export async function DELETE(
@@ -51,7 +51,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Webhook id is required" }, { status: 400 });
     }
 
-    const body = (await request.json().catch(() => ({}))) as { active?: unknown };
+    const body = await parseJsonBody<{ active?: unknown }>(request);
     if (typeof body.active !== "boolean") {
       return NextResponse.json({ error: "active (boolean) is required" }, { status: 400 });
     }
