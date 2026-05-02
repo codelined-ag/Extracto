@@ -4,6 +4,8 @@ import { OcrJobStatus } from "@prisma/client";
 
 import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { authenticateMutation, authHasScope } from "@/lib/auth/request";
+import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
+import { getClientIpAddress } from "@/lib/request-security";
 import { db } from "@/lib/db";
 import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
 import {
@@ -88,6 +90,10 @@ export async function POST(request: NextRequest) {
   }
   if (!authHasScope(result.auth, "ocr:submit")) {
     return openAiError("Missing required scope: ocr:submit", "permission_error", 403);
+  }
+  const limited = enforceOcrSubmitRateLimit(result.auth, getClientIpAddress(request));
+  if (limited) {
+    return openAiError("Too many OCR jobs requested. Please retry shortly.", "rate_limit_error", 429);
   }
 
   const body = (await request.json().catch(() => null)) as OpenAIChatRequest | null;

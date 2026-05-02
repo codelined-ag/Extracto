@@ -402,7 +402,7 @@ export function ollamaWarmupWithHostResolve(endpoint: string, model: string): Pr
 // ---- Provider dispatch --------------------------------------------------
 
 interface ProviderHandler {
-  envKey: string;
+  envKey: string | null;
   runOcr: (
     settings: ApiProviderSettings,
     model: string,
@@ -421,14 +421,10 @@ interface ProviderHandler {
   ) => Promise<PostProcessResult>;
 }
 
-// Single registry of per-provider OCR + post-processing handlers. TypeScript
-// enforces that every ProviderKind has an entry, so adding a new provider is
-// one declaration here rather than three if-chains.
 const PROVIDER_HANDLERS: Record<ProviderKind, ProviderHandler> = {
   ollama: {
-    envKey: "",
+    envKey: null,
     runOcr: (s, m, p, pv, _k, sig) => ollamaOcrWithHostResolve(s.apiEndpoint, m, p, pv, sig),
-    // _of (outputFormat) is intentionally discarded for Ollama — its API has
     runPostProcess: (s, m, sp, up, _k, of) =>
       ollamaPostProcessingWithHostResolve(s.apiEndpoint, m, sp, up, of),
   },

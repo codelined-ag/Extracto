@@ -13,15 +13,25 @@ import { resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
 import { normalizeAdvancedSettings } from "@/lib/ocr/settings";
 import { getApiSettings } from "@/lib/ocr/settings-store";
 
-const WATCH_FOLDER = (process.env.WATCH_FOLDER || "").trim();
-const WATCH_FOLDER_USER_EMAIL = (process.env.WATCH_FOLDER_USER_EMAIL || "").trim().toLowerCase();
-const WATCH_FOLDER_MODEL = (process.env.WATCH_FOLDER_MODEL || "").trim();
-const WATCH_FOLDER_PROVIDER = (process.env.WATCH_FOLDER_PROVIDER || "").trim();
-const WATCH_FOLDER_API_KEY = (process.env.WATCH_FOLDER_API_KEY || "").trim();
-const WATCH_FOLDER_INTERVAL_MS = (() => {
+interface WatchFolderConfig {
+  folder: string;
+  userEmail: string;
+  model: string;
+  provider: string;
+  intervalMs: number;
+}
+
+function getWatchFolderConfig(): WatchFolderConfig {
   const raw = Number(process.env.WATCH_FOLDER_INTERVAL_MS || "30000");
-  return Number.isFinite(raw) && raw >= 5_000 ? raw : 30_000;
-})();
+  return {
+    folder: (process.env.WATCH_FOLDER || "").trim(),
+    userEmail: (process.env.WATCH_FOLDER_USER_EMAIL || "").trim().toLowerCase(),
+    model: (process.env.WATCH_FOLDER_MODEL || "").trim(),
+    provider: (process.env.WATCH_FOLDER_PROVIDER || "").trim(),
+    intervalMs: Number.isFinite(raw) && raw >= 5_000 ? raw : 30_000,
+  };
+}
+
 const WATCH_MIN_AGE_MS = 5_000;
 const WATCH_RESULT_SUFFIX = ".extracto.json";
 const WATCH_DONE_SUFFIX = ".extracto.done";
@@ -37,9 +47,10 @@ interface UserRef {
 }
 
 async function findWatchUser(): Promise<UserRef | null> {
-  if (!WATCH_FOLDER_USER_EMAIL) return null;
+  const cfg = getWatchFolderConfig();
+  if (!cfg.userEmail) return null;
   return db.authUser.findUnique({
-    where: { email: WATCH_FOLDER_USER_EMAIL },
+    where: { email: cfg.userEmail },
     select: { id: true, email: true },
   });
 }
@@ -71,23 +82,23 @@ async function ingestFile(filePath: string, user: UserRef): Promise<void> {
   else if (ext === ".webp") mime = "image/webp";
   const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
 
-  // Submit directly via the pipeline helper — no HTTP-loopback to /api/ocr.
+  const cfg = getWatchFolderConfig();
   const storedSettings = await getApiSettings(user.id);
-  const settings = WATCH_FOLDER_PROVIDER
-    ? { ...storedSettings, provider: normalizeProvider(WATCH_FOLDER_PROVIDER) }
+  const settings = cfg.provider
+    ? { ...storedSettings, provider: normalizeProvider(cfg.provider) }
     : { ...storedSettings, provider: normalizeProvider(storedSettings.provider) };
   const settingsPayload = normalizeAdvancedSettings(undefined);
   const postProcessingPayload = sanitizePostProcessing(undefined);
   const provider = normalizeProvider((settings).provider);
-  const ocrModel = provider === "mistral" ? resolveMistralOcrModel(WATCH_FOLDER_MODEL) : WATCH_FOLDER_MODEL;
+  const ocrModel = provider === "mistral" ? resolveMistralOcrModel(cfg.model) : cfg.model;
   const prompt = buildPrompt(settingsPayload);
   const sourcePreview = normalizePreviewForHistory(dataUrl);
 
   const { jobId } = await submitOcrJob({
     userId: user.id,
-    apiKeyId: null, // watched-folder runs as the user via session-equivalent ingest
+    apiKeyId: null,
     fileName,
-    model: WATCH_FOLDER_MODEL,
+    model: cfg.model,
     ocrModel,
     provider,
     settings,
@@ -108,10 +119,11 @@ async function ingestFile(filePath: string, user: UserRef): Promise<void> {
 }
 
 async function pollOnce(): Promise<void> {
-  if (!WATCH_FOLDER) return;
-  if (!WATCH_FOLDER_USER_EMAIL || !WATCH_FOLDER_MODEL || !WATCH_FOLDER_API_KEY) {
+  const cfg = getWatchFolderConfig();
+  if (!cfg.folder) return;
+  if (!cfg.userEmail || !cfg.model) {
     console.warn(
-      "[watched-folder] WATCH_FOLDER set but WATCH_FOLDER_USER_EMAIL / WATCH_FOLDER_MODEL / WATCH_FOLDER_API_KEY missing; skipping"
+      "[watched-folder] WATCH_FOLDER set but WATCH_FOLDER_USER_EMAIL / WATCH_FOLDER_MODEL missing; skipping",
     );
     return;
   }
@@ -119,22 +131,22 @@ async function pollOnce(): Promise<void> {
   const user = await findWatchUser();
   if (!user) {
     console.warn(
-      `[watched-folder] no user found with email ${WATCH_FOLDER_USER_EMAIL}; skipping this sweep`
+      `[watched-folder] no user found with email ${cfg.userEmail}; skipping this sweep`,
     );
     return;
   }
 
   let entries: string[] = [];
   try {
-    entries = await readdir(WATCH_FOLDER);
+    entries = await readdir(cfg.folder);
   } catch (error) {
-    console.warn(`[watched-folder] cannot read ${WATCH_FOLDER}:`, error);
+    console.warn(`[watched-folder] cannot read ${cfg.folder}:`, error);
     return;
   }
 
   for (const entry of entries) {
     if (!isSupportedFile(entry)) continue;
-    const fullPath = path.join(WATCH_FOLDER, entry);
+    const fullPath = path.join(cfg.folder, entry);
     let info;
     try {
       info = await stat(fullPath);
@@ -155,7 +167,7 @@ async function pollOnce(): Promise<void> {
 function scheduleNext(): void {
   scheduledTimer = setTimeout(() => {
     void runSweep();
-  }, WATCH_FOLDER_INTERVAL_MS);
+  }, getWatchFolderConfig().intervalMs);
   scheduledTimer.unref?.();
 }
 
@@ -172,10 +184,11 @@ async function runSweep(): Promise<void> {
 
 export function startWatchedFolderIngestion(): void {
   if (started) return;
-  if (!WATCH_FOLDER) return;
+  const cfg = getWatchFolderConfig();
+  if (!cfg.folder) return;
   started = true;
   console.log(
-    `[watched-folder] enabled at ${WATCH_FOLDER} (interval ${WATCH_FOLDER_INTERVAL_MS}ms)`
+    `[watched-folder] enabled at ${cfg.folder} (interval ${cfg.intervalMs}ms)`,
   );
   void runSweep();
 }

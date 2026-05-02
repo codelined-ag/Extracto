@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
 import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
+import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
+import { getClientIpAddress } from "@/lib/request-security";
 import {
   buildPrompt,
   normalizePreviewForHistory,
@@ -73,6 +75,9 @@ function parseBatchBody(raw: unknown): BatchFile[] | { error: string } {
 }
 
 export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, { auth }) => {
+  const limited = enforceOcrSubmitRateLimit(auth, getClientIpAddress(request));
+  if (limited) return limited;
+
   const raw = await request.json().catch(() => null);
   const parsed = parseBatchBody(raw);
   if (!Array.isArray(parsed)) {

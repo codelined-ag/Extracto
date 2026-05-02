@@ -13,7 +13,7 @@ import { db } from "@/lib/db";
 import { enforceProviderEndpointPolicy, normalizeProvider, ProviderKind } from "@/lib/ocr/endpoint-policy";
 import { withOcrJobSlot } from "@/lib/ocr/job-control";
 import { resolveOllamaHostEndpoint } from "@/lib/ocr/host-normalization";
-import { consumeRateLimit } from "@/lib/rate-limit";
+import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
 import {
   AdvancedSettings,
@@ -56,8 +56,6 @@ function parseRequestPriority(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
   return Math.max(-10, Math.min(10, Math.trunc(value)));
 }
-const OCR_RATE_LIMIT_WINDOW_MS = 60_000;
-const OCR_RATE_LIMIT_MAX = 6;
 
 function normalizeProviderEndpoint(provider: ProviderKind, rawEndpoint: string): string {
   if (provider === "mistral") {
@@ -111,26 +109,8 @@ export async function POST(request: NextRequest) {
     if (submitScopeError) return submitScopeError;
     const userId = auth.userId;
 
-    const clientIp = getClientIpAddress(request);
-    const rateLimitKey =
-      auth.method === "api-key" && auth.apiKeyId
-        ? `ocr:job:key:${auth.apiKeyId}`
-        : `ocr:job:${userId}:${clientIp}`;
-    const rateLimitMax =
-      auth.method === "api-key" && auth.rateLimitPerMinute && auth.rateLimitPerMinute > 0
-        ? auth.rateLimitPerMinute
-        : OCR_RATE_LIMIT_MAX;
-    const rateLimit = consumeRateLimit({
-      key: rateLimitKey,
-      max: rateLimitMax,
-      windowMs: OCR_RATE_LIMIT_WINDOW_MS,
-    });
-    if (!rateLimit.allowed) {
-      return handleApiError(
-        new ApiRouteError("Too many OCR jobs requested. Please retry shortly.", 429),
-        { headers: { "Retry-After": `${rateLimit.retryAfterSeconds}` } },
-      );
-    }
+    const limited = enforceOcrSubmitRateLimit(auth, getClientIpAddress(request));
+    if (limited) return limited;
 
     const storedSettings = normalizeAndValidateApiSettings(await getApiSettings(userId));
     const body = (await request.json().catch(() => null)) as OCRRequestBody | null;
