@@ -378,7 +378,7 @@ cmd_settings() {
 
 cmd_ocr() {
   local file="${1:-}"
-  [ -n "$file" ] || die "usage: extracto ocr <file> [--model NAME] [--out PATH]"
+  [ -n "$file" ] || die "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait]"
   [ -f "$file" ] || die "file not found: $file"
   local out="" model="" wait_flag=1
   shift
@@ -398,6 +398,16 @@ cmd_ocr() {
         ;;
     esac
   done
+  [ -n "$model" ] || die "--model is required (e.g. --model llava:13b or --model mistral-ocr-latest)"
+
+  # Refuse files larger than 32 MiB raw — base64 inflates ~33% on top, so a
+  # 32 MiB PDF becomes a ~43 MiB shell variable and curl arg. Above this the
+  # OS ARG_MAX often bites before the API does.
+  local file_size_bytes
+  file_size_bytes="$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo 0)"
+  if [ "$file_size_bytes" -gt 33554432 ]; then
+    die "file is too large for the CLI uploader ($((file_size_bytes / 1024 / 1024)) MiB > 32 MiB). Use the web UI for big files."
+  fi
 
   local mime
   case "${file##*.}" in
@@ -408,27 +418,32 @@ cmd_ocr() {
     *) die "unsupported file type: ${file##*.}" ;;
   esac
 
-  local data_url
-  data_url="data:${mime};base64,$(base64 -w 0 < "$file")"
+  local b64
+  if base64 --help 2>&1 | grep -q -- "-w"; then
+    b64="$(base64 -w 0 < "$file")"
+  else
+    b64="$(base64 < "$file" | tr -d '\n')"
+  fi
+  local data_url="data:${mime};base64,${b64}"
   local file_basename
   file_basename="$(basename "$file")"
 
+  # Build the request body via python3 — passes user input on stdin only,
+  # so filenames/data URLs cannot escape into shell or python source.
   local body
   body="$(python3 -c '
 import json, sys
+file_name, model, preview = sys.stdin.read().split("\x1f", 2)
 print(json.dumps({
-  "fileName": sys.argv[1],
-  "model": sys.argv[2] or None,
-  "preview": sys.argv[3],
+  "files": [
+    {"fileName": file_name, "model": model, "preview": preview}
+  ]
 }, separators=(",", ":")))
-' "$file_basename" "$model" "$data_url")"
+' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${data_url}")"
 
   info "submitting OCR for ${file_basename}..."
   local response
-  response="$(api_post_json "/api/v1/ocr/batch" \
-    "$(printf '{"files":[{"fileName":%s,"data":%s}]}' \
-      "$(printf '%s' "$file_basename" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" \
-      "$(printf '%s' "$data_url" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")")"
+  response="$(api_post_json "/api/v1/ocr/batch" "$body")"
 
   if [ -n "$out" ]; then
     printf "%s" "$response" > "$out"
@@ -443,6 +458,8 @@ print(json.dumps({
     if [ -n "$job_id" ]; then
       info "waiting for job ${job_id}..."
       cmd_jobs wait "$job_id"
+    else
+      warn "no jobId in response — the submission may have failed. Inspect the JSON above."
     fi
   fi
 }

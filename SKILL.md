@@ -28,21 +28,22 @@ The CLI dies with a clear error if either the URL is unreachable or the token is
 ### Extract text from a single file
 
 ```bash
-extracto ocr ./invoice.pdf
+extracto ocr ./invoice.pdf --model mistral-ocr-latest
 ```
 
-Submits the file, polls until the job leaves `QUEUED`/`RUNNING`, and prints the final job JSON. Use `--out result.json` to save instead of printing, `--no-wait` to return as soon as the job is queued.
+The `--model` flag is **required** — `/api/v1/ocr/batch` rejects submissions without one. Pick a model that's available to the user's currently-configured provider (see `extracto settings get`).
 
-Supported types: `.pdf`, `.png`, `.jpg`/`.jpeg`, `.webp`. The CLI base64-encodes the file as a data URL and sends it to `POST /api/v1/ocr/batch`.
+The CLI submits the file, polls until the job leaves `QUEUED`/`RUNNING`, and prints the final job JSON. Use `--out result.json` to save instead of printing, `--no-wait` to return as soon as the job is queued.
 
-### Pick a specific OCR model
+Supported types: `.pdf`, `.png`, `.jpg`/`.jpeg`, `.webp`. The CLI base64-encodes the file as a data URL and sends it to `POST /api/v1/ocr/batch`. Files larger than 32 MiB are rejected client-side — use the web UI instead, since the OS arg-list limit gets hit before the API does.
+
+### More model examples
 
 ```bash
-extracto ocr ./scan.png --model llava:13b
-extracto ocr ./report.pdf --model mistral-ocr-latest
+extracto ocr ./scan.png --model llava:13b              # local Ollama
+extracto ocr ./report.pdf --model mistral-ocr-latest   # Mistral OCR
+extracto ocr ./photo.jpg --model openai/gpt-4o         # via OpenRouter
 ```
-
-The model must be available to the user's currently-configured provider. Check with `extracto settings get`.
 
 ### List recent jobs
 
@@ -102,7 +103,7 @@ extracto on        # docker compose up -d --build
 extracto off       # docker compose down
 extracto status    # docker compose ps
 extracto logs      # docker compose logs -f app
-extracto uninstall # remove containers, volumes, the CLI symlink, and ~/.extracto.env
+extracto uninstall # remove containers, volumes, the CLI symlink, and <repo>/.extracto.env
 ```
 
 ## Error handling
