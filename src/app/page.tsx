@@ -1999,11 +1999,11 @@ export default function ExtractoPage() {
  </Label>
  <Textarea
  placeholder={t(
-"Esempio: estrai numero fattura, scadenza e totali, restituisci una tabella.",
-"Example: extract invoice number, due date, totals — return one table.",
-"Exemple : extraire numéro de facture, échéance, totaux — renvoyer un tableau.",
-"Ejemplo: extrae número de factura, vencimiento, totales — devuelve una tabla.",
-"Beispiel: Rechnungsnummer, Fälligkeit, Summen extrahieren — eine Tabelle zurückgeben.",
+"Esempio: estrai numero fattura, scadenza e totali. Restituisci una tabella.",
+"Example: extract invoice number, due date, totals. Return one table.",
+"Exemple : extraire numéro de facture, échéance, totaux. Renvoyer un tableau.",
+"Ejemplo: extrae número de factura, vencimiento, totales. Devuelve una tabla.",
+"Beispiel: Rechnungsnummer, Fälligkeit, Summen extrahieren. Eine Tabelle zurückgeben.",
  )}
  value={postProcessing.instruction}
  onChange={(e) => setPostProcessing((prev) => ({ ...prev, instruction: e.target.value }))}
@@ -2222,11 +2222,11 @@ export default function ExtractoPage() {
  <span className="inline-flex items-center gap-1">
  {t("Nome collezione","Collection name","Nom collection","Nombre colección","Sammlungsname")}
  <HintInfo text={t(
-"Il nome con cui finisce nel vector store. Puoi usare i segnaposti {jobId} e {fileName} — verranno sostituiti per ogni esportazione.",
-"The name your chunks land under in the vector store. Use {jobId} or {fileName} as placeholders — they're filled in for every export.",
-"Le nom utilisé dans le vector store. Utilisez les placeholders {jobId} et {fileName} — ils sont remplacés à chaque export.",
-"El nombre que se usa en el vector store. Puedes usar los marcadores {jobId} y {fileName} — se sustituyen en cada exportación.",
-"Der Name im Vektor-Store. Nutze {jobId} oder {fileName} als Platzhalter — sie werden bei jedem Export ersetzt.",
+"Il nome con cui finisce nel vector store. Puoi usare i segnaposti {jobId} e {fileName}: verranno sostituiti per ogni esportazione.",
+"The name your chunks land under in the vector store. Use {jobId} or {fileName} as placeholders: they're filled in for every export.",
+"Le nom utilisé dans le vector store. Utilisez les placeholders {jobId} et {fileName}: ils sont remplacés à chaque export.",
+"El nombre que se usa en el vector store. Puedes usar los marcadores {jobId} y {fileName}: se sustituyen en cada exportación.",
+"Der Name im Vektor-Store. Nutze {jobId} oder {fileName} als Platzhalter: sie werden bei jedem Export ersetzt.",
 )}/>
  </span>
  </Label>
@@ -2863,7 +2863,7 @@ export default function ExtractoPage() {
  <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-muted-foreground">
  <span className="truncate">
  <span className="text-muted-foreground/70">{t("Modello","Model","Modèle","Modelo","Modell")}: </span>
- <span className="text-foreground/90 font-medium tabular">{models.find((m) => m.id === selectedModel)?.name || selectedModel || "—"}</span>
+ <span className="text-foreground/90 font-medium tabular">{models.find((m) => m.id === selectedModel)?.name || selectedModel || "none"}</span>
  </span>
  {canExportZip ? (
  <Tooltip>
@@ -2952,7 +2952,7 @@ export default function ExtractoPage() {
  {postProcessing.enabled ? (
  <div className="space-y-2">
  <Textarea
- placeholder={t("Es: estrai numero fattura, scadenza, totali — tabella.","Ex: extract invoice number, due date, totals — return one table.","Ex : extraire numéro, échéance, totaux — un tableau.","Ej: número, vencimiento, totales — tabla.","Bsp.: Rechnungsnummer, Fälligkeit, Summen — eine Tabelle.")}
+ placeholder={t("Es: estrai numero fattura, scadenza, totali. Restituisci una tabella.","Ex: extract invoice number, due date, totals. Return one table.","Ex : extraire numéro, échéance, totaux. Renvoyer un tableau.","Ej: número, vencimiento, totales. Devuelve una tabla.","Bsp.: Rechnungsnummer, Fälligkeit, Summen. Eine Tabelle zurückgeben.")}
  value={postProcessing.instruction}
  onChange={(e) => setPostProcessing((prev) => ({ ...prev, instruction: e.target.value }))}
  className="min-h-[60px] text-xs bg-card"/>

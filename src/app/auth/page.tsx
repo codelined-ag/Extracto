@@ -230,11 +230,11 @@ export default function AuthPage() {
           </h1>
           <p className="max-w-lg text-lg leading-relaxed text-foreground/85 anim-fade-in-up" style={{ animationDelay: "120ms" } as React.CSSProperties}>
             {t(
-              "Trasforma qualsiasi documento — PDF, foto, scansioni — in testo pulito e modificabile. Lavora in locale o nel cloud, conserva tabelle e formattazione, e archivia tutto dove ti serve.",
-              "Turn any document — PDFs, photos, scans — into clean, editable text. Run it locally or in the cloud, keep tables and formatting intact, and ship it wherever you need.",
-              "Transformez n'importe quel document — PDF, photos, scans — en texte propre et modifiable. Exécutez-le en local ou dans le cloud, conservez tableaux et mise en forme, et exportez-le où bon vous semble.",
-              "Convierte cualquier documento — PDFs, fotos, escaneos — en texto limpio y editable. Ejecútalo en local o en la nube, conserva tablas y formato, y envíalo a donde lo necesites.",
-              "Wandle jedes Dokument — PDFs, Fotos, Scans — in sauberen, bearbeitbaren Text um. Lokal oder in der Cloud, mit Tabellen und Formatierung intakt, und exportiere es überallhin.",
+              "Trasforma qualsiasi documento (PDF, foto, scansioni) in testo pulito e modificabile. Lavora in locale o nel cloud, conserva tabelle e formattazione, e archivia tutto dove ti serve.",
+              "Turn any document (PDFs, photos, scans) into clean, editable text. Run it locally or in the cloud, keep tables and formatting intact, and ship it wherever you need.",
+              "Transformez n'importe quel document (PDF, photos, scans) en texte propre et modifiable. Exécutez-le en local ou dans le cloud, conservez tableaux et mise en forme, et exportez-le où bon vous semble.",
+              "Convierte cualquier documento (PDFs, fotos, escaneos) en texto limpio y editable. Ejecútalo en local o en la nube, conserva tablas y formato, y envíalo a donde lo necesites.",
+              "Wandle jedes Dokument (PDFs, Fotos, Scans) in sauberen, bearbeitbaren Text um. Lokal oder in der Cloud, mit Tabellen und Formatierung intakt, und exportiere es überallhin.",
             )}
           </p>
         </section>
@@ -263,11 +263,11 @@ export default function AuthPage() {
                     "Melde dich an, um genau dort weiterzumachen, wo du aufgehört hast.",
                   )
                   : t(
-                    "Bastano un'email e una password — nessuna carta, nessuna formalità.",
-                    "Just an email and a password — no card, no fine print.",
-                    "Une email et un mot de passe — aucune carte, aucune formalité.",
-                    "Solo un correo y una contraseña — sin tarjeta, sin letra pequeña.",
-                    "Nur E-Mail und Passwort — keine Karte, kein Kleingedrucktes.",
+                    "Bastano un'email e una password. Niente carta, niente formalità.",
+                    "Just an email and a password. No card, no fine print.",
+                    "Une email et un mot de passe. Aucune carte, aucune formalité.",
+                    "Solo un correo y una contraseña. Sin tarjeta, sin letra pequeña.",
+                    "Nur E-Mail und Passwort. Keine Karte, kein Kleingedrucktes.",
                   )}
               </p>
             </div>
