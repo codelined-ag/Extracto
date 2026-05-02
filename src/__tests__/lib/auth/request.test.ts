@@ -51,6 +51,7 @@ import {
   authenticateMutation,
   withAuth,
   withMutationAuth,
+  withSessionAuth,
   type AuthContext,
 } from "@/lib/auth/request";
 
@@ -580,5 +581,105 @@ describe("withMutationAuth higher-order wrapper", () => {
     expect(resp.status).toBe(500);
     const body = await resp.json();
     expect(body.error).toBe("write failed");
+  });
+});
+
+describe("withSessionAuth (read mode)", () => {
+  it("calls handler when session-authenticated", async () => {
+    mockExtractBearerToken.mockReturnValue(null);
+    mockVerifySessionToken.mockResolvedValue({ userId: "u1" });
+    mockGetAuthCookieName.mockReturnValue("estracto_session");
+    const handler = vi.fn(async () => new Response("ok"));
+    const wrapped = withSessionAuth("read", "API keys", handler);
+
+    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    expect(resp.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("returns 401 when not authenticated", async () => {
+    mockExtractBearerToken.mockReturnValue(null);
+    mockVerifySessionToken.mockResolvedValue(null);
+    const handler = vi.fn();
+    const wrapped = withSessionAuth("read", "API keys", handler);
+
+    const resp = await wrapped(makeRequest());
+    expect(resp.status).toBe(401);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 with resource-specific message when authenticated via API key", async () => {
+    mockExtractBearerToken.mockReturnValue("extr_x");
+    mockIsLikelyApiKey.mockReturnValue(true);
+    mockHashApiKey.mockResolvedValue("hashed");
+    mockDb.apiKey.findUnique.mockResolvedValue({
+      id: "k1",
+      userId: "u1",
+      keyHash: "hashed",
+      revokedAt: null,
+      scopes: '["*"]',
+      rateLimitPerMinute: null,
+      monthlyResetAt: new Date(),
+    });
+    mockCompareKeyHashes.mockReturnValue(true);
+    const handler = vi.fn();
+    const wrapped = withSessionAuth("read", "API keys", handler);
+
+    const resp = await wrapped(makeRequest({ authorization: "Bearer extr_x" }));
+    expect(resp.status).toBe(403);
+    const body = await resp.json();
+    expect(body.error).toBe("API keys can only be viewed via an interactive session");
+    expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+describe("withSessionAuth (mutation mode)", () => {
+  it("returns 200 when session + trusted origin", async () => {
+    mockExtractBearerToken.mockReturnValue(null);
+    mockVerifySessionToken.mockResolvedValue({ userId: "u1" });
+    mockGetAuthCookieName.mockReturnValue("estracto_session");
+    mockIsTrustedMutationRequest.mockReturnValue(true);
+    const handler = vi.fn(async () => new Response("ok"));
+    const wrapped = withSessionAuth("mutation", "API keys", handler);
+
+    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    expect(resp.status).toBe(200);
+  });
+
+  it("returns 403 with 'modified' message when authenticated via API key", async () => {
+    mockExtractBearerToken.mockReturnValue("extr_x");
+    mockIsLikelyApiKey.mockReturnValue(true);
+    mockHashApiKey.mockResolvedValue("hashed");
+    mockDb.apiKey.findUnique.mockResolvedValue({
+      id: "k1",
+      userId: "u1",
+      keyHash: "hashed",
+      revokedAt: null,
+      scopes: '["*"]',
+      rateLimitPerMinute: null,
+      monthlyResetAt: new Date(),
+    });
+    mockCompareKeyHashes.mockReturnValue(true);
+    mockIsTrustedMutationRequest.mockReturnValue(true);
+    const handler = vi.fn();
+    const wrapped = withSessionAuth("mutation", "API keys", handler);
+
+    const resp = await wrapped(makeRequest({ authorization: "Bearer extr_x" }));
+    expect(resp.status).toBe(403);
+    const body = await resp.json();
+    expect(body.error).toBe("API keys can only be modified via an interactive session");
+  });
+
+  it("returns 403 when session origin untrusted (CSRF guard)", async () => {
+    mockExtractBearerToken.mockReturnValue(null);
+    mockVerifySessionToken.mockResolvedValue({ userId: "u1" });
+    mockGetAuthCookieName.mockReturnValue("estracto_session");
+    mockIsTrustedMutationRequest.mockReturnValue(false);
+    const handler = vi.fn();
+    const wrapped = withSessionAuth("mutation", "API keys", handler);
+
+    const resp = await wrapped(makeRequest({ cookie: "estracto_session=v" }));
+    expect(resp.status).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
   });
 });

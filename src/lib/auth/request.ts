@@ -239,3 +239,58 @@ export function withMutationAuth<P = unknown>(
     }
   };
 }
+
+/**
+ * Wrap a handler that may only be called from an interactive browser
+ * session (not via API key). Used by the API-key management endpoints —
+ * users mint and revoke keys via the UI, not via another key. The
+ * interactive-only restriction means the operation always carries the
+ * full session wildcard scope, so no additional scope arg is needed.
+ *
+ * `methodKind` selects whether the handler is read-only (no origin
+ * check) or a mutation (CSRF-style origin check enforced).
+ */
+export function withSessionAuth<P = unknown>(
+  methodKind: "read" | "mutation",
+  resourceLabel: string,
+  handler: AuthenticatedHandler<P>,
+) {
+  return async (
+    request: NextRequest,
+    ctx: RouteHandlerContext<P> = { params: Promise.resolve({} as P) },
+  ): Promise<Response> => {
+    try {
+      const auth =
+        methodKind === "mutation" ? await authenticateMutation(request) : null;
+      const ctxAuth = methodKind === "mutation"
+        ? (() => {
+            if (!auth || !auth.ok) {
+              return { ok: false as const, response: NextResponse.json(
+                { error: auth && !auth.ok ? auth.error : "Unauthorized" },
+                { status: auth && !auth.ok ? auth.status : 401 },
+              ) };
+            }
+            return { ok: true as const, auth: auth.auth };
+          })()
+        : (await (async () => {
+            const a = await authenticateRequest(request);
+            if (!a) {
+              return { ok: false as const, response: NextResponse.json(
+                { error: "Unauthorized" }, { status: 401 },
+              ) };
+            }
+            return { ok: true as const, auth: a };
+          })());
+      if (!ctxAuth.ok) return ctxAuth.response;
+      if (ctxAuth.auth.method !== "session") {
+        return NextResponse.json(
+          { error: `${resourceLabel} can only be ${methodKind === "mutation" ? "modified" : "viewed"} via an interactive session` },
+          { status: 403 },
+        );
+      }
+      return await handler(request, { ...ctx, auth: ctxAuth.auth });
+    } catch (error) {
+      return handleApiError(error);
+    }
+  };
+}

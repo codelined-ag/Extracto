@@ -42,6 +42,11 @@ export interface HandleApiErrorOptions {
    * `attemptedHosts: [...]`).
    */
   extra?: Record<string, unknown>;
+  /**
+   * Extra response headers (e.g. `Retry-After` for 429 responses). Merged
+   * with the JSON content-type Next.js sets automatically.
+   */
+  headers?: Record<string, string>;
 }
 
 export function handleApiError(error: unknown, options: HandleApiErrorOptions = {}): NextResponse {
@@ -55,7 +60,7 @@ export function handleApiError(error: unknown, options: HandleApiErrorOptions = 
   // exception, never a fake.
   return NextResponse.json(
     { ...options.extra, error: message },
-    { status }
+    { status, ...(options.headers ? { headers: options.headers } : {}) }
   );
 }
 

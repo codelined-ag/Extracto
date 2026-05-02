@@ -199,6 +199,35 @@ describe("handleApiError options.extra", () => {
   });
 });
 
+describe("handleApiError options.headers", () => {
+  it("sets Retry-After when supplied via options.headers", async () => {
+    const response = handleApiError(new ApiRouteError("rate limited", 429), {
+      headers: { "Retry-After": "30" },
+    });
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("30");
+  });
+
+  it("preserves application/json content-type when headers option is used", async () => {
+    const response = handleApiError(new Error("boom"), { headers: { "X-Trace": "abc" } });
+    expect(response.headers.get("content-type")).toMatch(/application\/json/);
+    expect(response.headers.get("x-trace")).toBe("abc");
+  });
+
+  it("works alongside extra and statusFor in one call", async () => {
+    const err = Object.assign(new Error("upstream timed out"), { name: "AbortError" });
+    const response = handleApiError(err, {
+      statusFor: pipelineStatusFor,
+      extra: { success: false },
+      headers: { "X-Provider": "ollama" },
+    });
+    expect(response.status).toBe(504);
+    expect(response.headers.get("x-provider")).toBe("ollama");
+    const body = await response.json();
+    expect(body).toEqual({ error: "upstream timed out", success: false });
+  });
+});
+
 describe("pipelineStatusFor", () => {
   it("maps AbortError to 504", () => {
     const err = Object.assign(new Error("aborted"), { name: "AbortError" });

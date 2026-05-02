@@ -2405,16 +2405,11 @@ export async function POST(request: NextRequest) {
       windowMs: OCR_RATE_LIMIT_WINDOW_MS,
     });
     if (!rateLimit.allowed) {
-      return NextResponse.json(
+      return handleApiError(
+        new ApiRouteError("Too many OCR jobs requested. Please retry shortly.", 429),
         {
-          error: "Too many OCR jobs requested. Please retry shortly.",
-          success: false,
-        },
-        {
-          status: 429,
-          headers: {
-            "Retry-After": `${rateLimit.retryAfterSeconds}`,
-          },
+          extra: { success: false },
+          headers: { "Retry-After": `${rateLimit.retryAfterSeconds}` },
         }
       );
     }
