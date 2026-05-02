@@ -177,6 +177,8 @@ export {
 import { runProviderOcr, runProviderPostProcessing } from "@/lib/ocr/provider-dispatch";
 export { runProviderOcr, runProviderPostProcessing };
 
+import { runOcrPages, type OrchestratorState } from "@/lib/ocr/pipeline-page-loop";
+
 
 // ---- Persistence + finalization -----------------------------------------
 
@@ -256,77 +258,76 @@ async function persistFailedJob(
 
 export async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<void> {
   const startedAtIso = new Date(input.startedAtMs).toISOString();
-  const pageOutputs: ProcessedPageOutput[] = input.initialPageOutputs ? [...input.initialPageOutputs] : [];
   const startIndex = Math.max(0, Math.min(input.startIndex ?? 0, input.inputPreviews.length));
-  const checkpoints: OcrPageCheckpoint[] = pageOutputs.map(toPageCheckpoint);
-  const pageRecords = pageOutputs.map(toPageRecord);
-  const partialStructuredPages = pageOutputs.map(toStructuredPagePayload);
-  const partialPageResults = pageOutputs.map(toPageResultPayload);
-  let totalDurationMs = pageOutputs.reduce((sum, page) => sum + page.durationMs, 0);
-  // chunks counter drives the "\n\n---\n\n" separator between page outputs
-  // inside appendPageMarkdown — the first chunk gets no leading separator.
-  // Must be threaded through the per-page loop or resumed jobs would
-  // double-separate.
-  let { text: extractedTextSoFar, chunks: extractedChunkCount } = seedExtractedText(pageOutputs);
-
   const selectedPostProcessModel = input.postProcessingPayload.model || input.model;
-  const usedOllamaModels = seedUsedOllamaModels(input.provider, input.ocrModel);
 
-  let progressEvents: OcrProgressEvent[] = [];
-  progressEvents = appendProgressEvent(
-    progressEvents,
+  const initialPages: ProcessedPageOutput[] = input.initialPageOutputs ? [...input.initialPageOutputs] : [];
+  const seededText = seedExtractedText(initialPages);
+
+  const state: OrchestratorState = {
+    pageOutputs: initialPages,
+    checkpoints: initialPages.map(toPageCheckpoint),
+    pageRecords: initialPages.map(toPageRecord),
+    partialStructuredPages: initialPages.map(toStructuredPagePayload),
+    partialPageResults: initialPages.map(toPageResultPayload),
+    totalDurationMs: initialPages.reduce((sum, page) => sum + page.durationMs, 0),
+    extractedTextSoFar: seededText.text,
+    extractedChunkCount: seededText.chunks,
+    progressEvents: [],
+    latestMetadata: {} as OcrProgressMetadata,
+    postProcessingMeta: seedPostProcessingMeta(input.postProcessingPayload, selectedPostProcessModel),
+    usedOllamaModels: seedUsedOllamaModels(input.provider, input.ocrModel),
+  };
+
+  state.progressEvents = appendProgressEvent(
+    state.progressEvents,
     "analyzing",
     input.resumed
       ? `Resuming from page ${startIndex + 1}/${input.inputPreviews.length}`
       : `Document analyzed: ${input.inputPreviews.length} page(s) ready`,
   );
   if (input.provider === "mistral" && input.ocrModel !== input.model) {
-    progressEvents = appendProgressEvent(
-      progressEvents,
+    state.progressEvents = appendProgressEvent(
+      state.progressEvents,
       "analyzing",
       `Using ${input.ocrModel} for OCR and ${input.model} for inference`,
     );
   }
 
-  let postProcessingMeta: OcrProgressMetadata["postProcessing"] = seedPostProcessingMeta(
-    input.postProcessingPayload,
-    selectedPostProcessModel,
-  );
-
   const snapshotMetadata = createProgressSnapshotter({
     pageCount: input.inputPreviews.length,
     startedAt: startedAtIso,
-    getProcessedPages: () => pageOutputs.length,
-    getEvents: () => progressEvents,
-    getCheckpoints: () => checkpoints,
-    getPostProcessing: () => postProcessingMeta,
+    getProcessedPages: () => state.pageOutputs.length,
+    getEvents: () => state.progressEvents,
+    getCheckpoints: () => state.checkpoints,
+    getPostProcessing: () => state.postProcessingMeta,
   });
   const ocrPct = (): number =>
-    ocrStageProgressPct(pageOutputs.length, input.inputPreviews.length, input.postProcessingPayload.enabled);
+    ocrStageProgressPct(state.pageOutputs.length, input.inputPreviews.length, input.postProcessingPayload.enabled);
 
-  let latestMetadata = snapshotMetadata({
+  state.latestMetadata = snapshotMetadata({
     stage: "analyzing",
     message: input.resumed
-      ? `Resuming OCR from checkpoint (${pageOutputs.length}/${input.inputPreviews.length} pages complete)`
+      ? `Resuming OCR from checkpoint (${state.pageOutputs.length}/${input.inputPreviews.length} pages complete)`
       : `Prepared ${input.inputPreviews.length} page(s) for OCR`,
     progressPct: 2,
   });
 
   const pauseAtCheckpoint = async (stageMessage: string, eventMessage: string): Promise<void> => {
-    progressEvents = appendProgressEvent(progressEvents, "paused", eventMessage);
-    latestMetadata = snapshotMetadata({
+    state.progressEvents = appendProgressEvent(state.progressEvents, "paused", eventMessage);
+    state.latestMetadata = snapshotMetadata({
       stage: "paused",
       message: stageMessage,
       progressPct: ocrPct(),
     });
 
-    await unloadAllOllamaModels(input.settings.apiEndpoint, usedOllamaModels);
+    await unloadAllOllamaModels(input.settings.apiEndpoint, state.usedOllamaModels);
 
     await db.ocrJob.update({
       where: { id: input.jobId },
       data: {
         status: OcrJobStatus.QUEUED,
-        metadata: toJsonValue({ ...latestMetadata, pageRecords }),
+        metadata: toJsonValue({ ...state.latestMetadata, pageRecords: state.pageRecords }),
         processingMs: Date.now() - input.startedAtMs,
       },
     });
@@ -341,113 +342,31 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       await ollamaWarmupWithHostResolve(input.settings.apiEndpoint, input.ocrModel);
     }
 
-    for (let index = startIndex; index < input.inputPreviews.length; index++) {
-      if (await isOcrJobStopRequested(input.jobId)) {
-        await pauseAtCheckpoint(
-          "Stopped. Resume to continue from checkpoint.",
-          `Stopped at ${pageOutputs.length}/${input.inputPreviews.length} page(s)`,
-        );
-        return;
-      }
+    const loop = await runOcrPages(state, {
+      jobId: input.jobId,
+      provider: input.provider,
+      settings: input.settings,
+      ocrModel: input.ocrModel,
+      prompt: input.prompt,
+      inputPreviews: input.inputPreviews,
+      startIndex,
+      snapshot: snapshotMetadata,
+      ocrPct,
+      pauseAtCheckpoint,
+    });
+    if (loop.paused) return;
 
-      const pagePreview = input.inputPreviews[index];
-      const pageNumber = index + 1;
-      const pageStartMs = Date.now();
-
-      progressEvents = appendProgressEvent(
-        progressEvents,
-        "ocr",
-        `Running OCR on page ${pageNumber}/${input.inputPreviews.length}`,
-      );
-
-      let pageText = "";
-      let pageStructured: Record<string, unknown> = { markdown: "" };
-      let pageMetadata: Record<string, unknown> = {};
-      const pageAbortController = new AbortController();
-      registerOcrJobAbortController(input.jobId, pageAbortController);
-      try {
-        ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runProviderOcr(
-          input.provider,
-          input.settings,
-          input.ocrModel,
-          input.prompt,
-          pagePreview,
-          pageAbortController.signal,
-        ));
-      } catch (error) {
-        if (error instanceof OcrStopRequestedError || (await isOcrJobStopRequested(input.jobId))) {
-          await pauseAtCheckpoint(
-            "Stopped during inference. Resume to continue from checkpoint.",
-            `Stopped during page ${pageNumber}/${input.inputPreviews.length} at ${pageOutputs.length}/${input.inputPreviews.length} page(s)`,
-          );
-          return;
-        }
-        throw error;
-      } finally {
-        unregisterOcrJobAbortController(input.jobId, pageAbortController);
-      }
-
-      const durationMs = Date.now() - pageStartMs;
-      totalDurationMs += durationMs;
-
-      const completedPage: ProcessedPageOutput = {
-        pageNumber,
-        text: pageText,
-        structured: pageStructured,
-        metadata: pageMetadata,
-        durationMs,
-      };
-
-      pageOutputs.push(completedPage);
-      checkpoints.push(toPageCheckpoint(completedPage));
-      pageRecords.push(toPageRecord(completedPage));
-      partialStructuredPages.push(toStructuredPagePayload(completedPage));
-      partialPageResults.push(toPageResultPayload(completedPage));
-
-      ({ text: extractedTextSoFar, chunks: extractedChunkCount } = appendPageMarkdown(
-        extractedTextSoFar,
-        extractedChunkCount,
-        completedPage,
-      ));
-
-      const averagePageMs = totalDurationMs / pageOutputs.length;
-      const remainingPages = input.inputPreviews.length - pageOutputs.length;
-      const etaSeconds =
-        remainingPages > 0 ? Math.max(1, Math.round((averagePageMs * remainingPages) / 1000)) : 0;
-      progressEvents = appendProgressEvent(
-        progressEvents,
-        "ocr",
-        `Completed page ${pageNumber}/${input.inputPreviews.length} in ${Math.round(durationMs / 100) / 10}s`,
-      );
-
-      latestMetadata = snapshotMetadata({
-        stage: "ocr",
-        message: `Completed page ${pageNumber}/${input.inputPreviews.length}`,
-        progressPct: ocrPct(),
-        currentPage: pageNumber,
-        etaSeconds,
-      });
-
-      await db.ocrJob.update({
-        where: { id: input.jobId },
-        data: {
-          extractedText: extractedTextSoFar,
-          metadata: toJsonValue({ ...latestMetadata, pageRecords }),
-        },
-      });
-    }
-
-    const extractedMarkdown = extractedTextSoFar.trim();
+    const extractedMarkdown = state.extractedTextSoFar.trim();
     if (!extractedMarkdown) {
       throw new ApiRouteError("OCR returned no text", 502);
     }
 
-    const pageScopedText = formatPageScopedText(pageOutputs);
+    const pageScopedText = formatPageScopedText(state.pageOutputs);
     const extractedMetadata: Record<string, unknown> = {
       ocrModel: input.ocrModel,
       inferenceModel: input.model,
       pageCount: input.inputPreviews.length,
-      pageResults: partialPageResults,
+      pageResults: state.partialPageResults,
     };
     let finalMarkdown = extractedMarkdown;
     let postProcessedJson: unknown;
@@ -457,16 +376,16 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       const postProcessingModel = selectedPostProcessModel;
       const postProcessingProvider = normalizeProvider((input.settings).provider);
       if (postProcessingProvider === "ollama") {
-        usedOllamaModels.add(postProcessingModel);
+        state.usedOllamaModels.add(postProcessingModel);
         await ollamaWarmupWithHostResolve(input.settings.apiEndpoint, postProcessingModel);
       }
 
-      progressEvents = appendProgressEvent(
-        progressEvents,
+      state.progressEvents = appendProgressEvent(
+        state.progressEvents,
         "post_processing",
         `Running post-processing with ${postProcessingModel}`,
       );
-      latestMetadata = snapshotMetadata({
+      state.latestMetadata = snapshotMetadata({
         stage: "post_processing",
         message: `Applying post-processing with ${postProcessingModel}`,
         progressPct: 90,
@@ -474,7 +393,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       });
       await db.ocrJob.update({
         where: { id: input.jobId },
-        data: { metadata: toJsonValue(latestMetadata) },
+        data: { metadata: toJsonValue(state.latestMetadata) },
       });
 
       const { systemPrompt, userPrompt } = buildPostProcessingPrompt(input.postProcessingPayload);
@@ -507,7 +426,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
           }
         }
 
-        postProcessingMeta = {
+        state.postProcessingMeta = {
           enabled: true,
           applied: Boolean(postProcessedText),
           outputFormat: input.postProcessingPayload.outputFormat,
@@ -516,11 +435,11 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
           provider: postProcessingProvider,
         };
         extractedMetadata.postProcessing = {
-          ...postProcessingMeta,
+          ...state.postProcessingMeta,
           ...postProcessResult.metadata,
         };
       } catch (error) {
-        postProcessingMeta = {
+        state.postProcessingMeta = {
           enabled: true,
           applied: false,
           outputFormat: input.postProcessingPayload.outputFormat,
@@ -529,7 +448,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
           provider: postProcessingProvider,
           error: errorMessage(error, "Post-processing failed"),
         };
-        extractedMetadata.postProcessing = postProcessingMeta;
+        extractedMetadata.postProcessing = state.postProcessingMeta;
       }
     } else {
       extractedMetadata.postProcessing = { enabled: false };
@@ -544,7 +463,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       {
         markdown: finalMarkdown,
         rawMarkdown: extractedMarkdown,
-        pages: partialStructuredPages,
+        pages: state.partialStructuredPages,
         ...(postProcessedText
           ? {
               postProcessingOutput:
@@ -567,33 +486,33 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       extractedMetadata.postProcessingJson = postProcessedJson;
     }
 
-    progressEvents = appendProgressEvent(progressEvents, "completed", "OCR job completed");
-    latestMetadata = snapshotMetadata({
+    state.progressEvents = appendProgressEvent(state.progressEvents, "completed", "OCR job completed");
+    state.latestMetadata = snapshotMetadata({
       stage: "completed",
       message: "Completed",
       progressPct: 100,
       etaSeconds: 0,
     });
-    extractedMetadata.progress = latestMetadata;
+    extractedMetadata.progress = state.latestMetadata;
 
-    await persistCompletedJob(input, finalMarkdown, result, extractedMetadata, usedOllamaModels);
+    await persistCompletedJob(input, finalMarkdown, result, extractedMetadata, state.usedOllamaModels);
   } catch (error) {
-    progressEvents = appendProgressEvent(
-      progressEvents,
+    state.progressEvents = appendProgressEvent(
+      state.progressEvents,
       "failed",
       errorMessage(error, "OCR processing failed"),
     );
-    latestMetadata = snapshotMetadata({
+    state.latestMetadata = snapshotMetadata({
       stage: "failed",
       message: errorMessage(error, "OCR processing failed"),
-      progressPct: latestMetadata.progressPct,
+      progressPct: state.latestMetadata.progressPct ?? 0,
     });
 
     await persistFailedJob(
       input,
       errorMessage(error, "OCR processing failed"),
-      latestMetadata,
-      usedOllamaModels,
+      state.latestMetadata,
+      state.usedOllamaModels,
     );
   }
 }
