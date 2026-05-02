@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus } from "@prisma/client";
 
+import { handleApiError } from "@/lib/api-error";
 import { authenticateMutation, authHasScope } from "@/lib/auth/request";
 import { buildOcrForwardHeaders, resolveInternalOcrEndpoint } from "@/lib/ocr/forward";
 import { db } from "@/lib/db";
@@ -68,6 +69,7 @@ function pickImageAndPrompt(messages: unknown): { preview: string | null; prompt
 }
 
 export async function POST(request: NextRequest) {
+  try {
   const result = await authenticateMutation(request);
   if (!result.ok) {
     return NextResponse.json({ error: { message: result.error, type: "auth_error" } }, { status: result.status });
@@ -197,4 +199,7 @@ export async function POST(request: NextRequest) {
     },
     { status: 504 }
   );
+  } catch (error) {
+    return handleApiError(error);
+  }
 }

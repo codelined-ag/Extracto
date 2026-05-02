@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
+import { handleApiError } from "@/lib/api-error";
 import { authenticateMutation, requireScope } from "@/lib/auth/request";
 import { buildOcrForwardHeaders, resolveInternalOcrEndpoint } from "@/lib/ocr/forward";
 
@@ -57,6 +58,7 @@ function parseBatchBody(raw: unknown): BatchFile[] | { error: string } {
 }
 
 export async function POST(request: NextRequest) {
+  try {
   const result = await authenticateMutation(request);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
@@ -115,4 +117,7 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ batchId, submissions });
+  } catch (error) {
+    return handleApiError(error);
+  }
 }

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { handleApiError } from "@/lib/api-error";
 import { authenticateRequest, requireScope } from "@/lib/auth/request";
 import { enforceProviderEndpointPolicy, normalizeProvider, ProviderKind } from "@/lib/endpoint-policy";
-import { getApiSettings } from "@/lib/settings-store";
+import { FALLBACK_OLLAMA_HOST, getApiSettings } from "@/lib/settings-store";
 import {
   buildOllamaHostCandidates,
   normalizeHostEndpoint,
-  resolveOllamaHostEndpoint,
 } from "@/lib/host-normalization";
 import {
   DEFAULT_MISTRAL_API_URL,
@@ -28,14 +28,6 @@ const MISTRAL_MODEL_PATHS = ["v1/models"] as const;
 const APP_NETWORK_MODE = (process.env.APP_NETWORK_MODE || "bridge")
   .trim()
   .toLowerCase();
-const envOllamaHost = resolveOllamaHostEndpoint(
-  process.env.OLLAMA_HOST || "",
-  OLLAMA_DEFAULT_HOST
-);
-const FALLBACK_OLLAMA_HOST = resolveOllamaHostEndpoint(
-  envOllamaHost,
-  OLLAMA_DEFAULT_HOST,
-);
 const DISCOVERY_FALLBACK_HOST =
   APP_NETWORK_MODE === "host" ? OLLAMA_DEFAULT_HOST : FALLBACK_OLLAMA_HOST;
 const DEFAULT_MISTRAL_ENDPOINT = normalizeHostEndpoint(
@@ -49,6 +41,7 @@ function getModelPaths(providerHint: ProviderKind): readonly string[] {
 }
 
 export async function GET(request: NextRequest) {
+  try {
   const auth = await authenticateRequest(request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -108,6 +101,9 @@ export async function GET(request: NextRequest) {
       },
       { status: 502 }
     );
+  }
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 

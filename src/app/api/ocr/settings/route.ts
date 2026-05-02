@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { handleApiError } from "@/lib/api-error";
 import { authenticateMutation, authenticateRequest, requireScope } from "@/lib/auth/request";
 import {
   AdvancedSettings,
@@ -19,38 +20,46 @@ const mapSettingsResponse = (setting: AdvancedSettings) => ({
 
 
 export async function GET(request: NextRequest) {
-  const auth = await authenticateRequest(request);
-  if (!auth) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const scopeError = requireScope(auth, "settings:read");
-  if (scopeError) return scopeError;
+  try {
+    const auth = await authenticateRequest(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const scopeError = requireScope(auth, "settings:read");
+    if (scopeError) return scopeError;
 
-  const existing = await db.ocrSetting.findUnique({ where: { key: OCR_SETTINGS_KEY } });
-  return NextResponse.json(mapSettingsResponse(existing ?? DEFAULT_SETTINGS));
+    const existing = await db.ocrSetting.findUnique({ where: { key: OCR_SETTINGS_KEY } });
+    return NextResponse.json(mapSettingsResponse(existing ?? DEFAULT_SETTINGS));
+  } catch (error) {
+    return handleApiError(error);
+  }
 }
 
 export async function PUT(request: NextRequest) {
-  const result = await authenticateMutation(request);
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
+  try {
+    const result = await authenticateMutation(request);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+    const scopeError = requireScope(result.auth, "settings:write");
+    if (scopeError) return scopeError;
+
+    const body = await request.json().catch(() => ({}));
+    const normalized = normalizeAdvancedSettings(body);
+
+    const settings = await db.ocrSetting.upsert({
+      where: { key: OCR_SETTINGS_KEY },
+      create: {
+        key: OCR_SETTINGS_KEY,
+        ...normalized,
+      },
+      update: {
+        ...normalized,
+      },
+    });
+
+    return NextResponse.json(mapSettingsResponse(settings));
+  } catch (error) {
+    return handleApiError(error);
   }
-  const scopeError = requireScope(result.auth, "settings:write");
-  if (scopeError) return scopeError;
-
-  const body = await request.json().catch(() => ({}));
-  const normalized = normalizeAdvancedSettings(body);
-
-  const settings = await db.ocrSetting.upsert({
-    where: { key: OCR_SETTINGS_KEY },
-    create: {
-      key: OCR_SETTINGS_KEY,
-      ...normalized,
-    },
-    update: {
-      ...normalized,
-    },
-  });
-
-  return NextResponse.json(mapSettingsResponse(settings));
 }

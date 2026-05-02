@@ -1,13 +1,19 @@
 import { Prisma } from "@prisma/client";
 
-const S3_BUCKET = process.env.S3_BUCKET?.trim() || "";
-const S3_REGION = process.env.S3_REGION?.trim() || "us-east-1";
-const S3_ENDPOINT = process.env.S3_ENDPOINT?.trim() || "";
-const S3_ACCESS_KEY_ID = process.env.S3_ACCESS_KEY_ID?.trim() || "";
-const S3_SECRET_ACCESS_KEY = process.env.S3_SECRET_ACCESS_KEY?.trim() || "";
-const S3_PREFIX = (process.env.S3_PREFIX || "extracto").trim().replace(/^\/+|\/+$/g, "");
-const S3_FORCE_PATH_STYLE =
-  (process.env.S3_FORCE_PATH_STYLE || "").trim().toLowerCase() === "true";
+// Env vars are read lazily inside getS3Config() so test fixtures and
+// runtime overrides take effect without import-order surprises.
+function getS3Config() {
+  return {
+    bucket: process.env.S3_BUCKET?.trim() || "",
+    region: process.env.S3_REGION?.trim() || "us-east-1",
+    endpoint: process.env.S3_ENDPOINT?.trim() || "",
+    accessKeyId: process.env.S3_ACCESS_KEY_ID?.trim() || "",
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY?.trim() || "",
+    prefix: (process.env.S3_PREFIX || "extracto").trim().replace(/^\/+|\/+$/g, ""),
+    forcePathStyle:
+      (process.env.S3_FORCE_PATH_STYLE || "").trim().toLowerCase() === "true",
+  };
+}
 
 interface ResultStore {
   put(key: string, body: string, contentType: string): Promise<{ location: string }>;
@@ -33,17 +39,18 @@ let s3LoadError: Error | null = null;
 async function getS3Client() {
   if (s3LoadError) throw s3LoadError;
   if (s3Client) return s3Client;
+  const cfg = getS3Config();
   try {
     const mod = await import("@aws-sdk/client-s3");
     s3Client = new mod.S3Client({
-      region: S3_REGION,
-      ...(S3_ENDPOINT ? { endpoint: S3_ENDPOINT } : {}),
-      ...(S3_FORCE_PATH_STYLE ? { forcePathStyle: true } : {}),
-      ...(S3_ACCESS_KEY_ID && S3_SECRET_ACCESS_KEY
+      region: cfg.region,
+      ...(cfg.endpoint ? { endpoint: cfg.endpoint } : {}),
+      ...(cfg.forcePathStyle ? { forcePathStyle: true } : {}),
+      ...(cfg.accessKeyId && cfg.secretAccessKey
         ? {
             credentials: {
-              accessKeyId: S3_ACCESS_KEY_ID,
-              secretAccessKey: S3_SECRET_ACCESS_KEY,
+              accessKeyId: cfg.accessKeyId,
+              secretAccessKey: cfg.secretAccessKey,
             },
           }
         : {}),
@@ -65,21 +72,22 @@ function parseS3Location(location: string): { bucket: string; key: string } | nu
 
 class S3ResultStore implements ResultStore {
   async put(key: string, body: string, contentType: string): Promise<{ location: string }> {
-    if (!S3_BUCKET) {
+    const cfg = getS3Config();
+    if (!cfg.bucket) {
       throw new Error("S3_BUCKET is required when RESULT_STORAGE=s3");
     }
     const client = await getS3Client();
     const mod = await import("@aws-sdk/client-s3");
-    const fullKey = S3_PREFIX ? `${S3_PREFIX}/${key}` : key;
+    const fullKey = cfg.prefix ? `${cfg.prefix}/${key}` : key;
     await client.send(
       new mod.PutObjectCommand({
-        Bucket: S3_BUCKET,
+        Bucket: cfg.bucket,
         Key: fullKey,
         Body: body,
         ContentType: contentType,
       })
     );
-    return { location: `s3://${S3_BUCKET}/${fullKey}` };
+    return { location: `s3://${cfg.bucket}/${fullKey}` };
   }
 
   async get(location: string): Promise<string | null> {
@@ -158,6 +166,12 @@ export async function maybeUploadResultJson(
   return { inline: null, location };
 }
 
+function isNotFoundError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const e = error as Record<string, unknown>;
+  return e["name"] === "NoSuchKey" || e["Code"] === "NoSuchKey";
+}
+
 export async function readResultText(
   location: string | null | undefined,
   inline: string | null | undefined
@@ -166,8 +180,8 @@ export async function readResultText(
     try {
       return await getStore().get(location);
     } catch (error) {
-      console.error("Result store read (text) failed:", error);
-      return null;
+      if (isNotFoundError(error)) return null;
+      throw error;
     }
   }
   return inline ?? null;
@@ -183,8 +197,8 @@ export async function readResultJson(
       if (text == null) return null;
       return JSON.parse(text) as unknown;
     } catch (error) {
-      console.error("Result store read (json) failed:", error);
-      return null;
+      if (isNotFoundError(error)) return null;
+      throw error;
     }
   }
   return (inline ?? null) as unknown;
