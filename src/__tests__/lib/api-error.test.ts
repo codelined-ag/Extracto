@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ApiRouteError } from "@/lib/api-error";
+import { ApiRouteError, handleApiError, parseJsonBody } from "@/lib/api-error";
 
 describe("ApiRouteError", () => {
   it("is an instance of Error", () => {
@@ -79,5 +79,117 @@ describe("ApiRouteError", () => {
   it("stack trace is defined", () => {
     const err = new ApiRouteError("error with stack");
     expect(err.stack).toBeDefined();
+  });
+});
+
+describe("handleApiError", () => {
+  it("returns a NextResponse with status 500 for unknown errors", async () => {
+    const response = handleApiError("not an error");
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("Internal server error");
+  });
+
+  it("returns 500 with the error message for a generic Error", async () => {
+    const response = handleApiError(new Error("boom"));
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("boom");
+  });
+
+  it("uses the ApiRouteError status code", async () => {
+    const response = handleApiError(new ApiRouteError("not found", 404));
+    expect(response.status).toBe(404);
+    const body = await response.json();
+    expect(body.error).toBe("not found");
+  });
+
+  it("uses ApiRouteError status 400", async () => {
+    const response = handleApiError(new ApiRouteError("bad request", 400));
+    expect(response.status).toBe(400);
+  });
+
+  it("uses ApiRouteError status 422", async () => {
+    const response = handleApiError(new ApiRouteError("unprocessable", 422));
+    expect(response.status).toBe(422);
+  });
+
+  it("returns 500 for a thrown string", async () => {
+    const response = handleApiError("string error");
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("Internal server error");
+  });
+
+  it("returns 500 for a thrown null", async () => {
+    const response = handleApiError(null);
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("Internal server error");
+  });
+
+  it("returns 500 for a thrown undefined", async () => {
+    const response = handleApiError(undefined);
+    expect(response.status).toBe(500);
+  });
+
+  it("returns 500 for a thrown plain object", async () => {
+    const response = handleApiError({ message: "oops" });
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("Internal server error");
+  });
+
+  it("preserves Error subclass messages (e.g. TypeError)", async () => {
+    const response = handleApiError(new TypeError("wrong type"));
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("wrong type");
+  });
+
+  it("returns content-type application/json", async () => {
+    const response = handleApiError(new ApiRouteError("test", 400));
+    expect(response.headers.get("content-type")).toMatch(/application\/json/);
+  });
+});
+
+describe("parseJsonBody", () => {
+  const mkRequest = (json: () => Promise<unknown>) => ({ json }) as { json: () => Promise<unknown> };
+
+  it("returns parsed object when valid JSON", async () => {
+    const body = await parseJsonBody<{ foo: string }>(mkRequest(async () => ({ foo: "bar" })));
+    expect(body).toEqual({ foo: "bar" });
+  });
+
+  it("returns empty object when json() throws", async () => {
+    const body = await parseJsonBody(mkRequest(async () => { throw new Error("invalid json"); }));
+    expect(body).toEqual({});
+  });
+
+  it("returns empty object when json() resolves to null", async () => {
+    const body = await parseJsonBody(mkRequest(async () => null));
+    expect(body).toEqual({});
+  });
+
+  it("returns empty object when json() resolves to a primitive", async () => {
+    const body = await parseJsonBody(mkRequest(async () => "not an object"));
+    expect(body).toEqual({});
+  });
+
+  it("returns empty object when json() resolves to an array", async () => {
+    const body = await parseJsonBody(mkRequest(async () => [1, 2, 3]));
+    expect(body).toEqual({});
+  });
+
+  it("preserves all fields from the parsed object", async () => {
+    const body = await parseJsonBody<{ a: number; b: boolean; c: string }>(
+      mkRequest(async () => ({ a: 1, b: true, c: "x" }))
+    );
+    expect(body).toEqual({ a: 1, b: true, c: "x" });
+  });
+
+  it("returns Partial<T> typing — undefined fields are allowed", async () => {
+    const body = await parseJsonBody<{ required: string }>(mkRequest(async () => ({})));
+    expect(body.required).toBeUndefined();
   });
 });

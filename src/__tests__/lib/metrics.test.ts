@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 async function freshMetrics() {
   vi.resetModules();
-  return import("@/lib/metrics");
+  return import("@/lib/background/metrics");
 }
 
 afterEach(() => {

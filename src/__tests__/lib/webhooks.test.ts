@@ -4,7 +4,7 @@ import {
   verifyWebhookSignature,
   generateWebhookSecret,
   WEBHOOK_SIGNATURE_TOLERANCE_SECONDS,
-} from "@/lib/webhooks";
+} from "@/lib/background/webhooks";
 
 // ---------------------------------------------------------------------------
 // Helpers
