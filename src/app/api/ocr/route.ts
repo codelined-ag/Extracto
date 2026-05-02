@@ -35,7 +35,6 @@ import {
   getOllamaDiscoveryFallbackHost,
   parseCheckpointPages,
   processOcrJobInBackground,
-  resolveProvider,
   sanitizePostProcessing,
   submitOcrJob,
   toJsonValue,
@@ -171,7 +170,7 @@ export async function POST(request: NextRequest) {
     const resumeRequested = body.resume === true || body.resume === "true";
     const resumeJobId = typeof body.jobId === "string" ? body.jobId.trim() : "";
 
-    const provider = resolveProvider(settings);
+    const provider = normalizeProvider((settings).provider);
     const ocrModel = provider === "mistral" ? resolveMistralOcrModel(model) : model;
     const prompt = buildPrompt(settingsPayload);
     const sourcePreview = normalizePreviewForHistory(inputPreviews[0] || "");

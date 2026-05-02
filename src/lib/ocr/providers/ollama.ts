@@ -9,6 +9,7 @@
 import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { parseServiceError, parsePreviewImageData } from "@/lib/ocr/error-parsing";
 import { parseJsonCandidate } from "@/lib/ocr/markdown-routing";
+import type { PostProcessOutputFormat } from "@/lib/ocr/settings";
 import {
   extractChatContentText,
   fetchWithTimeout,
@@ -158,26 +159,32 @@ export async function runOllamaPostProcessing(
   model: string,
   systemPrompt: string,
   userPrompt: string,
+  outputFormat: PostProcessOutputFormat = "markdown",
+  signal?: AbortSignal,
 ): Promise<PostProcessResult> {
   const errors: string[] = [];
 
   for (const host of hostBases) {
     for (const chatPath of CHAT_ENDPOINTS) {
       try {
+        const body: Record<string, unknown> = {
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          stream: false,
+          temperature: 0,
+        };
+        if (outputFormat === "json") {
+          if (chatPath === "/api/chat") body.format = "json";
+          else body.response_format = { type: "json_object" };
+        }
         const response = await fetchWithTimeout(`${host}${chatPath}`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-            stream: false,
-            temperature: 0,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal,
         });
 
         const payload = await parseResponseText(response);

@@ -51,16 +51,17 @@ async function readBody(resp: Response): Promise<string> {
   }
 }
 
-function modelMissingHint(body: string, model: string): string | null {
-  if (!body) return null;
+export function isModelMissingBody(body: string): boolean {
+  if (!body) return false;
   const lower = body.toLowerCase();
-  if (lower.includes("not found") && lower.includes("model")) {
-    return `Modello embedding "${model}" non installato su Ollama. Esegui: ollama pull ${model}`;
-  }
-  if (lower.includes("file does not exist") || lower.includes("pull it first")) {
-    return `Modello embedding "${model}" non installato su Ollama. Esegui: ollama pull ${model}`;
-  }
-  return null;
+  if (lower.includes("not found") && lower.includes("model")) return true;
+  if (lower.includes("file does not exist") || lower.includes("pull it first")) return true;
+  return false;
+}
+
+function modelMissingHint(body: string, model: string): string | null {
+  if (!isModelMissingBody(body)) return null;
+  return `MODEL_NOT_PULLED:${model}`;
 }
 
 async function embedWithOllama(

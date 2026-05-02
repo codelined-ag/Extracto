@@ -102,7 +102,7 @@ describe("embedTexts — Ollama fallback chain", () => {
       if (url.endsWith("/v1/embeddings")) return new Response("model not found", { status: 404 });
       return new Response("model not found", { status: 404 });
     });
-    await expect(embedTexts(["x"], config, fetchImpl)).rejects.toThrow(/ollama pull old-model/);
+    await expect(embedTexts(["x"], config, fetchImpl)).rejects.toThrow(/MODEL_NOT_PULLED:old-model/);
   });
 });
 

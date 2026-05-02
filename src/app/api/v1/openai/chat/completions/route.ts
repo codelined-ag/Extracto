@@ -8,7 +8,6 @@ import { db } from "@/lib/db";
 import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
 import {
   buildPrompt,
-  resolveProvider,
   sanitizePostProcessing,
   submitOcrJob,
 } from "@/lib/ocr/pipeline";
@@ -128,7 +127,7 @@ export async function POST(request: NextRequest) {
   const postProcessingPayload = sanitizePostProcessing(
     prompt ? { enabled: true, instruction: prompt, outputFormat: "markdown" } : undefined,
   );
-  const provider = resolveProvider(settings);
+  const provider = normalizeProvider((settings).provider);
   const ocrModel = provider === "mistral" ? resolveMistralOcrModel(model) : model;
   const ocrPrompt = buildPrompt(settingsPayload);
 

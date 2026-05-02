@@ -7,7 +7,6 @@ import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
 import {
   buildPrompt,
   normalizePreviewForHistory,
-  resolveProvider,
   sanitizePostProcessing,
   submitOcrJob,
 } from "@/lib/ocr/pipeline";
@@ -94,7 +93,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
     try {
       const settingsPayload = normalizeAdvancedSettings(file.settings);
       const postProcessingPayload = sanitizePostProcessing(file.postProcessing);
-      const provider = resolveProvider(settings);
+      const provider = normalizeProvider((settings).provider);
       const ocrModel = provider === "mistral" ? resolveMistralOcrModel(file.model) : file.model;
       const prompt = buildPrompt(settingsPayload);
       const inputPreviews = file.pages && file.pages.length > 0 ? file.pages : [file.preview];

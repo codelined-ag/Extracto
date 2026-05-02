@@ -85,7 +85,6 @@ import {
   normalizePreviewForHistory,
   normalizePostProcessedText,
   parseCheckpointPages,
-  resolveProvider,
   sanitizePostProcessing,
   submitOcrJob,
   toJsonValue,
@@ -396,17 +395,6 @@ describe("toJsonValue", () => {
 
   it("handles null verbatim", () => {
     expect(toJsonValue({ x: null })).toEqual({ x: null });
-  });
-});
-
-describe("resolveProvider", () => {
-  it("returns the normalized provider from settings", () => {
-    expect(resolveProvider({ provider: "ollama", apiEndpoint: "", apiKey: "" })).toBe("ollama");
-    expect(resolveProvider({ provider: "mistral", apiEndpoint: "", apiKey: "" })).toBe("mistral");
-  });
-
-  it("normalizes unknown providers to the default ollama", () => {
-    expect(resolveProvider({ provider: "unknown", apiEndpoint: "", apiKey: "" })).toBe("ollama");
   });
 });
 

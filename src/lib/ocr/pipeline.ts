@@ -385,8 +385,10 @@ export function ollamaPostProcessingWithHostResolve(
   model: string,
   systemPrompt: string,
   userPrompt: string,
+  outputFormat?: PostProcessOutputFormat,
+  signal?: AbortSignal,
 ): Promise<PostProcessResult> {
-  return runOllamaPostProcessingIter(getOllamaCandidatesForOcr(endpoint), model, systemPrompt, userPrompt);
+  return runOllamaPostProcessingIter(getOllamaCandidatesForOcr(endpoint), model, systemPrompt, userPrompt, outputFormat, signal);
 }
 
 export function ollamaUnloadWithHostResolve(endpoint: string, model: string): Promise<void> {
@@ -427,12 +429,8 @@ const PROVIDER_HANDLERS: Record<ProviderKind, ProviderHandler> = {
     envKey: "",
     runOcr: (s, m, p, pv, _k, sig) => ollamaOcrWithHostResolve(s.apiEndpoint, m, p, pv, sig),
     // _of (outputFormat) is intentionally discarded for Ollama — its API has
-    // no response_format option; the format is enforced via the user prompt
-    // (buildPostProcessingPrompt includes "Return only valid JSON" when
-    // outputFormat is "json"). The orchestrator separately normalizes the
-    // returned text via normalizePostProcessedText(text, outputFormat).
-    runPostProcess: (s, m, sp, up, _k, _of) =>
-      ollamaPostProcessingWithHostResolve(s.apiEndpoint, m, sp, up),
+    runPostProcess: (s, m, sp, up, _k, of) =>
+      ollamaPostProcessingWithHostResolve(s.apiEndpoint, m, sp, up, of),
   },
   openrouter: {
     envKey: "OPENROUTER_API_KEY",
@@ -460,10 +458,6 @@ function resolveProviderApiKey(provider: ProviderKind, settings: ApiProviderSett
   if (settings.apiKey) return settings.apiKey;
   const envKey = PROVIDER_HANDLERS[provider].envKey;
   return envKey ? (process.env[envKey] || "") : "";
-}
-
-export function resolveProvider(settings: ApiProviderSettings): ProviderKind {
-  return normalizeProvider(settings.provider);
 }
 
 export async function runProviderOcr(
@@ -970,7 +964,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
 
     if (input.postProcessingPayload.enabled) {
       const postProcessingModel = selectedPostProcessModel;
-      const postProcessingProvider = resolveProvider(input.settings);
+      const postProcessingProvider = normalizeProvider((input.settings).provider);
       if (postProcessingProvider === "ollama") {
         usedOllamaModels.add(postProcessingModel);
         await ollamaWarmupWithHostResolve(input.settings.apiEndpoint, postProcessingModel);

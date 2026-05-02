@@ -6,7 +6,6 @@ import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
 import {
   buildPrompt,
   normalizePreviewForHistory,
-  resolveProvider,
   sanitizePostProcessing,
   submitOcrJob,
 } from "@/lib/ocr/pipeline";
@@ -79,7 +78,7 @@ async function ingestFile(filePath: string, user: UserRef): Promise<void> {
     : { ...storedSettings, provider: normalizeProvider(storedSettings.provider) };
   const settingsPayload = normalizeAdvancedSettings(undefined);
   const postProcessingPayload = sanitizePostProcessing(undefined);
-  const provider = resolveProvider(settings);
+  const provider = normalizeProvider((settings).provider);
   const ocrModel = provider === "mistral" ? resolveMistralOcrModel(WATCH_FOLDER_MODEL) : WATCH_FOLDER_MODEL;
   const prompt = buildPrompt(settingsPayload);
   const sourcePreview = normalizePreviewForHistory(dataUrl);

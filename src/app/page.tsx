@@ -91,6 +91,7 @@ import {
 import { Combobox } from"@/components/ui/combobox";
 import { ThemeToggle } from"@/components/theme-toggle";
 import { useToast } from"@/hooks/use-toast";
+import { ToastAction } from"@/components/ui/toast";
 import { normalizeProvider, type ProviderKind, type ClientApiSettings } from"@/lib/api-types";
 import { type AdvancedSettings, type PostProcessingSettings, type PostProcessOutputFormat } from"@/lib/ocr/settings";
 import {
@@ -1316,9 +1317,78 @@ export default function ExtractoPage() {
  ...entry,
  kbExport: { status:"error", error: message },
  }));
+ const missing = message.match(/MODEL_NOT_PULLED:(\S+)/);
+ if (missing) {
+ const modelName = missing[1];
+ toast({
+ title: t(
+ `Modello "${modelName}" non installato`,
+ `Model "${modelName}" isn't pulled`,
+ `Modèle "${modelName}" non installé`,
+ `Modelo "${modelName}" no instalado`,
+ `Modell "${modelName}" nicht installiert`,
+ ),
+ description: t(
+"Premi Pull per scaricarlo automaticamente da Ollama.",
+"Click Pull to download it automatically from Ollama.",
+"Cliquez sur Pull pour le télécharger depuis Ollama.",
+"Pulsa Pull para descargarlo automáticamente desde Ollama.",
+"Auf Pull klicken, um es automatisch von Ollama zu laden.",
+ ),
+ variant:"destructive",
+ action: (
+ <ToastAction
+ altText={t("Scarica modello","Pull model","Télécharger","Descargar","Laden")}
+ onClick={() => { void pullEmbeddingModel(modelName, file); }}
+ >
+ {t("Scarica","Pull","Télécharger","Descargar","Laden")}
+ </ToastAction>
+ ),
+ });
+ return;
+ }
  toast({
  title: t("Esportazione KB non riuscita","KB export failed","Échec d'export KB","Error de exportación KB","KB-Export fehlgeschlagen"),
  description: message,
+ variant:"destructive",
+ });
+ }
+ };
+
+ const pullEmbeddingModel = async (model: string, file: ProcessingFile) => {
+ toast({
+ title: t(`Scaricamento ${model}...`,`Pulling ${model}...`,`Téléchargement de ${model}...`,`Descargando ${model}...`,`${model} wird geladen...`),
+ description: t(
+"Può richiedere alcuni minuti la prima volta.",
+"This can take a few minutes the first time.",
+"Cela peut prendre quelques minutes la première fois.",
+"Puede tardar varios minutos la primera vez.",
+"Beim ersten Mal kann es einige Minuten dauern.",
+ ),
+ });
+ try {
+ const resp = await fetch("/api/kb/pull-model", {
+ method:"POST",
+ headers:{"Content-Type":"application/json"},
+ body: JSON.stringify({ model }),
+ });
+ const payload = (await resp.json().catch(() => ({}))) as { error?: string };
+ if (!resp.ok) throw new Error(payload.error || `Pull failed (${resp.status})`);
+ toast({
+ title: t(`${model} installato`,`${model} ready`,`${model} prêt`,`${model} listo`,`${model} bereit`),
+ description: t(
+"Riprovo l'esportazione...",
+"Retrying the export...",
+"Nouvelle tentative d'export...",
+"Reintentando la exportación...",
+"Export wird erneut versucht...",
+ ),
+ });
+ await exportFileToKb(file);
+ } catch (err) {
+ toast({
+ title: t("Pull non riuscito","Pull failed","Échec du téléchargement","Error de descarga","Pull fehlgeschlagen"),
+ description: err instanceof Error ? err.message :"",
  variant:"destructive",
  });
  }
