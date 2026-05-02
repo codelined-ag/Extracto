@@ -1861,8 +1861,8 @@ export default function ExtractoPage() {
  className="flex items-center gap-3 group"whileHover={{ scale: 1.015 }}
  transition={{ type:"spring", stiffness: 400, damping: 24 }}
  >
- <div className="relative grid place-items-center size-9 rounded-xl bg-primary/12 text-primary transition-[background-color,transform] duration-200 group-hover:bg-primary/18 group-hover:rotate-[-4deg]">
- <ScanLine className="h-4.5 w-4.5"/>
+ <div className="relative grid place-items-center size-9 text-primary transition-transform duration-200 group-hover:rotate-[-4deg]">
+ <ScanLine className="h-5 w-5"/>
  <motion.div
  className="absolute -top-1 -right-1"animate={{ scale: [1, 1.18, 1], rotate: [0, 8, 0] }}
  transition={{ duration: 2.4, repeat: Infinity, ease:"easeInOut"}}
@@ -2486,8 +2486,8 @@ export default function ExtractoPage() {
  </div>
  ) : !selectedHistoryJob ? (
  <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
- <div className="size-14 rounded-2xl surface-soft grid place-items-center mb-4">
- <HistoryIcon size={22} className="inline-flex items-center justify-center text-muted-foreground"/>
+ <div className="grid place-items-center mb-4 text-muted-foreground">
+ <HistoryIcon size={32} className="inline-flex items-center justify-center"/>
  </div>
  <p className="font-display text-xl font-semibold tracking-tight">
  {t("Seleziona un'esecuzione","Pick a run","Choisissez une exécution","Selecciona una ejecución","Lauf auswählen")}
@@ -2815,8 +2815,8 @@ export default function ExtractoPage() {
  ) : (
  <div className="flex items-center justify-center py-8 min-h-[120px]">
  <div className="text-center">
- <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
- <FileTextIcon size={24} className="inline-flex items-center justify-center text-muted-foreground"/>
+ <div className="mx-auto mb-3 flex items-center justify-center text-muted-foreground/70">
+ <FileTextIcon size={32} className="inline-flex items-center justify-center"/>
  </div>
  <p className="text-sm font-medium">{t("Nessun file","No files yet","Aucun fichier","Sin archivos aún","Noch keine Dateien")}</p>
  <p className="text-xs text-muted-foreground">
@@ -2860,15 +2860,15 @@ export default function ExtractoPage() {
  {t("Riprendi dal checkpoint","Resume from checkpoint","Reprendre depuis le checkpoint","Reanudar desde checkpoint","Vom Checkpoint fortsetzen")}
  </Button>
  ) : null}
- <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-muted-foreground">
- <span className="truncate">
- <span className="text-muted-foreground/70">{t("Modello","Model","Modèle","Modelo","Modell")}: </span>
- <span className="text-foreground/90 font-medium tabular">{models.find((m) => m.id === selectedModel)?.name || selectedModel || "none"}</span>
- </span>
+ <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-muted-foreground min-w-0">
+ <div className="flex items-baseline gap-1.5 min-w-0 flex-1">
+ <span className="text-muted-foreground/70 shrink-0">{t("Modello","Model","Modèle","Modelo","Modell")}</span>
+ <span className="text-foreground/90 font-medium tabular truncate min-w-0">{models.find((m) => m.id === selectedModel)?.name || selectedModel || "none"}</span>
+ </div>
  {canExportZip ? (
  <Tooltip>
  <TooltipTrigger asChild>
- <button type="button"onClick={exportAllAsZip} className="inline-flex items-center gap-1 text-foreground/70 hover:text-primary transition-colors">
+ <button type="button"onClick={exportAllAsZip} className="inline-flex items-center gap-1 text-foreground/70 hover:text-primary transition-colors shrink-0">
  <ArchiveIcon size={12} className="inline-flex items-center justify-center"/>
  <span>ZIP</span>
  </button>
@@ -2987,8 +2987,8 @@ export default function ExtractoPage() {
  className="group flex items-center justify-between gap-2 px-4 py-3 rounded-2xl bg-card text-left shadow-[var(--shadow-soft)] transition-[transform,box-shadow] duration-200 ease-[cubic-bezier(0.2,0.7,0.2,1)] hover:-translate-y-px hover:shadow-[var(--shadow-lift)]"
  >
  <span className="inline-flex items-center gap-2.5">
- <span className="grid place-items-center size-9 rounded-xl bg-primary/12 text-primary">
- <HistoryIcon size={16} className="inline-flex items-center justify-center"/>
+ <span className="grid place-items-center size-9 text-primary">
+ <HistoryIcon size={18} className="inline-flex items-center justify-center"/>
  </span>
  <span className="flex flex-col">
  <span className="text-sm font-semibold tracking-tight">{t("Cronologia","History","Historique","Historial","Verlauf")}</span>
@@ -3304,8 +3304,8 @@ export default function ExtractoPage() {
  initial={{ opacity: 0, scale: 0.9 }}
  animate={{ opacity: 1, scale: 1 }}
  className="text-center">
- <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-destructive/10 flex items-center justify-center">
- <AlertCircle className="h-8 w-8 text-destructive"/>
+ <div className="mx-auto mb-4 flex items-center justify-center text-destructive">
+ <AlertCircle className="h-10 w-10"/>
  </div>
  <p className="text-sm font-medium mb-1">{t("Elaborazione non riuscita","Processing Failed","Échec du traitement","Procesamiento fallido","Verarbeitung fehlgeschlagen")}</p>
  <p className="text-xs text-muted-foreground max-w-xs">
@@ -3334,8 +3334,8 @@ export default function ExtractoPage() {
  initial={{ opacity: 0, y: 10 }}
  animate={{ opacity: 1, y: 0 }}
  className="text-center">
- <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
- <ScanLine className="h-8 w-8 text-muted-foreground"/>
+ <div className="mx-auto mb-4 flex items-center justify-center text-muted-foreground/70">
+ <ScanLine className="h-10 w-10"/>
  </div>
  <p className="text-sm font-medium mb-1">{t("Pronto per OCR","Ready for OCR","Prêt pour l'OCR","Listo para OCR","Bereit für OCR")}</p>
  <p className="text-xs text-muted-foreground">
@@ -3355,8 +3355,8 @@ export default function ExtractoPage() {
  animate={{ opacity: 1, y: 0 }}
  transition={{ delay: 0.4 }}
  >
- <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
- <SparklesIcon size={40} className="inline-flex items-center justify-center text-primary"/>
+ <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center text-primary">
+ <SparklesIcon size={48} className="inline-flex items-center justify-center"/>
  </div>
  <h3 className="text-lg font-semibold mb-2">{t("Seleziona un documento","Select a document","Choisir un document","Selecciona un documento","Dokument wählen")}</h3>
  <p className="text-sm text-muted-foreground max-w-xs mx-auto">
@@ -3420,16 +3420,11 @@ function SettingsSection({ title, hint, right, children }: { title: React.ReactN
  );
 }
 
-function ToggleRow({ label, hint, checked, onCheckedChange }: { label: string; hint?: string; checked: boolean; onCheckedChange: (v: boolean) => void }) {
+function ToggleRow({ label, checked, onCheckedChange }: { label: string; hint?: string; checked: boolean; onCheckedChange: (v: boolean) => void }) {
  return (
  <div className="flex items-center justify-between gap-4 surface-soft rounded-xl px-3.5 py-2.5">
  <div className="min-w-0">
- <Label className="text-sm font-medium">
- <span className="inline-flex items-center gap-1.5">
- {label}
- {hint ? <HintInfo text={hint} /> : null}
- </span>
- </Label>
+ <Label className="text-sm font-medium">{label}</Label>
  </div>
  <Switch checked={checked} onCheckedChange={onCheckedChange} />
  </div>
