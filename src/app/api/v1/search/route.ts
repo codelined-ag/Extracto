@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { handleApiError } from "@/lib/api-error";
 import { authenticateRequest, requireScope } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 
@@ -19,55 +20,59 @@ function buildSnippet(text: string, query: string): string {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await authenticateRequest(request);
-  if (!auth) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const auth = await authenticateRequest(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const scopeError = requireScope(auth, "search:read");
+    if (scopeError) return scopeError;
+
+    const { searchParams } = new URL(request.url);
+    const q = (searchParams.get("q") || "").trim();
+    if (!q) {
+      return NextResponse.json({ error: "q is required" }, { status: 400 });
+    }
+    if (q.length < 2) {
+      return NextResponse.json({ error: "q must be at least 2 characters" }, { status: 400 });
+    }
+    if (q.length > 200) {
+      return NextResponse.json({ error: "q is too long (max 200 chars)" }, { status: 400 });
+    }
+
+    const rawLimit = Number(searchParams.get("limit") || "20");
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(MAX_LIMIT, Math.trunc(rawLimit)) : 20;
+
+    const rows = await db.ocrJob.findMany({
+      where: {
+        userId: auth.userId,
+        extractedText: { contains: q },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        fileName: true,
+        status: true,
+        model: true,
+        createdAt: true,
+        completedAt: true,
+        extractedText: true,
+      },
+    });
+
+    const results = rows.map((row) => ({
+      id: row.id,
+      fileName: row.fileName,
+      status: row.status,
+      model: row.model,
+      createdAt: row.createdAt,
+      completedAt: row.completedAt,
+      snippet: row.extractedText ? buildSnippet(row.extractedText, q) : null,
+    }));
+
+    return NextResponse.json({ q, count: results.length, results });
+  } catch (error) {
+    return handleApiError(error);
   }
-  const scopeError = requireScope(auth, "search:read");
-  if (scopeError) return scopeError;
-
-  const { searchParams } = new URL(request.url);
-  const q = (searchParams.get("q") || "").trim();
-  if (!q) {
-    return NextResponse.json({ error: "q is required" }, { status: 400 });
-  }
-  if (q.length < 2) {
-    return NextResponse.json({ error: "q must be at least 2 characters" }, { status: 400 });
-  }
-  if (q.length > 200) {
-    return NextResponse.json({ error: "q is too long (max 200 chars)" }, { status: 400 });
-  }
-
-  const rawLimit = Number(searchParams.get("limit") || "20");
-  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(MAX_LIMIT, Math.trunc(rawLimit)) : 20;
-
-  const rows = await db.ocrJob.findMany({
-    where: {
-      userId: auth.userId,
-      extractedText: { contains: q },
-    },
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    select: {
-      id: true,
-      fileName: true,
-      status: true,
-      model: true,
-      createdAt: true,
-      completedAt: true,
-      extractedText: true,
-    },
-  });
-
-  const results = rows.map((row) => ({
-    id: row.id,
-    fileName: row.fileName,
-    status: row.status,
-    model: row.model,
-    createdAt: row.createdAt,
-    completedAt: row.completedAt,
-    snippet: row.extractedText ? buildSnippet(row.extractedText, q) : null,
-  }));
-
-  return NextResponse.json({ q, count: results.length, results });
 }

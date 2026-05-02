@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { handleApiError } from "@/lib/api-error";
 import { findUserByEmail, toSafeUser, verifyPassword } from "@/lib/auth/credentials";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { getClientIpAddress, isTrustedMutationRequest } from "@/lib/request-security";
@@ -90,10 +91,6 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    if (error instanceof Error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ error: "Unable to sign in" }, { status: 500 });
+    return handleApiError(error);
   }
 }

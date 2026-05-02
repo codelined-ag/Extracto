@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
+import { handleApiError } from "@/lib/api-error";
 import { createUser, findUserByEmail, toSafeUser } from "@/lib/auth/credentials";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { getClientIpAddress, isTrustedMutationRequest } from "@/lib/request-security";
@@ -98,11 +99,6 @@ export async function POST(request: NextRequest) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return badRequest("Email already registered", 409);
     }
-
-    if (error instanceof Error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ error: "Unable to create account" }, { status: 500 });
+    return handleApiError(error);
   }
 }
