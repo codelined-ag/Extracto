@@ -20,8 +20,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { ApiRouteError, handleApiError, parseJsonBody } from "@/lib/api-error";
-import { authenticateMutation, requireScope } from "@/lib/auth/request";
+import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
+import { withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { runKbExport } from "@/lib/kb/export";
 import { ChromaAdapter } from "@/lib/kb/stores/chroma";
@@ -49,66 +49,56 @@ interface KbExportRequest extends Record<string, unknown> {
   chunking?: unknown;
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
-  try {
-    if (!KB_EXPORT_ENABLED) {
-      throw new ApiRouteError(
-        "KB export is disabled. Set KB_EXPORT_ENABLED=1 in your env to enable it.",
-        503,
-      );
-    }
-    const auth = await authenticateMutation(request);
-    if (!auth.ok) {
-      return NextResponse.json({ error: auth.error }, { status: auth.status });
-    }
-    const scopeError = requireScope(auth.auth, "ocr:read");
-    if (scopeError) return scopeError;
-
-    const body = await parseJsonBody<KbExportRequest>(request);
-    const jobId = stringField(body.jobId, "jobId");
-    const collectionName = stringField(body.collectionName, "collectionName");
-    const chunking = parseChunking(body.chunking);
-    const embedding = parseEmbedding(body.embedding);
-    const store = parseVectorStore(body.vectorStore);
-
-    const job = await db.ocrJob.findFirst({
-      where: { id: jobId, userId: auth.auth.userId },
-      select: {
-        id: true,
-        fileName: true,
-        extractedText: true,
-        model: true,
-        completedAt: true,
-        createdAt: true,
-        metadata: true,
-      },
-    });
-    if (!job) {
-      throw new ApiRouteError("Job not found", 404);
-    }
-    if (!job.extractedText || !job.extractedText.trim()) {
-      throw new ApiRouteError("Job has no extracted text to export", 400);
-    }
-
-    const language = pickLanguage(job.metadata);
-    const result = await runKbExport({
-      jobId: job.id,
-      fileName: job.fileName,
-      extractedText: job.extractedText,
-      extractedAt: (job.completedAt ?? job.createdAt).toISOString(),
-      sourceModel: job.model ?? undefined,
-      language,
-      chunking,
-      embedding,
-      store,
-      collectionName,
-    });
-
-    return NextResponse.json(result);
-  } catch (error) {
-    return handleApiError(error);
+export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { auth }) => {
+  if (!KB_EXPORT_ENABLED) {
+    throw new ApiRouteError(
+      "KB export is disabled. Set KB_EXPORT_ENABLED=1 in your env to enable it.",
+      503,
+    );
   }
-}
+
+  const body = await parseJsonBody<KbExportRequest>(request);
+  const jobId = stringField(body.jobId, "jobId");
+  const collectionName = stringField(body.collectionName, "collectionName");
+  const chunking = parseChunking(body.chunking);
+  const embedding = parseEmbedding(body.embedding);
+  const store = parseVectorStore(body.vectorStore);
+
+  const job = await db.ocrJob.findFirst({
+    where: { id: jobId, userId: auth.userId },
+    select: {
+      id: true,
+      fileName: true,
+      extractedText: true,
+      model: true,
+      completedAt: true,
+      createdAt: true,
+      metadata: true,
+    },
+  });
+  if (!job) {
+    throw new ApiRouteError("Job not found", 404);
+  }
+  if (!job.extractedText || !job.extractedText.trim()) {
+    throw new ApiRouteError("Job has no extracted text to export", 400);
+  }
+
+  const language = pickLanguage(job.metadata);
+  const result = await runKbExport({
+    jobId: job.id,
+    fileName: job.fileName,
+    extractedText: job.extractedText,
+    extractedAt: (job.completedAt ?? job.createdAt).toISOString(),
+    sourceModel: job.model ?? undefined,
+    language,
+    chunking,
+    embedding,
+    store,
+    collectionName,
+  });
+
+  return NextResponse.json(result);
+});
 
 function stringField(value: unknown, label: string): string {
   if (typeof value !== "string" || !value.trim()) {
