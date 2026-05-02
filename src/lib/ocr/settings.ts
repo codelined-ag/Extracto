@@ -27,50 +27,34 @@ export const DEFAULT_SETTINGS: AdvancedSettings = {
 
 export const OCR_SETTINGS_KEY = "global";
 
+function getString(obj: Record<string, unknown> | null, key: string, fallback: string): string {
+  const v = obj?.[key];
+  return v && typeof v === "string" ? v : fallback;
+}
+
+function getBool(obj: Record<string, unknown> | null, key: string, fallback: boolean): boolean {
+  const v = obj?.[key];
+  return typeof v === "boolean" ? v : fallback;
+}
+
 export function normalizeAdvancedSettings(input: unknown): AdvancedSettings {
-  const candidate =
-    input &&
-    typeof input === "object" &&
-    !Array.isArray(input)
+  const c =
+    input && typeof input === "object" && !Array.isArray(input)
       ? (input as Record<string, unknown>)
       : null;
 
-  const language =
-    candidate?.language && typeof candidate.language === "string"
-      ? candidate.language
-      : DEFAULT_SETTINGS.language;
-
-  const tableDetection =
-    typeof candidate?.tableDetection === "boolean"
-      ? candidate.tableDetection
-      : DEFAULT_SETTINGS.tableDetection;
-
-  const handwritingRecognition =
-    typeof candidate?.handwritingRecognition === "boolean"
-      ? candidate.handwritingRecognition
-      : DEFAULT_SETTINGS.handwritingRecognition;
-
-  const preserveFormatting =
-    typeof candidate?.preserveFormatting === "boolean"
-      ? candidate.preserveFormatting
-      : DEFAULT_SETTINGS.preserveFormatting;
-
-  const customPrompt =
-    candidate?.customPrompt && typeof candidate.customPrompt === "string"
-      ? candidate.customPrompt
-      : DEFAULT_SETTINGS.customPrompt;
-
-  const parsedQuality =
-    typeof candidate?.quality === "number" && Number.isFinite(candidate.quality)
-      ? Math.max(50, Math.min(100, Math.round(candidate.quality / 10) * 10))
+  const rawQuality = c?.quality;
+  const quality =
+    typeof rawQuality === "number" && Number.isFinite(rawQuality)
+      ? Math.max(50, Math.min(100, Math.round(rawQuality / 10) * 10))
       : DEFAULT_SETTINGS.quality;
 
   return {
-    language,
-    tableDetection,
-    handwritingRecognition,
-    preserveFormatting,
-    customPrompt,
-    quality: parsedQuality,
+    language: getString(c, "language", DEFAULT_SETTINGS.language),
+    tableDetection: getBool(c, "tableDetection", DEFAULT_SETTINGS.tableDetection),
+    handwritingRecognition: getBool(c, "handwritingRecognition", DEFAULT_SETTINGS.handwritingRecognition),
+    preserveFormatting: getBool(c, "preserveFormatting", DEFAULT_SETTINGS.preserveFormatting),
+    customPrompt: getString(c, "customPrompt", DEFAULT_SETTINGS.customPrompt),
+    quality,
   };
 }

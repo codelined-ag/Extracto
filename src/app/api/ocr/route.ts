@@ -1991,7 +1991,7 @@ function toPageCheckpoint(page: ProcessedPageOutput): OcrPageCheckpoint {
   };
 }
 
-function toCheckpointPage(page: ProcessedPageOutput) {
+function toPageRecord(page: ProcessedPageOutput) {
   return {
     pageNumber: page.pageNumber,
     text: page.text,
@@ -2023,7 +2023,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
   const pageOutputs: ProcessedPageOutput[] = input.initialPageOutputs ? [...input.initialPageOutputs] : [];
   const startIndex = Math.max(0, Math.min(input.startIndex ?? 0, input.inputPreviews.length));
   const checkpoints: OcrPageCheckpoint[] = pageOutputs.map(toPageCheckpoint);
-  const checkpointPages = pageOutputs.map(toCheckpointPage);
+  const pageRecords = pageOutputs.map(toPageRecord);
   const partialStructuredPages = pageOutputs.map(toStructuredPagePayload);
   const partialPageResults = pageOutputs.map(toPageResultPayload);
   let totalDurationMs = pageOutputs.reduce((sum, page) => sum + page.durationMs, 0);
@@ -2124,7 +2124,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
         status: OcrJobStatus.QUEUED,
         metadata: toJsonValue({
           ...latestMetadata,
-          checkpointPages,
+          pageRecords,
         }),
         processingMs: Date.now() - input.startedAtMs,
       },
@@ -2199,7 +2199,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
 
       pageOutputs.push(completedPage);
       checkpoints.push(toPageCheckpoint(completedPage));
-      checkpointPages.push(toCheckpointPage(completedPage));
+      pageRecords.push(toPageRecord(completedPage));
       partialStructuredPages.push(toStructuredPagePayload(completedPage));
       partialPageResults.push(toPageResultPayload(completedPage));
 
@@ -2251,7 +2251,7 @@ async function processOcrJobInBackground(input: ProcessOcrJobInput): Promise<voi
           extractedText: extractedTextSoFar,
           metadata: toJsonValue({
             ...latestMetadata,
-            checkpointPages,
+            pageRecords,
           }),
         },
       });
@@ -2486,10 +2486,10 @@ function parseCheckpointPages(
 ): ProcessedPageOutput[] {
   const rawCheckpointPages =
     metadata && typeof metadata === "object" && !Array.isArray(metadata)
-      ? (metadata as { checkpointPages?: unknown }).checkpointPages
+      ? (metadata as { pageRecords?: unknown }).pageRecords
       : undefined;
   const fromResult = result && typeof result === "object" && !Array.isArray(result)
-    ? (result as { metadata?: { checkpointPages?: unknown } }).metadata?.checkpointPages
+    ? (result as { metadata?: { pageRecords?: unknown } }).metadata?.pageRecords
     : undefined;
   const checkpointSource = Array.isArray(rawCheckpointPages) ? rawCheckpointPages : fromResult;
 
@@ -2769,7 +2769,7 @@ export async function POST(request: NextRequest) {
           jobId: existingJob.id,
           pageCount: inputPreviews.length,
           resumed: true,
-          checkpointPages: startIndex,
+          pageRecords: startIndex,
         },
         { status: 202 }
       );

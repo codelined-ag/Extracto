@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { db } from "@/lib/db";
 
 vi.mock("@/lib/db", () => ({
   db: {
@@ -9,7 +10,6 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-import { db } from "@/lib/db";
 import {
   markOcrJobRunning,
   clearOcrJobRunning,
@@ -23,12 +23,12 @@ import {
   isOcrJobStopRequested,
 } from "@/lib/ocr/job-control";
 
-const mockDb = db as { ocrJob: { update: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> } };
+const mockUpdate = vi.mocked(db.ocrJob.update);
+const mockFindUnique = vi.mocked(db.ocrJob.findUnique);
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  mockDb.ocrJob.update.mockResolvedValue({});
-  mockDb.ocrJob.findUnique.mockResolvedValue(null);
+  mockUpdate.mockReset().mockResolvedValue({} as never);
+  mockFindUnique.mockReset().mockResolvedValue(null);
 });
 
 describe("running job tracking", () => {
@@ -144,28 +144,26 @@ describe("withOcrJobSlot", () => {
 
 describe("stop request cache", () => {
   it("requestOcrJobStop updates DB and caches the result", async () => {
-    const id = "job-stop-1";
+    const id = "job-stop-cache";
     await requestOcrJobStop(id);
-    expect(mockDb.ocrJob.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id } })
-    );
+    expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id } }));
     // Cache hit — DB should not be called again immediately
     const stopped = await isOcrJobStopRequested(id);
     expect(stopped).toBe(true);
-    expect(mockDb.ocrJob.findUnique).not.toHaveBeenCalled();
+    expect(mockFindUnique).not.toHaveBeenCalled();
     clearOcrJobRunning(id);
   });
 
   it("isOcrJobStopRequested returns false when DB row has no stopRequestedAt", async () => {
     const id = "job-not-stopped";
-    mockDb.ocrJob.findUnique.mockResolvedValue({ stopRequestedAt: null });
+    mockFindUnique.mockResolvedValue({ stopRequestedAt: null } as never);
     const result = await isOcrJobStopRequested(id);
     expect(result).toBe(false);
   });
 
   it("isOcrJobStopRequested returns true when DB row has stopRequestedAt set", async () => {
-    const id = "job-db-stopped";
-    mockDb.ocrJob.findUnique.mockResolvedValue({ stopRequestedAt: new Date() });
+    const id = "job-db-stopped-2";
+    mockFindUnique.mockResolvedValue({ stopRequestedAt: new Date() } as never);
     const result = await isOcrJobStopRequested(id);
     expect(result).toBe(true);
     clearOcrJobRunning(id);
