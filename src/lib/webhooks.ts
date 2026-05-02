@@ -70,7 +70,7 @@ export function verifyWebhookSignature(
 
 interface JobEventPayload {
   id: string;
-  status: string;
+  status: import("@prisma/client").OcrJobStatus;
   fileName: string;
   model: string;
   errorMessage: string | null;

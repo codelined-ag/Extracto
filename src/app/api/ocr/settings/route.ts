@@ -17,7 +17,7 @@ const mapSettingsResponse = (setting: OcrSetting) => ({
   quality: setting.quality,
 });
 
-async function getDefaultSettingsRow() {
+async function getOrCreateDefaultSettingsRow() {
   const settings = await db.ocrSetting.findUnique({
     where: { key: OCR_SETTINGS_KEY },
   });
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   const scopeError = requireScope(auth, "settings:read");
   if (scopeError) return scopeError;
 
-  const settings = await getDefaultSettingsRow();
+  const settings = await getOrCreateDefaultSettingsRow();
   return NextResponse.json(mapSettingsResponse(settings));
 }
 

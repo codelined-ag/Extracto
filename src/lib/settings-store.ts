@@ -151,12 +151,13 @@ function normalizeApiEndpoint(rawEndpoint: string | undefined, provider: Provide
 }
 
 export interface ApiProviderSettings {
-  provider: string;
+  provider: ProviderKind;
   apiEndpoint: string;
   apiKey: string;
 }
 
-interface SaveApiSettingsInput extends Partial<ApiProviderSettings> {
+interface SaveApiSettingsInput extends Omit<Partial<ApiProviderSettings>, "provider"> {
+  provider?: string;
   replaceApiKey?: boolean;
 }
 

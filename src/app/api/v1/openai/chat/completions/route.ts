@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { OcrJobStatus } from "@prisma/client";
 
 import { authenticateMutation, authHasScope } from "@/lib/auth/request";
 import { buildOcrForwardHeaders } from "@/lib/ocr/forward";
@@ -153,7 +154,7 @@ export async function POST(request: NextRequest) {
       },
     });
     if (!job) break;
-    if (job.status === "COMPLETED") {
+    if (job.status === OcrJobStatus.COMPLETED) {
       const text = await readResultText(job.extractedTextLocation, job.extractedText);
       return NextResponse.json({
         id: `chatcmpl-${randomBytes(8).toString("hex")}`,
@@ -171,7 +172,7 @@ export async function POST(request: NextRequest) {
         extracto: { jobId },
       });
     }
-    if (job.status === "FAILED") {
+    if (job.status === OcrJobStatus.FAILED) {
       return NextResponse.json(
         {
           error: {

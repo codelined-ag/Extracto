@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 
+import { OcrJobStatus } from "@prisma/client";
+
 import { authenticateRequest, requireScope } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 
@@ -8,8 +10,7 @@ export const dynamic = "force-dynamic";
 const POLL_INTERVAL_MS = 800;
 const MAX_LIFETIME_MS = 30 * 60 * 1000;
 
-type TerminalStatus = "COMPLETED" | "FAILED";
-const TERMINAL_STATUSES: TerminalStatus[] = ["COMPLETED", "FAILED"];
+const TERMINAL_STATUSES: OcrJobStatus[] = [OcrJobStatus.COMPLETED, OcrJobStatus.FAILED];
 
 export async function GET(
   request: NextRequest,
@@ -106,7 +107,7 @@ export async function GET(
           });
         }
 
-        if (TERMINAL_STATUSES.includes(job.status as TerminalStatus)) {
+        if (TERMINAL_STATUSES.includes(job.status)) {
           send("done", { id: job.id, status: job.status });
           break;
         }
