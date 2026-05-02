@@ -1167,7 +1167,7 @@ async function runProviderOcr(
   if (provider === "openai_compat") {
     return runOpenAICompatOcr(settings.apiEndpoint, model, settings.apiKey || process.env.OPENAI_COMPAT_API_KEY || "", prompt, preview, signal);
   }
-  return runMistralOcr(model, preview, settings.apiKey || process.env.MISTRAL_API_KEY || "", settings.apiEndpoint, signal);
+  return runMistralOcr(settings.apiEndpoint, model, settings.apiKey || process.env.MISTRAL_API_KEY || "", preview, signal);
 }
 
 async function runOllamaOcr(
@@ -1467,10 +1467,10 @@ function buildMistralChatEndpoint(rawEndpoint: string): string {
 }
 
 async function runMistralOcr(
-  model: string,
-  preview: string,
-  apiKey: string,
   apiEndpoint: string,
+  model: string,
+  apiKey: string,
+  preview: string,
   signal?: AbortSignal
 ): Promise<{ text: string; structured: Record<string, unknown>; metadata: Record<string, unknown> }> {
   if (!apiKey) {
