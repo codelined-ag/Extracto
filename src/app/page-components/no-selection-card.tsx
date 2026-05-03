@@ -19,7 +19,7 @@ export function NoSelectionCard({ t }: NoSelectionCardProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
         >
-          <div className="w-32 h-32 mx-auto mb-4 flex items-center justify-center">
+          <div className="w-24 h-24 mx-auto flex items-end justify-center">
             <img
               src="/document.gif"
               alt=""
@@ -27,7 +27,7 @@ export function NoSelectionCard({ t }: NoSelectionCardProps) {
               className="max-w-full max-h-full object-contain"
             />
           </div>
-          <h3 className="text-lg font-semibold mb-2">
+          <h3 className="text-lg font-semibold mt-1 mb-2">
             {t(
               "Seleziona un documento",
               "Select a document",
