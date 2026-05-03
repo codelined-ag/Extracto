@@ -34,7 +34,7 @@
 
 You need Docker. That's it. Pick one path.
 
-### Path A — single `docker run` (no clone, just pull and go)
+### Path A: single `docker run` (no clone, just pull and go)
 
 ```bash
 docker run -d --name extracto -p 3000:3000 -v extracto-data:/app/data -e AUTH_SECRET="$(openssl rand -hex 32)" ghcr.io/codelined-ag/extracto:latest
@@ -42,7 +42,7 @@ docker run -d --name extracto -p 3000:3000 -v extracto-data:/app/data -e AUTH_SE
 
 Open <http://localhost:3000>, sign up, you're in. Multi-arch (`linux/amd64` + `linux/arm64`); pin a release with `:v0.3.0` instead of `:latest`.
 
-### Path B — recommended: the `extracto` installer (Linux / macOS)
+### Path B (recommended): the `extracto` installer (Linux / macOS)
 
 The installer adds Docker and Ollama if missing, drops an `extracto` launcher in `~/.local/bin`, and runs Extracto from the published image (no source build needed):
 
@@ -67,7 +67,7 @@ extracto uninstall     # full teardown
 
 The launcher also wraps the API: `extracto ocr ./invoice.pdf --model mistral-ocr-latest`, `extracto jobs list`, `extracto kb export`, `extracto api-key create ...`. See [extracto.help](https://extracto.help) for the full CLI reference.
 
-### Path C — Windows
+### Path C: Windows
 
 ```powershell
 git clone https://github.com/codelined-ag/Extracto.git
@@ -101,7 +101,7 @@ One Docker container. SQLite for the database, Bun for the runtime, Next.js 16 f
 
 ## Who it's for
 
-Three audiences, one backend. Same jobs, same history, same provider settings — pick the surface that fits.
+Three audiences, one backend. Same jobs, same history, same provider settings. Pick the surface that fits.
 
 ### Regular people who want their own OCR
 
@@ -136,7 +136,7 @@ Everything beyond a five-minute install lives at **[extracto.help](https://extra
 - Troubleshooting + ops (logs, metrics, retention, S3 offload, watched folders)
 - Architecture tour and contribution guide
 
-The [`openapi.yaml`](./openapi.yaml) spec covers the full `/api/v1/*` surface — import into Bruno, Postman, Insomnia, or any client generator.
+The [`openapi.yaml`](./openapi.yaml) spec covers the full `/api/v1/*` surface: import into Bruno, Postman, Insomnia, or any client generator.
 
 ---
 
