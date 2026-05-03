@@ -39,7 +39,6 @@ export interface OcrProgressMetadata {
   events: OcrProgressEvent[];
   checkpoints: OcrPageCheckpoint[];
   pageNumbers?: number[];
-  pageAnchorDigest?: PageAnchorDigest[];
   postProcessing: {
     enabled: boolean;
     applied?: boolean;
@@ -76,7 +75,6 @@ export function buildProgressMetadata(input: {
   events: OcrProgressEvent[];
   checkpoints: OcrPageCheckpoint[];
   pageNumbers?: number[];
-  pageAnchorDigest?: PageAnchorDigest[];
   postProcessing: OcrProgressMetadata["postProcessing"];
 }): OcrProgressMetadata {
   return {
@@ -92,16 +90,8 @@ export function buildProgressMetadata(input: {
     events: input.events,
     checkpoints: input.checkpoints,
     ...(input.pageNumbers ? { pageNumbers: input.pageNumbers } : {}),
-    ...(input.pageAnchorDigest ? { pageAnchorDigest: input.pageAnchorDigest } : {}),
     postProcessing: input.postProcessing,
   };
-}
-
-export interface PageAnchorDigest {
-  pageNumber: number;
-  blockCount: number;
-  characterCount: number;
-  isHighConfidence: boolean;
 }
 
 export const OCR_STAGE_PCT_WITH_POST_PROCESSING = 85;

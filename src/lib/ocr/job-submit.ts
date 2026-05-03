@@ -18,7 +18,6 @@ import {
   toPageCheckpoint,
   type ProcessedPageOutput,
 } from "@/lib/ocr/pipeline-result-builder";
-import { assessTextLayerQuality } from "@/lib/ocr/pdf-anchoring";
 import type { AdvancedSettings, PostProcessingSettings } from "@/lib/ocr/settings";
 
 export interface SubmitOcrJobInput {
@@ -160,12 +159,6 @@ export async function submitOcrJob(
     events: buildQueuedEvents(startedAtIso, "Job created", input.provider, input.ocrModel, input.model),
     checkpoints: [],
     pageNumbers: input.pageNumbers,
-    pageAnchorDigest: input.pageAnchors?.map((p) => ({
-      pageNumber: p.pageNumber,
-      blockCount: p.blocks.length,
-      characterCount: p.characterCount,
-      isHighConfidence: assessTextLayerQuality(p).isHighConfidence,
-    })),
     postProcessing: seedPostProcessingMeta(
       input.postProcessingPayload,
       input.postProcessingPayload.model || input.model,
@@ -282,12 +275,6 @@ export async function resumeOcrJob(input: ResumeOcrJobInput): Promise<ResumeOcrJ
     events: buildQueuedEvents(startedAtIso, "Resume requested", input.provider, input.ocrModel, input.model),
     checkpoints: initialPageOutputs.map(toPageCheckpoint),
     pageNumbers: effectivePageNumbers,
-    pageAnchorDigest: effectivePageAnchors?.map((p) => ({
-      pageNumber: p.pageNumber,
-      blockCount: p.blocks.length,
-      characterCount: p.characterCount,
-      isHighConfidence: assessTextLayerQuality(p).isHighConfidence,
-    })),
     postProcessing: seedPostProcessingMeta(
       input.postProcessingPayload,
       input.postProcessingPayload.model || input.model,

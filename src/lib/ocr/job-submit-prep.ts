@@ -2,6 +2,7 @@ import { normalizeProvider, type ApiProviderSettings, type ProviderKind } from "
 import { db } from "@/lib/db";
 import { resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
 import { buildPrompt, sanitizePostProcessing } from "@/lib/ocr/job-input-helpers";
+import { getDocumentPreset } from "@/lib/ocr/document-presets";
 import {
   DEFAULT_SETTINGS,
   OCR_SETTINGS_KEY,
@@ -18,7 +19,10 @@ async function loadStoredAdvancedSettings(userId: string): Promise<AdvancedSetti
     });
     if (!row) return { ...DEFAULT_SETTINGS };
     return normalizeAdvancedSettings(row);
-  } catch {
+  } catch (error) {
+    console.warn(
+      `loadStoredAdvancedSettings(${userId}) failed: ${error instanceof Error ? error.message : String(error)}; falling back to DEFAULT_SETTINGS`,
+    );
     return { ...DEFAULT_SETTINGS };
   }
 }
@@ -57,10 +61,20 @@ export async function resolveOcrJobInputs(args: {
 
   const storedAdvanced = await loadStoredAdvancedSettings(args.userId);
   const merged = { ...storedAdvanced, ...(args.perRequestSettings ?? {}) };
-  const settingsPayload = normalizeAdvancedSettings(merged);
+  const normalized = normalizeAdvancedSettings(merged);
+  const settingsPayload = applyPresetForcedFlags(normalized);
   const postProcessingPayload = sanitizePostProcessing(args.perRequestPostProcessing);
   const ocrModel = provider === "mistral" ? resolveMistralOcrModel(args.model) : args.model;
   const prompt = buildPrompt(settingsPayload);
 
   return { provider, ocrModel, prompt, settings, settingsPayload, postProcessingPayload };
+}
+
+function applyPresetForcedFlags(settings: AdvancedSettings): AdvancedSettings {
+  const preset = getDocumentPreset(settings.documentPreset);
+  return {
+    ...settings,
+    tableDetection: preset.forceTableDetection ?? settings.tableDetection,
+    preserveFormatting: preset.forcePreserveFormatting ?? settings.preserveFormatting,
+  };
 }

@@ -9,19 +9,26 @@ follows [SemVer](https://semver.org/).
 ## [0.4.0] - 2026-05-04
 
 ### Added
-- Document anchoring: extracts the PDF text layer + bounding boxes server-side and feeds them into the vision model prompt, dramatically reducing hallucinations on born-digital PDFs.
+- Document anchoring: extracts the PDF text layer + bounding boxes server-side and injects them into the vision-model prompt as ground truth.
 - Hybrid text-layer fast-path: skips the vision model entirely on PDFs with a high-confidence text layer (free, lossless, instant).
+- Junk-OCR detector: the fast-path is automatically skipped when the text layer looks like noise (low alphabetic ratio or no word-shaped tokens).
 - Column-aware reading order in the text-layer extractor (handles two-column papers correctly).
 - Heading inference from font size (renders larger fonts as `#`, `##`, `###`).
 - Document-type presets (`generic`, `academic`, `invoice`, `contract`, `form`) that sharpen the per-document prompt and request structured JSON for invoices and forms.
-- New `sourcePdf` field on `POST /api/v1/ocr/batch` and `POST /api/ocr` so callers can hand the server the original PDF for anchoring.
+- `sourcePdf` field on `POST /api/v1/ocr/batch` and `POST /api/ocr` so callers can hand the server the original PDF for anchoring.
 - CLI flags `--preset KIND` and `--no-text-layer` on `extracto ocr` (bash and PowerShell).
-- MCP `ocr_submit` schema gained `pages`, `pageNumbers`, `documentPreset`, and `preferTextLayer`.
-- `OcrSetting` Prisma table gained `preferTextLayer` and `documentPreset` columns (auto-applied via `db push` on container startup).
+- MCP `ocr_submit` schema gained `pages`, `pageNumbers`, `sourcePdf`, `documentPreset`, and `preferTextLayer`.
+- `OcrSetting` Prisma table gained `preferTextLayer` and `documentPreset` columns, auto-applied via `prisma migrate deploy` on container startup.
 - `scripts/benchmark-extraction.ts` for measuring baseline vs anchored vs text-layer performance against any PDF.
+- Caddyfile body cap raised to 128 MB to accommodate `sourcePdf` payloads.
 
 ### Changed
 - The default per-page prompt now adapts to the configured document preset.
+- CLI and MCP submissions now inherit the user's saved `documentPreset` and `preferTextLayer` settings unless overridden per-call.
+- `next.config.ts` declares `pdfjs-dist` as a server-external package for clean Next.js standalone tracing.
+
+### Caveats
+- RTL languages (Arabic, Hebrew) are detected for sort order only; intra-block character order in the text-layer extractor is not yet reversed.
 
 ## [0.3.2] - 2026-05-03
 

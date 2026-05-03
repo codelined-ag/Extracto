@@ -68,9 +68,10 @@ server.tool(
           preview: z.string().describe("Data URL (data:image/* or data:application/pdf;base64,...)"),
           sourcePdf: z
             .string()
+            .max(180_000_000)
             .optional()
             .describe(
-              "Original PDF as a data URL. Enables document anchoring and the text-layer fast-path on the server. Optional; pass the same bytes you'd put in `preview` when the caller pre-rendered images.",
+              "Original PDF as a data URL. Enables document anchoring and the text-layer fast-path on the server. Optional; pass the same bytes you'd put in `preview` when the caller pre-rendered images. Capped at ~128 MB raw (180M base64 chars) to match the server body limit.",
             ),
           pages: z
             .array(z.string())

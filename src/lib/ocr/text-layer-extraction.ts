@@ -111,7 +111,7 @@ function detectHeadingLevels(blocks: AnchorTextBlock[]): number[] {
 function renderBlock(block: AnchorTextBlock, headingLevel: number): string {
   const text = block.text.replace(/\s+/gu, " ").trim();
   if (!text) return "";
-  if (headingLevel >= 1 && headingLevel <= 6 && text.length < 200) {
+  if (headingLevel >= 1 && headingLevel <= 6 && text.length < HEADING_TEXT_MAX_LEN) {
     const hashes = "#".repeat(headingLevel);
     return `${hashes} ${text}`;
   }

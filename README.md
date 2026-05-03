@@ -36,6 +36,8 @@
   </picture>
 </p>
 
+> **v0.4.0**: per-page selection, document anchoring, hybrid text-layer fast-path, and 5 document-type presets. See the [changelog](./CHANGELOG.md) and [extraction quality docs](https://extracto.help/extraction-quality).
+
 ---
 
 ## Why

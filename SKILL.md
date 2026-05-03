@@ -45,6 +45,17 @@ extracto ocr ./report.pdf --model mistral-ocr-latest   # Mistral OCR
 extracto ocr ./photo.jpg --model openai/gpt-4o         # via OpenRouter
 ```
 
+### v0.4.0 quality flags
+
+```bash
+extracto ocr ./paper.pdf --model anthropic/claude-3.5-sonnet --pages 1-5,7   # only OCR these pages
+extracto ocr ./invoice.pdf --model openai/gpt-4o --preset invoice            # request structured invoice JSON
+extracto ocr ./paper.pdf --model anthropic/claude-3.5-sonnet --preset academic
+extracto ocr ./scan.pdf --model llava:13b --no-text-layer                    # force vision model even on born-digital PDFs
+```
+
+`--preset` accepts `generic`, `academic`, `invoice`, `contract`, `form`. The default is `generic`. Born-digital PDFs use the text-layer fast-path automatically (no VLM call) unless you pass `--no-text-layer`.
+
 ### List recent jobs
 
 ```bash
