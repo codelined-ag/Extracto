@@ -5,16 +5,9 @@ import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { authenticateMutation, authHasScope } from "@/lib/auth/request";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
-import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
+import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
 import { waitForOcrJobCompletion } from "@/lib/ocr/job-wait";
-import {
-  buildPrompt,
-  sanitizePostProcessing,
-  submitOcrJob,
-} from "@/lib/ocr/pipeline";
-import { resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
-import { normalizeAdvancedSettings } from "@/lib/ocr/settings";
-import { getApiSettings } from "@/lib/ocr/settings-store";
+import { submitOcrJob } from "@/lib/ocr/pipeline";
 
 interface OpenAIChatRequest {
   model?: unknown;
@@ -117,30 +110,23 @@ export async function POST(request: NextRequest) {
   }
 
   // Submit directly via the pipeline helper (no HTTP-loopback to /api/ocr).
-  const storedSettings = await getApiSettings(result.auth.userId);
-  const settings = { ...storedSettings, provider: normalizeProvider(storedSettings.provider) };
-  const settingsPayload = normalizeAdvancedSettings(undefined);
-  const postProcessingPayload = sanitizePostProcessing(
-    prompt ? { enabled: true, instruction: prompt, outputFormat: "markdown" } : undefined,
-  );
-  const provider = normalizeProvider((settings).provider);
-  const ocrModel = provider === "mistral" ? resolveMistralOcrModel(model) : model;
-  const ocrPrompt = buildPrompt(settingsPayload);
+  const inputs = await resolveOcrJobInputs({
+    userId: result.auth.userId,
+    model,
+    perRequestPostProcessing: prompt
+      ? { enabled: true, instruction: prompt, outputFormat: "markdown" }
+      : undefined,
+  });
 
   let jobId: string;
   try {
     const created = await submitOcrJob({
+      ...inputs,
       userId: result.auth.userId,
       apiKeyId: result.auth.method === "api-key" ? result.auth.apiKeyId ?? null : null,
       fileName: "openai-adapter",
       model,
-      ocrModel,
-      provider,
-      settings,
-      settingsPayload,
-      postProcessingPayload,
       inputPreviews: [preview],
-      prompt: ocrPrompt,
       sourcePreview: null,
     });
     jobId = created.jobId;

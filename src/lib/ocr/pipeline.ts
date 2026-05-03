@@ -80,10 +80,8 @@ export interface ModelCatalog {
 }
 
 import type {
-  OcrPageCheckpoint,
   OcrProgressEvent,
   OcrProgressMetadata,
-  OcrProgressStage,
 } from "@/lib/ocr/pipeline-progress";
 import {
   appendProgressEvent,
@@ -92,7 +90,6 @@ import {
   ocrStageProgressPct,
 } from "@/lib/ocr/pipeline-progress";
 import type {
-  OcrJsonResult,
   ProcessedPageOutput,
 } from "@/lib/ocr/pipeline-result-builder";
 import {
@@ -110,19 +107,15 @@ import {
   normalizePostProcessedText,
 } from "@/lib/ocr/pipeline-post-processing";
 
-export type {
-  OcrPageCheckpoint,
-  OcrProgressEvent,
-  OcrProgressMetadata,
-  OcrProgressStage,
-  OcrJsonResult,
-  ProcessedPageOutput,
-};
+// Pipeline barrel: only re-exports symbols that callers genuinely
+// import via `@/lib/ocr/pipeline`. Leaf-only symbols (provider
+// dispatch, ollama runners, full result-builder) live in their own
+// modules and should be imported directly. Drives down the "barrel
+// drift" risk flagged by cross_module_architecture.
+export type { OcrProgressEvent };
 export {
   appendProgressEvent,
   buildProgressMetadata,
-  ocrStageProgressPct,
-  buildJsonResult,
   toJsonValue,
   buildPostProcessingPrompt,
   computeTextStats,
@@ -148,27 +141,14 @@ export interface ProcessOcrJobInput {
 }
 
 import {
-  getOllamaCandidatesForOcr,
   getOllamaDiscoveryFallbackHost,
   getOllamaModels,
-  ollamaOcrWithResolvedHost,
-  ollamaPostProcessingWithResolvedHost,
   ollamaUnloadWithResolvedHost,
   ollamaWarmupWithResolvedHost,
 } from "@/lib/ocr/ollama-dispatch";
 
-export {
-  getOllamaCandidatesForOcr,
-  getOllamaDiscoveryFallbackHost,
-  getOllamaModels,
-  ollamaOcrWithResolvedHost,
-  ollamaPostProcessingWithResolvedHost,
-  ollamaUnloadWithResolvedHost,
-  ollamaWarmupWithResolvedHost,
-};
-
-import { runProviderOcr, runProviderPostProcessing } from "@/lib/ocr/provider-dispatch";
-export { runProviderOcr, runProviderPostProcessing };
+// Re-exported for callers that go through the pipeline barrel.
+export { getOllamaDiscoveryFallbackHost };
 
 import { runOcrPages, type OrchestratorState } from "@/lib/ocr/pipeline-page-loop";
 import { runPostProcessingStage } from "@/lib/ocr/pipeline-post-processing-stage";

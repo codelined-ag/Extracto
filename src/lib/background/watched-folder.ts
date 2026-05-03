@@ -3,14 +3,11 @@ import path from "node:path";
 
 import { db } from "@/lib/db";
 import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
+import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
 import {
-  buildPrompt,
   normalizePreviewForHistory,
-  sanitizePostProcessing,
   submitOcrJob,
 } from "@/lib/ocr/pipeline";
-import { resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
-import { normalizeAdvancedSettings } from "@/lib/ocr/settings";
 import { getApiSettings } from "@/lib/ocr/settings-store";
 
 interface WatchFolderConfig {
@@ -84,28 +81,23 @@ async function ingestFile(filePath: string, user: UserRef): Promise<void> {
 
   const cfg = getWatchFolderConfig();
   const storedSettings = await getApiSettings(user.id);
-  const settings = cfg.provider
+  const preloadedSettings = cfg.provider
     ? { ...storedSettings, provider: normalizeProvider(cfg.provider) }
-    : { ...storedSettings, provider: normalizeProvider(storedSettings.provider) };
-  const settingsPayload = normalizeAdvancedSettings(undefined);
-  const postProcessingPayload = sanitizePostProcessing(undefined);
-  const provider = normalizeProvider((settings).provider);
-  const ocrModel = provider === "mistral" ? resolveMistralOcrModel(cfg.model) : cfg.model;
-  const prompt = buildPrompt(settingsPayload);
+    : storedSettings;
+  const inputs = await resolveOcrJobInputs({
+    userId: user.id,
+    model: cfg.model,
+    preloadedSettings,
+  });
   const sourcePreview = normalizePreviewForHistory(dataUrl);
 
   const { jobId } = await submitOcrJob({
+    ...inputs,
     userId: user.id,
     apiKeyId: null,
     fileName,
     model: cfg.model,
-    ocrModel,
-    provider,
-    settings,
-    settingsPayload,
-    postProcessingPayload,
     inputPreviews: [dataUrl],
-    prompt,
     sourcePreview,
     priority: -2,
   });

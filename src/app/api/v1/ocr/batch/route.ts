@@ -3,23 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
-import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
-import {
-  buildPrompt,
-  normalizePreviewForHistory,
-  sanitizePostProcessing,
-  submitOcrJob,
-} from "@/lib/ocr/pipeline";
-import {
-  resolveMistralOcrModel,
-} from "@/lib/ocr/providers/mistral";
-import {
-  normalizeAdvancedSettings,
-  type AdvancedSettings,
-  type PostProcessingSettings,
-} from "@/lib/ocr/settings";
+import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
+import { normalizePreviewForHistory, submitOcrJob } from "@/lib/ocr/pipeline";
+import type { AdvancedSettings, PostProcessingSettings } from "@/lib/ocr/settings";
 import { getApiSettings } from "@/lib/ocr/settings-store";
 
 const MAX_BATCH_SIZE = 50;
@@ -84,38 +72,30 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
     throw new ApiRouteError(parsed.error, 400);
   }
 
-  // Load the user's stored provider settings once for the whole batch.
-  const storedSettings = await getApiSettings(auth.userId);
-  const settings = {
-    ...storedSettings,
-    provider: normalizeProvider(storedSettings.provider),
-  };
+  const preloadedSettings = await getApiSettings(auth.userId);
   const apiKeyId = auth.method === "api-key" ? auth.apiKeyId ?? null : null;
   const batchId = `batch_${randomBytes(8).toString("hex")}`;
 
   const submissions: Array<{ fileName: string; jobId?: string; error?: string }> = [];
   for (const file of parsed) {
     try {
-      const settingsPayload = normalizeAdvancedSettings(file.settings);
-      const postProcessingPayload = sanitizePostProcessing(file.postProcessing);
-      const provider = normalizeProvider((settings).provider);
-      const ocrModel = provider === "mistral" ? resolveMistralOcrModel(file.model) : file.model;
-      const prompt = buildPrompt(settingsPayload);
+      const inputs = await resolveOcrJobInputs({
+        userId: auth.userId,
+        model: file.model,
+        perRequestSettings: file.settings,
+        perRequestPostProcessing: file.postProcessing,
+        preloadedSettings,
+      });
       const inputPreviews = file.pages && file.pages.length > 0 ? file.pages : [file.preview];
       const sourcePreview = normalizePreviewForHistory(inputPreviews[0] || "");
 
       const { jobId } = await submitOcrJob({
+        ...inputs,
         userId: auth.userId,
         apiKeyId,
         fileName: file.fileName,
         model: file.model,
-        ocrModel,
-        provider,
-        settings,
-        settingsPayload,
-        postProcessingPayload,
         inputPreviews,
-        prompt,
         sourcePreview,
         priority: file.priority,
         batchId,

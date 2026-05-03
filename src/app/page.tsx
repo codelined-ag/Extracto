@@ -166,7 +166,7 @@ interface Model {
 // Server-side ClientApiSettings deliberately omits apiKey. The UI form
 // state still needs an apiKey field for the password input — modeled as a
 // local-only extension so the network shape and the form shape don't drift.
-type ApiSettings = ClientApiSettings & { apiKey: string };
+type ApiSettingsForm = ClientApiSettings & { apiKey: string };
 
 
 type ProviderModelSelections = Partial<Record<ProviderKind, string>>;
@@ -226,7 +226,7 @@ function pickPreferredProviderModelId(
  return modelIds[0] ||"";
 }
 
-const DEFAULT_API_SETTINGS: ApiSettings = {
+const DEFAULT_API_SETTINGS: ApiSettingsForm = {
  provider:"ollama",
  apiEndpoint: DEFAULT_OLLAMA_ENDPOINT,
  apiKey:"",
@@ -476,8 +476,8 @@ export default function ExtractoPage() {
  const [files, setFiles] = React.useState<ProcessingFile[]>([]);
  const [selectedModel, setSelectedModel] = React.useState<string>(OLLAMA_FALLBACK_MODELS[0].id);
  const [models, setModels] = React.useState<Model[]>(OLLAMA_FALLBACK_MODELS);
- const [apiSettings, setApiSettings] = React.useState<ApiSettings>(DEFAULT_API_SETTINGS);
- const [apiSettingsDraft, setApiSettingsDraft] = React.useState<ApiSettings>(DEFAULT_API_SETTINGS);
+ const [apiSettings, setApiSettings] = React.useState<ApiSettingsForm>(DEFAULT_API_SETTINGS);
+ const [apiSettingsDraft, setApiSettingsDraft] = React.useState<ApiSettingsForm>(DEFAULT_API_SETTINGS);
  const [apiKeyDirty, setApiKeyDirty] = React.useState(false);
  const [isDragOver, setIsDragOver] = React.useState(false);
  const [isProcessing, setIsProcessing] = React.useState(false);
@@ -663,7 +663,7 @@ export default function ExtractoPage() {
  );
 
  const fetchAvailableModels = React.useCallback(
- async (values: ApiSettings) => {
+ async (values: ApiSettingsForm) => {
  setIsLoadingModels(true);
  setModelError("");
 
@@ -776,9 +776,9 @@ export default function ExtractoPage() {
  throw new Error(`Failed to load API settings (${apiResp.status})`);
  }
 
- const values = (await apiResp.json()) as ApiSettings;
+ const values = (await apiResp.json()) as ApiSettingsForm;
  const provider = normalizeProvider(values.provider);
- const normalizedSettings: ApiSettings = {
+ const normalizedSettings: ApiSettingsForm = {
  provider,
  apiEndpoint: values.apiEndpoint?.trim() || defaultEndpointForProvider(provider),
  apiKey:"",
@@ -830,9 +830,9 @@ export default function ExtractoPage() {
  throw new Error(payload.error || `Failed to save API settings (${response.status})`);
  }
 
- const saved = (await response.json()) as ApiSettings;
+ const saved = (await response.json()) as ApiSettingsForm;
  const provider = normalizeProvider(saved.provider);
- const normalizedSettings: ApiSettings = {
+ const normalizedSettings: ApiSettingsForm = {
  provider,
  apiEndpoint: saved.apiEndpoint?.trim() || defaultEndpointForProvider(provider),
  apiKey:"",

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus } from "@prisma/client";
 
 import { ApiProviderSettings, getApiSettings } from "@/lib/ocr/settings-store";
-import { normalizeMistralApiBase, resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
+import { normalizeMistralApiBase } from "@/lib/ocr/providers/mistral";
 import {
   normalizeOpenAICompatApiBase,
   normalizeOpenRouterApiBase,
@@ -12,9 +12,9 @@ import { enforceProviderEndpointPolicy, normalizeProvider, ProviderKind } from "
 import { resolveOllamaHostEndpoint } from "@/lib/ocr/host-normalization";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
+import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
 import {
   AdvancedSettings,
-  normalizeAdvancedSettings,
   PostProcessingSettings,
 } from "@/lib/ocr/settings";
 import { ApiRouteError, handleApiError, pipelineStatusFor } from "@/lib/api-error";
@@ -24,12 +24,10 @@ import {
   getDefaultOpenRouterApiUrl,
 } from "@/lib/ocr/provider-config";
 import {
-  buildPrompt,
   getModelCatalog,
   normalizePreviewForHistory,
   getOllamaDiscoveryFallbackHost,
   resumeOcrJob,
-  sanitizePostProcessing,
   submitOcrJob,
 } from "@/lib/ocr/pipeline";
 
@@ -95,7 +93,6 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
   const startedAtMs = Date.now();
   try {
     const userId = auth.userId;
-    const authResult = { auth };
 
     const limited = enforceOcrSubmitRateLimit(auth, getClientIpAddress(request));
     if (limited) return limited;
@@ -122,9 +119,6 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
       : preview
         ? [preview]
         : [];
-    const settingsPayload = normalizeAdvancedSettings(body.settings);
-    const postProcessingPayload = sanitizePostProcessing(body.postProcessing);
-    const settings = storedSettings;
 
     if (!model) {
       throw new ApiRouteError("Model is required", 400);
@@ -137,9 +131,13 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
     const resumeRequested = body.resume === true || body.resume === "true";
     const resumeJobId = typeof body.jobId === "string" ? body.jobId.trim() : "";
 
-    const provider = normalizeProvider((settings).provider);
-    const ocrModel = provider === "mistral" ? resolveMistralOcrModel(model) : model;
-    const prompt = buildPrompt(settingsPayload);
+    const inputs = await resolveOcrJobInputs({
+      userId,
+      model,
+      perRequestSettings: body.settings,
+      perRequestPostProcessing: body.postProcessing,
+      preloadedSettings: storedSettings,
+    });
     const sourcePreview = normalizePreviewForHistory(inputPreviews[0] || "");
 
     if (resumeRequested) {
@@ -148,18 +146,13 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
       }
 
       const { jobId, pageCount, pageRecords } = await resumeOcrJob({
+        ...inputs,
         jobId: resumeJobId,
         userId,
         apiKeyId: auth.method === "api-key" ? auth.apiKeyId ?? null : null,
         fileName,
         model,
-        ocrModel,
-        provider,
-        settings,
-        settingsPayload,
-        postProcessingPayload,
         inputPreviews,
-        prompt,
         sourcePreview,
         startedAtMs,
       });
@@ -181,17 +174,12 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
       ? body.batchId.trim().slice(0, 64)
       : null;
     const { jobId, pageCount } = await submitOcrJob({
+      ...inputs,
       userId,
-      apiKeyId: authResult.auth.method === "api-key" ? authResult.auth.apiKeyId ?? null : null,
+      apiKeyId: auth.method === "api-key" ? auth.apiKeyId ?? null : null,
       fileName,
       model,
-      ocrModel,
-      provider,
-      settings,
-      settingsPayload,
-      postProcessingPayload,
       inputPreviews,
-      prompt,
       sourcePreview,
       priority: requestedPriority,
       batchId: requestedBatchId,
