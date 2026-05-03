@@ -1,8 +1,9 @@
-// Shared types for the knowledge-base export pipeline.
-// All KB modules consume these — no Prisma, no Next.js, no I/O imports
-// belong here.
-
-export type ChunkingStrategy = "fixed" | "sentence" | "paragraph";
+export type ChunkingStrategy =
+  | "fixed"
+  | "sentence"
+  | "paragraph"
+  | "hierarchical"
+  | "semantic";
 
 export interface ChunkingOptions {
   strategy: ChunkingStrategy;
@@ -10,8 +11,42 @@ export interface ChunkingOptions {
   maxChunkSize: number;
   /** For "fixed" strategy: char overlap between adjacent chunks. */
   overlap?: number;
-  /** For "sentence" / "paragraph": minimum chunk size before merging onward. */
+  /** For "sentence" / "paragraph" / "hierarchical": minimum chunk size before merging onward. */
   minChunkSize?: number;
+  /**
+   * For "semantic": percentile (0-100) of pairwise cosine distances between
+   * consecutive sentence embeddings; distances above this percentile become
+   * chunk boundaries. Higher = fewer, larger chunks. Default 95.
+   */
+  breakpointPercentile?: number;
+  /**
+   * For "hierarchical": maximum heading depth (1..6) to honor when building
+   * the heading breadcrumb path. Headings deeper than this are flattened
+   * into the deepest in-bounds parent. Default 6 (honor all).
+   */
+  maxHeadingDepth?: number;
+}
+
+/**
+ * Strategy-output shape: text plus any strategy-specific metadata that the
+ * orchestrator merges into the final ChunkMetadata. Keeping the extras
+ * narrowly typed prevents strategies from sneaking arbitrary fields into
+ * the persisted vector-store record.
+ */
+export interface ChunkPiece {
+  text: string;
+  extras?: {
+    /**
+     * Hierarchical: ordered list of heading texts from the outermost ancestor
+     * down to the chunk's parent leaf. NOTE: when ATX heading levels are
+     * skipped (e.g. an H1 followed directly by an H3), `headingPath.length`
+     * will be smaller than `headingLevel`. Consumers must NOT index by level —
+     * always treat the path as a logical breadcrumb of in-document headings.
+     */
+    headingPath?: string[];
+    /** Hierarchical: deepest heading level (1..6) the chunk lives under, or 0 if none. */
+    headingLevel?: number;
+  };
 }
 
 export interface ChunkMetadata {
@@ -39,6 +74,14 @@ export interface ChunkMetadata {
   sourceEndOffset?: number;
   /** SHA-256 hex digest of the chunk text — enables idempotent upserts. */
   contentHash?: string;
+  /**
+   * Hierarchical: ordered breadcrumb of heading texts (outermost → parent leaf).
+   * `headingPath.length` may be less than `headingLevel` when ATX levels are
+   * skipped. Treat as a logical breadcrumb, not as a level-indexed array.
+   */
+  headingPath?: string[];
+  /** Hierarchical: deepest heading level (1..6), or 0 if no heading context. */
+  headingLevel?: number;
 }
 
 export interface Chunk {
@@ -48,32 +91,17 @@ export interface Chunk {
 
 import type { ProviderKind } from "@/lib/api-types";
 
-// Embedding only supports the chat-completions-style providers (Mistral
-// has no embeddings endpoint at this time). Derive from ProviderKind so
-// adding a new provider doesn't silently leave EmbeddingProviderKind
-// out of sync.
 export type EmbeddingProviderKind = Extract<ProviderKind, "ollama" | "openrouter" | "openai_compat">;
 
 export interface EmbeddingProviderConfig {
   provider: EmbeddingProviderKind;
   apiEndpoint: string;
-  /** Required for openrouter and (in practice) openai_compat. Ollama leaves it unset. */
   apiKey?: string;
   model: string;
-  /** Vector dimensionality for the model — needed at collection-create time
-      to validate compatibility with the chosen vector store. */
   dimensions?: number;
 }
 
-/** Adapter contract for a backing vector store (Chroma, Qdrant, etc.). */
 export interface VectorStoreAdapter {
-  /** Push or update a batch of chunks. Implementations may batch internally. */
   upsert(chunks: Array<Chunk & { embedding: number[] }>, collectionName: string): Promise<void>;
-  /**
-   * True iff the collection exists. Implementations typically auto-create on
-   * upsert, so the only legitimate use of this method is pre-flight UX
-   * (warn before writing to a name that's already taken, or report whether
-   * a previous export landed).
-   */
   collectionExists(name: string): Promise<boolean>;
 }

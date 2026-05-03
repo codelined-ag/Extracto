@@ -154,7 +154,8 @@ describe("chunk (dispatcher)", () => {
 
   it("dispatches to chunkFixed when strategy=fixed", () => {
     const result = chunk("abcdefghij", { strategy: "fixed", maxChunkSize: 4, overlap: 0 });
-    expect(result).toEqual(["abcd", "efgh", "ij"]);
+    expect(result.map((p) => p.text)).toEqual(["abcd", "efgh", "ij"]);
+    expect(result.every((p) => p.extras === undefined)).toBe(true);
   });
 
   it("dispatches to chunkSentence when strategy=sentence", () => {
@@ -163,9 +164,8 @@ describe("chunk (dispatcher)", () => {
   });
 
   it("dispatches to chunkParagraph when strategy=paragraph", () => {
-    // maxChunkSize=2 < merged "A\n\nB" length 4, forces split
     const result = chunk("A\n\nB", { strategy: "paragraph", maxChunkSize: 2 });
-    expect(result).toEqual(["A", "B"]);
+    expect(result.map((p) => p.text)).toEqual(["A", "B"]);
   });
 
   it("throws on maxChunkSize=0", () => {
@@ -177,13 +177,28 @@ describe("chunk (dispatcher)", () => {
   });
 
   it("uses defaults when overlap/minChunkSize are omitted", () => {
-    expect(chunk("abcdefgh", { strategy: "fixed", maxChunkSize: 4 })).toEqual(["abcd", "efgh"]);
-    expect(chunk("Hello.", { strategy: "sentence", maxChunkSize: 100 })).toEqual(["Hello."]);
+    expect(chunk("abcdefgh", { strategy: "fixed", maxChunkSize: 4 }).map((p) => p.text)).toEqual([
+      "abcd",
+      "efgh",
+    ]);
+    expect(chunk("Hello.", { strategy: "sentence", maxChunkSize: 100 }).map((p) => p.text)).toEqual(
+      ["Hello."],
+    );
+  });
+
+  it("refuses semantic via the sync chunk() entrypoint", () => {
+    expect(() => chunk("abc", { strategy: "semantic", maxChunkSize: 100 })).toThrow(/semantic/i);
   });
 });
 
 describe("SUPPORTED_STRATEGIES", () => {
-  it("lists fixed, sentence, paragraph", () => {
-    expect([...SUPPORTED_STRATEGIES]).toEqual(["fixed", "sentence", "paragraph"]);
+  it("lists every strategy the dispatcher accepts", () => {
+    expect([...SUPPORTED_STRATEGIES]).toEqual([
+      "fixed",
+      "sentence",
+      "paragraph",
+      "hierarchical",
+      "semantic",
+    ]);
   });
 });
