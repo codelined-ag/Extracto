@@ -15,6 +15,31 @@
   <a href="#configuration">Configuration</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/codelined-ag/extracto/actions/workflows/ci.yml"><img src="https://github.com/codelined-ag/extracto/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/codelined-ag/extracto?color=brightgreen" alt="License"></a>
+  <a href="https://github.com/codelined-ag/extracto/pkgs/container/extracto"><img src="https://img.shields.io/badge/ghcr.io-extracto-blue?logo=docker" alt="GHCR"></a>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/main-dark.png">
+    <img src="docs/screenshots/main-light.png" alt="Extracto workspace" width="100%">
+  </picture>
+</p>
+
+<details>
+<summary>More screenshots</summary>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/auth-dark.png">
+    <img src="docs/screenshots/auth-light.png" alt="Sign-in" width="100%">
+  </picture>
+</p>
+
+</details>
+
 ---
 
 ## What it does
@@ -100,6 +125,18 @@ docker compose logs -f app
 ```
 
 The container generates a strong `AUTH_SECRET` on first boot and writes it to `/app/data/.auth_secret` (or you can set your own in `docker.env`). Open <http://localhost:3000>.
+
+### Pre-built image (skip the build)
+
+```bash
+docker pull ghcr.io/codelined-ag/extracto:latest
+docker run -d --name extracto -p 3000:3000 \
+  -v extracto-data:/app/data \
+  -e AUTH_SECRET="$(openssl rand -hex 32)" \
+  ghcr.io/codelined-ag/extracto:latest
+```
+
+Multi-arch (`linux/amd64` + `linux/arm64`). Pin a release with `:v0.3.0` instead of `:latest`.
 
 ---
 
@@ -235,6 +272,8 @@ Each delivery carries an `X-Extracto-Signature: t=<unix-ts>,v1=<hex>` HMAC-SHA25
 
 `/api/*` is the browser-internal surface (no version contract). `/api/v1/*` is the stable API (semver, no breaking changes within v1).
 
+The full v1 contract is also published as an OpenAPI spec at [`openapi.yaml`](./openapi.yaml) — import into Bruno, Postman, Insomnia, or any client generator.
+
 ---
 
 ## Use it from an agent
@@ -282,6 +321,28 @@ extracto settings get
 `extracto ocr` accepts `.pdf`, `.png`, `.jpg`/`.jpeg`, `.webp` up to ~32 MiB. It base64-encodes and submits via `/api/v1/ocr/batch`, then polls until the job leaves `QUEUED`/`PROCESSING`. Errors print to stderr with non-zero exit codes.
 
 The CLI lives at `scripts/extracto.sh` (Bash, Linux + macOS) and `scripts/extracto.ps1` (PowerShell, Windows).
+
+### MCP server (Claude Desktop / Cursor / Codex)
+
+Extracto ships a Model Context Protocol server at `scripts/mcp-server.ts`. It exposes the v1 API as agent tools (`ocr_submit`, `ocr_get`, `jobs_list`, `job_stop`, `kb_search`, `presets_list`) over stdio.
+
+```jsonc
+// Claude Desktop config
+{
+  "mcpServers": {
+    "extracto": {
+      "command": "bun",
+      "args": ["run", "/abs/path/to/extracto/scripts/mcp-server.ts"],
+      "env": {
+        "EXTRACTO_URL": "http://localhost:3000",
+        "EXTRACTO_TOKEN": "extr_..."
+      }
+    }
+  }
+}
+```
+
+Full setup walkthrough: [`examples/mcp.md`](./examples/mcp.md).
 
 ### The agent skill
 

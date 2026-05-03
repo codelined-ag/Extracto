@@ -1,0 +1,650 @@
+openapi: 3.1.0
+info:
+  title: Extracto v1 API
+  version: 0.3.0
+  description: |
+    Stable bearer-auth HTTP surface for Extracto. Mint a key with
+    `extracto api-key create <user-email> <name>` (or `POST /api/v1/keys`
+    via session auth), then send it as `Authorization: Bearer <key>` on
+    every call below.
+
+    Mutation endpoints additionally require a same-origin `Origin` header
+    that matches the request URL (CSRF-style).
+  license:
+    name: MIT
+    url: https://github.com/codelined-ag/extracto/blob/main/LICENSE
+servers:
+  - url: http://localhost:3000
+    description: Local Docker
+  - url: https://extracto.example.com
+    description: Production
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: extr_*
+    metricsBearer:
+      type: http
+      scheme: bearer
+      description: Separate token, set via `METRICS_TOKEN` env.
+
+  schemas:
+    OcrJob:
+      type: object
+      required: [id, status, fileName, model, createdAt]
+      properties:
+        id: { type: string }
+        status:
+          type: string
+          enum: [QUEUED, PROCESSING, COMPLETED, FAILED]
+        fileName: { type: string }
+        sourcePreview: { type: string, nullable: true }
+        model: { type: string }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+        processingMs: { type: integer, nullable: true }
+        metadata: { type: object, additionalProperties: true }
+        errorMessage: { type: string, nullable: true }
+        extractedText: { type: string, nullable: true }
+        result: { type: object, additionalProperties: true, nullable: true }
+
+    BatchSubmission:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items:
+            type: object
+            required: [fileName, model, preview]
+            properties:
+              fileName: { type: string }
+              model: { type: string }
+              preview:
+                type: string
+                description: Data URL (data:image/* or data:application/pdf).
+              priority:
+                type: integer
+                minimum: -10
+                maximum: 10
+              settings: { $ref: "#/components/schemas/AdvancedSettings" }
+              postProcessing: { $ref: "#/components/schemas/PostProcessingSettings" }
+
+    BatchResponse:
+      type: object
+      required: [batchId, submissions]
+      properties:
+        batchId: { type: string }
+        submissions:
+          type: array
+          items:
+            type: object
+            required: [fileName, jobId]
+            properties:
+              fileName: { type: string }
+              jobId: { type: string }
+
+    AdvancedSettings:
+      type: object
+      properties:
+        language: { type: string, default: auto }
+        tableDetection: { type: boolean, default: true }
+        handwritingRecognition: { type: boolean, default: false }
+        preserveFormatting: { type: boolean, default: true }
+        customPrompt: { type: string }
+        quality: { type: integer, minimum: 0, maximum: 100, default: 80 }
+
+    PostProcessingSettings:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        instruction: { type: string, maxLength: 6000 }
+        outputFormat:
+          type: string
+          enum: [markdown, json]
+          default: markdown
+        model: { type: string }
+
+    ApiKey:
+      type: object
+      required: [id, name, prefix, scopes, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        prefix: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        rateLimitPerMinute: { type: integer, nullable: true }
+        totalRequests: { type: integer }
+        requestsThisMonth: { type: integer }
+        monthlyResetAt: { type: string, format: date-time, nullable: true }
+        lastUsedAt: { type: string, format: date-time, nullable: true }
+        revokedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    Preset:
+      type: object
+      required: [id, name, instruction, outputFormat, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        name: { type: string, maxLength: 80 }
+        instruction: { type: string, maxLength: 6000 }
+        outputFormat: { type: string, enum: [markdown, json] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Webhook:
+      type: object
+      required: [id, url, events, active, createdAt]
+      properties:
+        id: { type: string }
+        url: { type: string, format: uri }
+        events:
+          type: array
+          items:
+            type: string
+            enum: [job.completed, job.failed]
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    KbExportRequest:
+      type: object
+      required: [jobId, collectionName, vectorStore, embedding, chunking]
+      properties:
+        jobId: { type: string }
+        collectionName: { type: string }
+        vectorStore:
+          type: object
+          required: [kind, baseUrl]
+          properties:
+            kind: { type: string, enum: [chroma, qdrant, weaviate] }
+            baseUrl: { type: string, format: uri }
+            apiKey: { type: string }
+            dimensions: { type: integer, minimum: 1 }
+        embedding:
+          type: object
+          required: [provider, apiEndpoint, model]
+          properties:
+            provider:
+              type: string
+              enum: [ollama, openrouter, openai_compat]
+            apiEndpoint: { type: string, format: uri }
+            apiKey: { type: string }
+            model: { type: string }
+            dimensions: { type: integer, minimum: 1 }
+        chunking:
+          type: object
+          required: [strategy, maxChunkSize]
+          properties:
+            strategy:
+              type: string
+              enum: [fixed, sentence, paragraph]
+            maxChunkSize: { type: integer, minimum: 1, maximum: 10000 }
+            overlap: { type: integer, minimum: 0 }
+            minChunkSize: { type: integer, minimum: 0 }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+  parameters:
+    JobId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Per-key or per-IP rate limit exceeded
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+security:
+  - bearer: []
+
+paths:
+  /api/v1/ocr/batch:
+    post:
+      summary: Submit one or more OCR jobs in a single batch
+      operationId: submitOcrBatch
+      tags: [OCR]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BatchSubmission" }
+      responses:
+        "200":
+          description: Batch accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/openai/chat/completions:
+    post:
+      summary: OpenAI-shaped chat-completions adapter that performs OCR
+      operationId: openaiChatCompletions
+      tags: [OCR]
+      description: |
+        Drop-in for OpenAI-SDK code that wants vision OCR. Pass an
+        `image_url` content part (data URL); Extracto submits an OCR
+        job, blocks until it completes (up to 5 minutes), and returns
+        the standard OpenAI Chat Completions shape.
+      requestBody:
+        required: true
+        content:
+          application/json: {}
+      responses:
+        "200":
+          description: OpenAI-shaped completion
+          content:
+            application/json: {}
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/jobs:
+    get:
+      summary: List the caller's OCR jobs
+      operationId: listJobs
+      tags: [Jobs]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [QUEUED, PROCESSING, COMPLETED, FAILED]
+      responses:
+        "200":
+          description: Job list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items: { $ref: "#/components/schemas/OcrJob" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    delete:
+      summary: Bulk-delete the caller's jobs
+      operationId: deleteJobs
+      tags: [Jobs]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [QUEUED, PROCESSING, COMPLETED, FAILED]
+      responses:
+        "200":
+          description: Number deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { deleted: { type: integer } }
+
+  /api/jobs/{id}:
+    get:
+      summary: Fetch a single job (with hydrated text + result)
+      operationId: getJob
+      tags: [Jobs]
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      responses:
+        "200":
+          description: Job
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { job: { $ref: "#/components/schemas/OcrJob" } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Delete one job
+      operationId: deleteJob
+      tags: [Jobs]
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { deleted: { type: integer } }
+
+  /api/jobs/{id}/control:
+    post:
+      summary: Stop a running job
+      operationId: controlJob
+      tags: [Jobs]
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [stop] }
+      responses:
+        "200":
+          description: Stop requested
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stopRequested: { type: boolean }
+                  running: { type: boolean }
+
+  /api/jobs/{id}/stream:
+    get:
+      summary: Server-Sent Events stream of job progress
+      operationId: streamJob
+      tags: [Jobs]
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream: {}
+
+  /api/v1/keys:
+    get:
+      summary: List the caller's API keys (session-only)
+      operationId: listApiKeys
+      tags: [Keys]
+      responses:
+        "200":
+          description: Keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items: { $ref: "#/components/schemas/ApiKey" }
+                  availableScopes:
+                    type: array
+                    items: { type: string }
+        "403":
+          description: Bearer-token requests rejected by design
+    post:
+      summary: Mint a new API key (session-only; plaintext returned ONCE)
+      operationId: createApiKey
+      tags: [Keys]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 64 }
+                scopes:
+                  type: array
+                  items: { type: string }
+                rateLimitPerMinute:
+                  type: integer
+                  minimum: 1
+                  maximum: 600
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key:
+                    allOf:
+                      - $ref: "#/components/schemas/ApiKey"
+                      - type: object
+                        properties: { plaintext: { type: string } }
+                  warning: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409":
+          description: Per-user key cap reached
+
+  /api/v1/keys/{id}:
+    delete:
+      summary: Revoke an API key (session-only)
+      operationId: revokeApiKey
+      tags: [Keys]
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      responses:
+        "200":
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { revoked: { type: integer } }
+
+  /api/v1/presets:
+    get:
+      summary: List output presets
+      operationId: listPresets
+      tags: [Presets]
+      responses:
+        "200":
+          description: Presets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  presets:
+                    type: array
+                    items: { $ref: "#/components/schemas/Preset" }
+    post:
+      summary: Create a preset
+      operationId: createPreset
+      tags: [Presets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, instruction]
+              properties:
+                name: { type: string, maxLength: 80 }
+                instruction: { type: string, maxLength: 6000 }
+                outputFormat:
+                  type: string
+                  enum: [markdown, json]
+                  default: markdown
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { preset: { $ref: "#/components/schemas/Preset" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409":
+          description: Per-user preset cap reached
+
+  /api/v1/presets/{id}:
+    delete:
+      summary: Delete a preset
+      operationId: deletePreset
+      tags: [Presets]
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { deleted: { type: integer } }
+
+  /api/v1/webhooks:
+    get:
+      summary: List webhooks
+      operationId: listWebhooks
+      tags: [Webhooks]
+      responses:
+        "200":
+          description: Webhooks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhooks:
+                    type: array
+                    items: { $ref: "#/components/schemas/Webhook" }
+    post:
+      summary: Register a webhook (signing secret returned ONCE)
+      operationId: createWebhook
+      tags: [Webhooks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, format: uri }
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum: [job.completed, job.failed]
+                active: { type: boolean, default: true }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhook:
+                    allOf:
+                      - $ref: "#/components/schemas/Webhook"
+                      - type: object
+                        properties: { secret: { type: string } }
+                  warning: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/v1/webhooks/{id}:
+    delete:
+      summary: Delete a webhook
+      operationId: deleteWebhook
+      tags: [Webhooks]
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { deleted: { type: integer } }
+
+  /api/v1/search:
+    get:
+      summary: Full-text search across the caller's KB-exported jobs
+      operationId: search
+      tags: [KB]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json: {}
+
+  /api/v1/export/kb:
+    post:
+      summary: Export an OCR job's text to a vector store
+      operationId: exportKb
+      tags: [KB]
+      description: |
+        Requires `KB_EXPORT_ENABLED=1` on the server. The embedding
+        endpoint is policy-checked against the same allowlists as the
+        OCR providers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KbExportRequest" }
+      responses:
+        "200":
+          description: Export result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId: { type: string }
+                  collectionName: { type: string }
+                  chunkCount: { type: integer }
+                  embeddingDimensions: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503":
+          description: KB export disabled (set `KB_EXPORT_ENABLED=1`)
+
+  /api/v1/metrics:
+    get:
+      summary: Prometheus-format metrics
+      operationId: metrics
+      tags: [Ops]
+      security:
+        - metricsBearer: []
+      responses:
+        "200":
+          description: Metrics
+          content:
+            text/plain: {}
+        "401":
+          description: Token mismatch
+        "503":
+          description: METRICS_TOKEN not configured
