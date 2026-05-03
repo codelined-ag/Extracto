@@ -970,7 +970,7 @@ export default function ExtractoPage() {
  return;
  }
  void history.loadDetail(history.selectedId);
- }, [historyOpen, history]);
+ }, [historyOpen, history.selectedId, history.loadDetail, history.resetSelection]);
 
  React.useEffect(() => {
  if (!ocrSettingsLoadedRef.current) return;
