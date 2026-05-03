@@ -70,7 +70,17 @@ async function loadPdfJs(): Promise<PdfJsLib> {
   pdfJsLibPromise = (async () => {
     const mod = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as unknown as PdfJsLib;
     if (mod.GlobalWorkerOptions) {
-      mod.GlobalWorkerOptions.workerSrc = "";
+      const resolveImpl = (import.meta as { resolve?: (s: string) => string | Promise<string> }).resolve;
+      if (typeof resolveImpl === "function") {
+        try {
+          const workerUrl = await resolveImpl("pdfjs-dist/legacy/build/pdf.worker.mjs");
+          mod.GlobalWorkerOptions.workerSrc = workerUrl;
+        } catch {
+          mod.GlobalWorkerOptions.workerSrc = "";
+        }
+      } else {
+        mod.GlobalWorkerOptions.workerSrc = "";
+      }
     }
     return mod;
   })();

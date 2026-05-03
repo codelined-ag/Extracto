@@ -29,6 +29,10 @@ follows [SemVer](https://semver.org/).
 
 ### Caveats
 - RTL languages (Arabic, Hebrew) are detected for sort order only; intra-block character order in the text-layer extractor is not yet reversed.
+- The text-layer fast-path can fragment dense multi-column pages where pdfjs emits each word as a separate span. The anchored vision-model path is unaffected. Disable the fast-path per-job with `--no-text-layer` (CLI), `preferTextLayer: false` (settings) when this matters.
+
+### Benchmark
+- `google/gemini-2.5-flash-lite` on a 33-page born-digital PDF, first 3 pages, `--preset academic`: anchoring reduced VLM latency by 40-44% with equivalent character coverage; the text-layer fast-path on a content-heavy page emitted 99% of the characters in 0 ms.
 
 ## [0.3.2] - 2026-05-03
 
