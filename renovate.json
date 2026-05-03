@@ -12,23 +12,32 @@
   "schedule": ["before 6am on monday"],
   "labels": ["dependencies"],
   "rangeStrategy": "bump",
+  "rebaseWhen": "behind-base-branch",
+  "platformAutomerge": true,
   "lockFileMaintenance": {
     "enabled": true,
     "automerge": true,
-    "automergeType": "branch",
+    "automergeType": "pr",
     "schedule": ["before 6am on monday"]
   },
   "packageRules": [
     {
       "matchUpdateTypes": ["patch", "pin", "digest"],
       "automerge": true,
-      "automergeType": "branch"
+      "automergeType": "pr"
     },
     {
       "matchUpdateTypes": ["minor"],
       "matchDepTypes": ["devDependencies"],
       "automerge": true,
-      "automergeType": "branch"
+      "automergeType": "pr"
+    },
+    {
+      "matchUpdateTypes": ["minor"],
+      "matchDepTypes": ["dependencies"],
+      "automerge": true,
+      "automergeType": "pr",
+      "minimumReleaseAge": "3 days"
     },
     {
       "matchUpdateTypes": ["major"],
