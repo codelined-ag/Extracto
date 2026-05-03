@@ -54,10 +54,7 @@ export const POST = withSessionAuth("mutation", "API keys", async (request: Next
     throw new ApiRouteError("Key name is required", 400);
   }
   if (rawName.length > MAX_KEY_NAME_LENGTH) {
-    return NextResponse.json(
-      { error: `Key name must be at most ${MAX_KEY_NAME_LENGTH} characters` },
-      { status: 400 }
-    );
+    throw new ApiRouteError(`Key name must be at most ${MAX_KEY_NAME_LENGTH} characters`, 400);
   }
 
   const scopes = normalizeRequestedScopes(body.scopes);
@@ -66,10 +63,7 @@ export const POST = withSessionAuth("mutation", "API keys", async (request: Next
   if (body.rateLimitPerMinute !== undefined && body.rateLimitPerMinute !== null) {
     const raw = Number(body.rateLimitPerMinute);
     if (!Number.isFinite(raw) || raw < 1 || raw > MAX_RATE_LIMIT_PER_MINUTE) {
-      return NextResponse.json(
-        { error: `rateLimitPerMinute must be between 1 and ${MAX_RATE_LIMIT_PER_MINUTE}` },
-        { status: 400 }
-      );
+      throw new ApiRouteError(`rateLimitPerMinute must be between 1 and ${MAX_RATE_LIMIT_PER_MINUTE}`, 400);
     }
     rateLimitPerMinute = Math.trunc(raw);
   }
@@ -78,10 +72,7 @@ export const POST = withSessionAuth("mutation", "API keys", async (request: Next
     where: { userId: auth.userId, revokedAt: null },
   });
   if (activeCount >= MAX_KEYS_PER_USER) {
-    return NextResponse.json(
-      { error: `Maximum of ${MAX_KEYS_PER_USER} active API keys per user` },
-      { status: 409 }
-    );
+    throw new ApiRouteError(`Maximum of ${MAX_KEYS_PER_USER} active API keys per user`, 409);
   }
 
   const { plaintext, prefix, keyHash } = generateApiKey();

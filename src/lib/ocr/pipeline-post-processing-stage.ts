@@ -1,6 +1,10 @@
 import { errorMessage } from "@/lib/api-error";
 import { db } from "@/lib/db";
 import { normalizeProvider } from "@/lib/api-types";
+import {
+  registerOcrJobAbortController,
+  unregisterOcrJobAbortController,
+} from "@/lib/ocr/job-control";
 import { getOllamaCandidatesForOcr } from "@/lib/ocr/ollama-dispatch";
 import { warmupOllamaModel } from "@/lib/ocr/providers/ollama";
 import {
@@ -81,6 +85,8 @@ export async function runPostProcessingStage(
   let postProcessedText: string | undefined;
   let postProcessedJson: unknown;
 
+  const postProcessAbort = new AbortController();
+  registerOcrJobAbortController(deps.jobId, postProcessAbort);
   try {
     const postProcessResult = await runProviderPostProcessing(
       postProcessingProvider,
@@ -89,6 +95,7 @@ export async function runPostProcessingStage(
       systemPrompt,
       postProcessRequestText,
       deps.postProcessingPayload.outputFormat,
+      postProcessAbort.signal,
     );
 
     const normalizedPostProcessed = normalizePostProcessedText(
@@ -134,5 +141,7 @@ export async function runPostProcessingStage(
       finalMarkdown,
       postProcessingForExtractedMetadata: state.postProcessingMeta,
     };
+  } finally {
+    unregisterOcrJobAbortController(deps.jobId, postProcessAbort);
   }
 }

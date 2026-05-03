@@ -305,26 +305,32 @@ export async function runCompatPostProcessing(
   systemPrompt: string,
   userPrompt: string,
   outputFormat: PostProcessOutputFormat,
+  signal?: AbortSignal,
 ): Promise<PostProcessResult> {
   if (!apiKey) {
     throw new ApiRouteError(`${cfg.label} API key is not configured`, 500);
   }
 
   const endpoint = buildCompatEndpoint(cfg, apiEndpoint, "/chat/completions");
-  const response = await fetchWithTimeout(endpoint, {
-    method: "POST",
-    headers: cfg.buildHeaders(apiKey),
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      ...(outputFormat === "json" ? { response_format: { type: "json_object" } } : {}),
-      temperature: 0,
-      stream: false,
-    }),
-  });
+  const response = await fetchWithTimeout(
+    endpoint,
+    {
+      method: "POST",
+      headers: cfg.buildHeaders(apiKey),
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        ...(outputFormat === "json" ? { response_format: { type: "json_object" } } : {}),
+        temperature: 0,
+        stream: false,
+      }),
+    },
+    REQUEST_TIMEOUT_MS,
+    signal,
+  );
 
   const payload = await parseResponseText(response);
   if (!response.ok) {

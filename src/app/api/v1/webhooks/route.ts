@@ -79,10 +79,7 @@ export const POST = withMutationAuth("webhooks:write", async (request: NextReque
 
   const count = await db.webhook.count({ where: { userId: auth.userId } });
   if (count >= MAX_WEBHOOKS_PER_USER) {
-    return NextResponse.json(
-      { error: `Maximum of ${MAX_WEBHOOKS_PER_USER} webhooks per user` },
-      { status: 409 }
-    );
+    throw new ApiRouteError(`Maximum of ${MAX_WEBHOOKS_PER_USER} webhooks per user`, 409);
   }
 
   const secret = generateWebhookSecret();

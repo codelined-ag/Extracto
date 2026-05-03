@@ -75,14 +75,9 @@ vi.mock("@/lib/ocr/providers/compat", async () => {
   };
 });
 
-import {
-  buildPrompt,
-  normalizePreviewForHistory,
-  parseCheckpointPages,
-  sanitizePostProcessing,
-  submitOcrJob,
-  toJsonValue,
-} from "@/lib/ocr/pipeline";
+import { buildPrompt, normalizePreviewForHistory, sanitizePostProcessing } from "@/lib/ocr/job-input-helpers";
+import { parseCheckpointPages, submitOcrJob } from "@/lib/ocr/job-submit";
+import { toJsonValue } from "@/lib/ocr/pipeline-result-builder";
 import {
   buildPostProcessingPrompt,
   computeTextStats,

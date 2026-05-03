@@ -135,7 +135,7 @@ describe("runProviderPostProcessing", () => {
       "user",
       "markdown",
     );
-    expect(mOllamaPP).toHaveBeenCalledWith(["http://o"], "model", "sys", "user", "markdown");
+    expect(mOllamaPP).toHaveBeenCalledWith(["http://o"], "model", "sys", "user", "markdown", undefined);
   });
 
   it("routes mistral post-processing with the resolved API key", async () => {
@@ -147,7 +147,7 @@ describe("runProviderPostProcessing", () => {
       "user",
       "json",
     );
-    expect(mMistralPP).toHaveBeenCalledWith("http://m", "mistral-large", "k", "sys", "user", "json");
+    expect(mMistralPP).toHaveBeenCalledWith("http://m", "mistral-large", "k", "sys", "user", "json", undefined);
   });
 
   it("routes openrouter + openai_compat post-processing through the compat runner", async () => {
@@ -167,6 +167,7 @@ describe("runProviderPostProcessing", () => {
       "sys",
       "user",
       "markdown",
+      undefined,
     ]);
 
     await runProviderPostProcessing(
@@ -185,6 +186,7 @@ describe("runProviderPostProcessing", () => {
       "sys",
       "user",
       "json",
+      undefined,
     ]);
   });
 

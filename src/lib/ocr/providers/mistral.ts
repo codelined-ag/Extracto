@@ -264,6 +264,7 @@ export async function runMistralPostProcessing(
   systemPrompt: string,
   userPrompt: string,
   outputFormat: PostProcessOutputFormat,
+  signal?: AbortSignal,
 ): Promise<PostProcessResult> {
   if (!apiKey) {
     throw new ApiRouteError("MISTRAL_API_KEY is not configured", 500);
@@ -274,29 +275,34 @@ export async function runMistralPostProcessing(
     buildMistralChatEndpoint(apiEndpoint.trim() || getDefaultMistralApiUrl()),
     getDefaultMistralApiUrl(),
   );
-  const response = await fetchWithTimeout(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+  const response = await fetchWithTimeout(
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        ...(outputFormat === "json"
+          ? {
+              response_format: {
+                type: "json_object",
+              },
+            }
+          : {}),
+        temperature: 0,
+        stream: false,
+      }),
     },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      ...(outputFormat === "json"
-        ? {
-            response_format: {
-              type: "json_object",
-            },
-          }
-        : {}),
-      temperature: 0,
-      stream: false,
-    }),
-  });
+    REQUEST_TIMEOUT_MS,
+    signal,
+  );
 
   const payload = await parseResponseText(response);
   if (!response.ok) {

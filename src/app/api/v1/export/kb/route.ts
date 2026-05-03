@@ -35,6 +35,18 @@ import type {
   EmbeddingProviderKind,
   VectorStoreAdapter,
 } from "@/lib/kb/types";
+import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
+import {
+  getDefaultOpenAICompatApiUrl,
+  getDefaultOpenRouterApiUrl,
+  OLLAMA_DEFAULT_HOST,
+} from "@/lib/ocr/provider-config";
+
+function getEmbeddingProviderFallback(provider: EmbeddingProviderKind): string {
+  if (provider === "openrouter") return getDefaultOpenRouterApiUrl();
+  if (provider === "openai_compat") return getDefaultOpenAICompatApiUrl();
+  return OLLAMA_DEFAULT_HOST;
+}
 
 const VALID_STRATEGIES: readonly ChunkingStrategy[] = ["fixed", "sentence", "paragraph"];
 const VALID_PROVIDERS: readonly EmbeddingProviderKind[] = ["ollama", "openrouter", "openai_compat"];
@@ -148,7 +160,12 @@ function parseEmbedding(raw: unknown): EmbeddingProviderConfig {
     );
   }
   const provider = rawProvider as EmbeddingProviderKind;
-  const apiEndpoint = stringField(r.apiEndpoint, "embedding.apiEndpoint");
+  const rawEndpoint = stringField(r.apiEndpoint, "embedding.apiEndpoint");
+  const apiEndpoint = enforceProviderEndpointPolicy(
+    provider,
+    rawEndpoint,
+    getEmbeddingProviderFallback(provider),
+  );
   const model = stringField(r.model, "embedding.model");
   const apiKey = typeof r.apiKey === "string" ? r.apiKey : undefined;
   const dimensions = typeof r.dimensions === "number" && Number.isInteger(r.dimensions) && r.dimensions > 0

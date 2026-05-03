@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { parseJsonBody } from "@/lib/api-error";
+import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
 import { withAuth, withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 
@@ -42,26 +42,15 @@ export const POST = withMutationAuth("presets:write", async (request: NextReques
   const outputFormat = validateOutputFormat(body.outputFormat) ?? "markdown";
 
   if (!name || name.length > MAX_NAME_LENGTH) {
-    return NextResponse.json(
-      { error: `name is required and must be at most ${MAX_NAME_LENGTH} characters` },
-      { status: 400 }
-    );
+    throw new ApiRouteError(`name is required and must be at most ${MAX_NAME_LENGTH} characters`, 400);
   }
   if (!instruction || instruction.length > MAX_INSTRUCTION_LENGTH) {
-    return NextResponse.json(
-      {
-        error: `instruction is required and must be at most ${MAX_INSTRUCTION_LENGTH} characters`,
-      },
-      { status: 400 }
-    );
+    throw new ApiRouteError(`instruction is required and must be at most ${MAX_INSTRUCTION_LENGTH} characters`, 400);
   }
 
   const count = await db.outputPreset.count({ where: { userId: auth.userId } });
   if (count >= MAX_PRESETS_PER_USER) {
-    return NextResponse.json(
-      { error: `Maximum of ${MAX_PRESETS_PER_USER} presets per user` },
-      { status: 409 }
-    );
+    throw new ApiRouteError(`Maximum of ${MAX_PRESETS_PER_USER} presets per user`, 409);
   }
 
   const created = await db.outputPreset.create({

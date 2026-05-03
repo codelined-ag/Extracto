@@ -180,12 +180,16 @@ export async function runOllamaPostProcessing(
           if (chatPath === "/api/chat") body.format = "json";
           else body.response_format = { type: "json_object" };
         }
-        const response = await fetchWithTimeout(`${host}${chatPath}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+        const response = await fetchWithTimeout(
+          `${host}${chatPath}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          },
+          REQUEST_TIMEOUT_MS,
           signal,
-        });
+        );
 
         const payload = await parseResponseText(response);
         if (!response.ok) {
@@ -219,6 +223,7 @@ export async function runOllamaPostProcessing(
           },
         };
       } catch (error) {
+        if (error instanceof OcrStopRequestedError) throw error;
         errors.push(
           `${host}${chatPath}: ${errorMessage(error, "Request failed")}`,
         );

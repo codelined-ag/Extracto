@@ -329,17 +329,3 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
     );
   }
 }
-
-
-export { buildPrompt, normalizePreviewForHistory, sanitizePostProcessing } from "@/lib/ocr/job-input-helpers";
-export {
-  parseCheckpointPages,
-  resumeOcrJob,
-  submitOcrJob,
-  type ResumeOcrJobInput,
-  type ResumeOcrJobResult,
-  type SubmitOcrJobInput,
-} from "@/lib/ocr/job-submit";
-export { getModelCatalog, type ModelCatalog } from "@/lib/ocr/model-catalog";
-export { type OcrPage } from "@/lib/ocr/providers/shared";
-export { toJsonValue } from "@/lib/ocr/pipeline-result-builder";

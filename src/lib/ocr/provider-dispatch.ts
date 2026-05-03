@@ -37,6 +37,7 @@ interface ProviderHandler {
     userPrompt: string,
     apiKey: string,
     outputFormat: PostProcessOutputFormat,
+    signal?: AbortSignal,
   ) => Promise<PostProcessResult>;
 }
 
@@ -47,30 +48,30 @@ const PROVIDER_HANDLERS: Record<ProviderKind, ProviderHandler> = {
       decorateOllamaErrors(s.apiEndpoint, () =>
         runOllamaOcr(getOllamaCandidatesForOcr(s.apiEndpoint), m, p, pv, sig),
       ),
-    runPostProcess: (s, m, sp, up, _k, of) =>
+    runPostProcess: (s, m, sp, up, _k, of, sig) =>
       decorateOllamaErrors(s.apiEndpoint, () =>
-        runOllamaPostProcessing(getOllamaCandidatesForOcr(s.apiEndpoint), m, sp, up, of),
+        runOllamaPostProcessing(getOllamaCandidatesForOcr(s.apiEndpoint), m, sp, up, of, sig),
       ),
   },
   openrouter: {
     envKey: "OPENROUTER_API_KEY",
     runOcr: (s, m, p, pv, k, sig) =>
       runCompatOcr(OPENROUTER_CONFIG, s.apiEndpoint, m, k, p, pv, sig),
-    runPostProcess: (s, m, sp, up, k, of) =>
-      runCompatPostProcessing(OPENROUTER_CONFIG, s.apiEndpoint, m, k, sp, up, of),
+    runPostProcess: (s, m, sp, up, k, of, sig) =>
+      runCompatPostProcessing(OPENROUTER_CONFIG, s.apiEndpoint, m, k, sp, up, of, sig),
   },
   openai_compat: {
     envKey: "OPENAI_COMPAT_API_KEY",
     runOcr: (s, m, p, pv, k, sig) =>
       runCompatOcr(OPENAI_COMPAT_CONFIG, s.apiEndpoint, m, k, p, pv, sig),
-    runPostProcess: (s, m, sp, up, k, of) =>
-      runCompatPostProcessing(OPENAI_COMPAT_CONFIG, s.apiEndpoint, m, k, sp, up, of),
+    runPostProcess: (s, m, sp, up, k, of, sig) =>
+      runCompatPostProcessing(OPENAI_COMPAT_CONFIG, s.apiEndpoint, m, k, sp, up, of, sig),
   },
   mistral: {
     envKey: "MISTRAL_API_KEY",
     runOcr: (s, m, _p, pv, k, sig) => runMistralOcr(s.apiEndpoint, m, k, pv, sig),
-    runPostProcess: (s, m, sp, up, k, of) =>
-      runMistralPostProcessing(s.apiEndpoint, m, k, sp, up, of),
+    runPostProcess: (s, m, sp, up, k, of, sig) =>
+      runMistralPostProcessing(s.apiEndpoint, m, k, sp, up, of, sig),
   },
 };
 
@@ -99,6 +100,7 @@ export async function runProviderPostProcessing(
   systemPrompt: string,
   userPrompt: string,
   outputFormat: PostProcessOutputFormat,
+  signal?: AbortSignal,
 ): Promise<PostProcessResult> {
   const handler = PROVIDER_HANDLERS[provider];
   return handler.runPostProcess(
@@ -108,5 +110,6 @@ export async function runProviderPostProcessing(
     userPrompt,
     resolveProviderApiKey(provider, settings),
     outputFormat,
+    signal,
   );
 }
