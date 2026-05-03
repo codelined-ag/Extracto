@@ -22,8 +22,8 @@ import {
 } from "@/lib/ocr/pipeline-result-builder";
 import { runProviderOcr } from "@/lib/ocr/provider-dispatch";
 import { OcrStopRequestedError } from "@/lib/ocr/providers/shared";
-import type { ProviderKind } from "@/lib/ocr/endpoint-policy";
-import type { ApiProviderSettings } from "@/lib/ocr/settings-store";
+import type { ProviderKind } from "@/lib/api-types";
+import type { ApiProviderSettings } from "@/lib/api-types";
 
 export interface OrchestratorState {
   pageOutputs: ProcessedPageOutput[];

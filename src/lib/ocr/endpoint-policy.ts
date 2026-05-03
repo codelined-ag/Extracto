@@ -1,8 +1,6 @@
+import { ApiRouteError } from "@/lib/api-error";
 import { normalizeHostEndpoint } from "@/lib/ocr/host-normalization";
 import { type ProviderKind } from "@/lib/api-types";
-
-export type { ProviderKind } from "@/lib/api-types";
-export { normalizeProvider } from "@/lib/api-types";
 
 const DEFAULT_OLLAMA_HOST_PATTERNS = [
   "localhost",
@@ -94,22 +92,22 @@ function getConfiguredPatterns(provider: ProviderKind): string[] {
 function normalizeEndpointForValidation(rawEndpoint: string, fallbackEndpoint: string): URL {
   const normalized = normalizeHostEndpoint(rawEndpoint, fallbackEndpoint).trim();
   if (!normalized) {
-    throw new Error("API endpoint is required");
+    throw new ApiRouteError("API endpoint is required", 400);
   }
 
   let parsed: URL;
   try {
     parsed = new URL(normalized);
   } catch {
-    throw new Error("API endpoint must be a valid absolute URL");
+    throw new ApiRouteError("API endpoint must be a valid absolute URL", 400);
   }
 
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("Only http and https API endpoints are allowed");
+    throw new ApiRouteError("Only http and https API endpoints are allowed", 400);
   }
 
   if (parsed.username || parsed.password) {
-    throw new Error("API endpoint credentials are not allowed");
+    throw new ApiRouteError("API endpoint credentials are not allowed", 400);
   }
 
   parsed.search = "";
@@ -128,8 +126,9 @@ export function enforceProviderEndpointPolicy(
 
   const allowed = patterns.some((pattern) => hostMatchesPattern(hostname, pattern));
   if (!allowed) {
-    throw new Error(
-      `Endpoint host "${hostname}" is not allowed for ${provider}. Allowed patterns: ${patterns.join(", ")}`
+    throw new ApiRouteError(
+      `Endpoint host "${hostname}" is not allowed for ${provider}. Allowed patterns: ${patterns.join(", ")}`,
+      400,
     );
   }
 

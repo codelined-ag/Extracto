@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { motion } from "motion/react";
 import { FileUp, Upload } from "lucide-react";

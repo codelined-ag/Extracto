@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OcrJobStatus } from "@prisma/client";
 
-import { ApiProviderSettings, getApiSettings } from "@/lib/ocr/settings-store";
+import type { ApiProviderSettings } from "@/lib/api-types";
+import { getApiSettings } from "@/lib/ocr/settings-store";
 import { normalizeMistralApiBase } from "@/lib/ocr/providers/mistral";
 import {
   normalizeOpenAICompatApiBase,
   normalizeOpenRouterApiBase,
 } from "@/lib/ocr/providers/compat";
 import { withAuth, withMutationAuth } from "@/lib/auth/request";
-import { enforceProviderEndpointPolicy, normalizeProvider, ProviderKind } from "@/lib/ocr/endpoint-policy";
+import { normalizeProvider, type ProviderKind } from "@/lib/api-types";
+import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 import { resolveOllamaHostEndpoint } from "@/lib/ocr/host-normalization";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
@@ -23,13 +25,10 @@ import {
   getDefaultOpenAICompatApiUrl,
   getDefaultOpenRouterApiUrl,
 } from "@/lib/ocr/provider-config";
-import {
-  getModelCatalog,
-  normalizePreviewForHistory,
-  getOllamaDiscoveryFallbackHost,
-  resumeOcrJob,
-  submitOcrJob,
-} from "@/lib/ocr/pipeline";
+import { normalizePreviewForHistory } from "@/lib/ocr/job-input-helpers";
+import { resumeOcrJob, submitOcrJob } from "@/lib/ocr/job-submit";
+import { getModelCatalog } from "@/lib/ocr/model-catalog";
+import { getOllamaDiscoveryFallbackHost } from "@/lib/ocr/ollama-dispatch";
 
 interface OCRRequestBody {
   jobId?: unknown;
@@ -49,25 +48,25 @@ function parseRequestPriority(value: unknown): number {
   return Math.max(-10, Math.min(10, Math.trunc(value)));
 }
 
+interface ProviderEndpointAdapter {
+  normalize: (raw: string) => string;
+  getDefault: () => string;
+}
+
+const ENDPOINT_ADAPTERS: Record<ProviderKind, ProviderEndpointAdapter> = {
+  mistral: { normalize: normalizeMistralApiBase, getDefault: getDefaultMistralApiUrl },
+  openrouter: { normalize: normalizeOpenRouterApiBase, getDefault: getDefaultOpenRouterApiUrl },
+  openai_compat: { normalize: normalizeOpenAICompatApiBase, getDefault: getDefaultOpenAICompatApiUrl },
+  ollama: {
+    normalize: (raw) => resolveOllamaHostEndpoint(raw, getOllamaDiscoveryFallbackHost()),
+    getDefault: getOllamaDiscoveryFallbackHost,
+  },
+};
+
 function normalizeProviderEndpoint(provider: ProviderKind, rawEndpoint: string): string {
-  if (provider === "mistral") {
-    return enforceProviderEndpointPolicy("mistral",
-      normalizeMistralApiBase(rawEndpoint || getDefaultMistralApiUrl()),
-      getDefaultMistralApiUrl());
-  }
-  if (provider === "openrouter") {
-    return enforceProviderEndpointPolicy("openrouter",
-      normalizeOpenRouterApiBase(rawEndpoint || getDefaultOpenRouterApiUrl()),
-      getDefaultOpenRouterApiUrl());
-  }
-  if (provider === "openai_compat") {
-    return enforceProviderEndpointPolicy("openai_compat",
-      normalizeOpenAICompatApiBase(rawEndpoint || getDefaultOpenAICompatApiUrl()),
-      getDefaultOpenAICompatApiUrl());
-  }
-  return enforceProviderEndpointPolicy("ollama",
-    resolveOllamaHostEndpoint(rawEndpoint || getOllamaDiscoveryFallbackHost(), getOllamaDiscoveryFallbackHost()),
-    getOllamaDiscoveryFallbackHost());
+  const adapter = ENDPOINT_ADAPTERS[provider];
+  const fallback = adapter.getDefault();
+  return enforceProviderEndpointPolicy(provider, adapter.normalize(rawEndpoint || fallback), fallback);
 }
 
 function normalizeAndValidateApiSettings(raw: ApiProviderSettings): ApiProviderSettings {

@@ -8,10 +8,8 @@
 import { createHash } from "node:crypto";
 
 import { ApiRouteError } from "@/lib/api-error";
-import {
-  enforceProviderEndpointPolicy,
-  type ProviderKind,
-} from "@/lib/ocr/endpoint-policy";
+import type { ProviderKind } from "@/lib/api-types";
+import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 import { parseServiceError, parsePreviewImageData } from "@/lib/ocr/error-parsing";
 import { parseJsonCandidate } from "@/lib/ocr/markdown-routing";
 import {
@@ -20,6 +18,10 @@ import {
   getOpenRouterReferer,
   getOpenRouterTitle,
 } from "@/lib/ocr/provider-config";
+import {
+  normalizeOpenAICompatEndpoint,
+  normalizeOpenRouterEndpoint,
+} from "@/lib/ocr/provider-normalization";
 import {
   extractChatContentText,
   fetchWithTimeout,
@@ -54,46 +56,11 @@ export interface CompatProviderConfig {
 }
 
 export function normalizeOpenRouterApiBase(rawEndpoint: string): string {
-  const trimmed = rawEndpoint.trim();
-  if (!trimmed) {
-    return getDefaultOpenRouterApiUrl();
-  }
-
-  try {
-    const url = new URL(/^https?:\/\//iu.test(trimmed) ? trimmed : `https://${trimmed}`);
-    url.search = "";
-    url.hash = "";
-    let pathname = url.pathname.replace(/\/+$/u, "");
-    if (!pathname || pathname === "/") {
-      pathname = "/api/v1";
-    } else if (pathname.endsWith("/api")) {
-      pathname = `${pathname}/v1`;
-    }
-    pathname = pathname.replace(/\/(chat\/completions|models)$/u, "");
-    url.pathname = pathname;
-    return url.toString().replace(/\/+$/u, "");
-  } catch {
-    return getDefaultOpenRouterApiUrl();
-  }
+  return normalizeOpenRouterEndpoint(rawEndpoint, getDefaultOpenRouterApiUrl());
 }
 
 export function normalizeOpenAICompatApiBase(rawEndpoint: string): string {
-  const trimmed = rawEndpoint.trim();
-  if (!trimmed) {
-    return getDefaultOpenAICompatApiUrl();
-  }
-  try {
-    const url = new URL(/^https?:\/\//iu.test(trimmed) ? trimmed : `https://${trimmed}`);
-    url.search = "";
-    url.hash = "";
-    const pathname = url.pathname
-      .replace(/\/+$/u, "")
-      .replace(/\/(chat\/completions|models)$/u, "");
-    url.pathname = pathname;
-    return url.toString().replace(/\/+$/u, "");
-  } catch {
-    return getDefaultOpenAICompatApiUrl();
-  }
+  return normalizeOpenAICompatEndpoint(rawEndpoint, getDefaultOpenAICompatApiUrl());
 }
 
 const openRouterModelCache = new Map<string, { values: string[]; expiresAt: number }>();

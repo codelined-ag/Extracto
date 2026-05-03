@@ -84,3 +84,12 @@ Thumbs.db
 # Local dev SQLite created when running bunx prisma db push outside docker
 prisma/db/
 .venv-desloppify/
+
+# Playwright debugging artifacts (do not commit)
+.playwright-mcp/
+auth-dark.png
+auth-light.png
+auth-light-final.png
+auth-light-settled.png
+main-dark.png
+main-light.png

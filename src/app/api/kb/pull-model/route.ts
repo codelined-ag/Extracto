@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
 import { getKbDefaults } from "@/lib/kb/defaults-store";
+import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
+import { OLLAMA_DEFAULT_HOST } from "@/lib/ocr/provider-config";
 
 interface PullRequest extends Record<string, unknown> {
   model?: unknown;
@@ -21,9 +23,10 @@ export const POST = withMutationAuth("settings:write", async (request: NextReque
   if (!model) throw new ApiRouteError("model is required", 400);
 
   const defaults = await getKbDefaults(auth.userId);
-  const endpoint = (typeof body.apiEndpoint === "string" && body.apiEndpoint.trim())
+  const rawEndpoint = (typeof body.apiEndpoint === "string" && body.apiEndpoint.trim())
     ? body.apiEndpoint.trim()
     : defaults.embedding.apiEndpoint;
+  const endpoint = enforceProviderEndpointPolicy("ollama", rawEndpoint, OLLAMA_DEFAULT_HOST);
 
   const url = `${trimSlashes(endpoint)}/api/pull`;
   const controller = new AbortController();

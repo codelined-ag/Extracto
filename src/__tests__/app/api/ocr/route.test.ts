@@ -49,29 +49,44 @@ vi.mock("@/lib/ocr/settings-store", () => ({
   }),
 }));
 
+vi.mock("@/lib/api-types", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api-types")>("@/lib/api-types");
+  return {
+    ...actual,
+    normalizeProvider: (p: unknown) => p ?? "ollama",
+  };
+});
+
 vi.mock("@/lib/ocr/endpoint-policy", () => ({
   enforceProviderEndpointPolicy: vi.fn().mockImplementation((_p: unknown, host: string) => host),
-  normalizeProvider: (p: unknown) => p ?? "ollama",
-  ProviderKind: undefined,
+}));
+
+vi.mock("@/lib/ocr/ollama-dispatch", () => ({
+  getOllamaDiscoveryFallbackHost: vi.fn().mockReturnValue("http://localhost:11434"),
 }));
 
 vi.mock("@/lib/ocr/host-normalization", () => ({
   resolveOllamaHostEndpoint: (host: string) => host,
 }));
 
-vi.mock("@/lib/ocr/pipeline", () => ({
+vi.mock("@/lib/ocr/job-input-helpers", () => ({
   buildPrompt: vi.fn().mockReturnValue("PROMPT"),
-  getModelCatalog: vi.fn(),
   normalizePreviewForHistory: vi.fn().mockReturnValue("data:preview"),
-  getOllamaDiscoveryFallbackHost: vi.fn().mockReturnValue("http://localhost:11434"),
-  resumeOcrJob: vi.fn(),
   sanitizePostProcessing: vi.fn().mockReturnValue({
     enabled: false,
     outputFormat: "markdown",
     instruction: "",
     model: "",
   }),
+}));
+
+vi.mock("@/lib/ocr/job-submit", () => ({
   submitOcrJob: vi.fn(),
+  resumeOcrJob: vi.fn(),
+}));
+
+vi.mock("@/lib/ocr/model-catalog", () => ({
+  getModelCatalog: vi.fn(),
 }));
 
 vi.mock("@/lib/ocr/providers/mistral", () => ({
@@ -92,7 +107,7 @@ vi.mock("@/lib/ocr/provider-config", () => ({
 
 import { ApiRouteError } from "@/lib/api-error";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
-import { resumeOcrJob, submitOcrJob } from "@/lib/ocr/pipeline";
+import { resumeOcrJob, submitOcrJob } from "@/lib/ocr/job-submit";
 import { POST } from "@/app/api/ocr/route";
 
 const mockedRateLimit = enforceOcrSubmitRateLimit as ReturnType<typeof vi.fn>;

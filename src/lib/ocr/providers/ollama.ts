@@ -159,7 +159,7 @@ export async function runOllamaPostProcessing(
   model: string,
   systemPrompt: string,
   userPrompt: string,
-  outputFormat: PostProcessOutputFormat = "markdown",
+  outputFormat: PostProcessOutputFormat,
   signal?: AbortSignal,
 ): Promise<PostProcessResult> {
   const errors: string[] = [];

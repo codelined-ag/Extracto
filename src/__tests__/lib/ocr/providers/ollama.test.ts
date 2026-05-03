@@ -189,7 +189,7 @@ describe("runOllamaPostProcessing", () => {
   it("sends system + user messages with stream=false and temperature=0", async () => {
     mockedFetch.mockResolvedValueOnce(okJson({ message: { content: "post-processed" } }));
 
-    const result = await runOllamaPostProcessing(["http://h:11434"], "llama3", "sys", "usr");
+    const result = await runOllamaPostProcessing(["http://h:11434"], "llama3", "sys", "usr", "markdown");
 
     expect(result.text).toBe("post-processed");
     const body = JSON.parse(mockedFetch.mock.calls[0][1].body as string);
@@ -203,7 +203,7 @@ describe("runOllamaPostProcessing", () => {
 
   it("returns endpoint in metadata for diagnostics", async () => {
     mockedFetch.mockResolvedValueOnce(okJson({ message: { content: "ok" } }));
-    const result = await runOllamaPostProcessing(["http://h:11434"], "m", "s", "u");
+    const result = await runOllamaPostProcessing(["http://h:11434"], "m", "s", "u", "markdown");
     expect(result.metadata.endpoint).toBe("http://h:11434/api/chat");
   });
 
@@ -211,14 +211,14 @@ describe("runOllamaPostProcessing", () => {
     mockedFetch
       .mockResolvedValueOnce(errJson(404, { error: "x" }))
       .mockResolvedValueOnce(okJson({ choices: [{ message: { content: "from v1" } }] }));
-    const result = await runOllamaPostProcessing(["http://h:11434"], "m", "s", "u");
+    const result = await runOllamaPostProcessing(["http://h:11434"], "m", "s", "u", "markdown");
     expect(result.text).toBe("from v1");
     expect(result.metadata.endpoint).toBe("http://h:11434/v1/chat/completions");
   });
 
   it("rejects with ApiRouteError(502) when all hosts fail", async () => {
     mockedFetch.mockResolvedValue(errJson(500, { error: "no" }));
-    await expect(runOllamaPostProcessing(["http://h:11434"], "m", "s", "u")).rejects.toMatchObject({
+    await expect(runOllamaPostProcessing(["http://h:11434"], "m", "s", "u", "markdown")).rejects.toMatchObject({
       status: 502,
       message: expect.stringMatching(/post-processing failed/i),
     });

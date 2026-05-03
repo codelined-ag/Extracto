@@ -26,7 +26,7 @@ vi.mock("@/lib/ocr/settings-store", () => ({
   }),
 }));
 
-vi.mock("@/lib/ocr/pipeline", () => ({
+vi.mock("@/lib/ocr/job-input-helpers", () => ({
   buildPrompt: vi.fn().mockReturnValue("PROMPT"),
   sanitizePostProcessing: vi.fn().mockImplementation((v) => ({
     enabled: !!v,
@@ -34,6 +34,9 @@ vi.mock("@/lib/ocr/pipeline", () => ({
     instruction: v?.instruction ?? "",
     model: "",
   })),
+}));
+
+vi.mock("@/lib/ocr/job-submit", () => ({
   submitOcrJob: vi.fn(),
 }));
 
@@ -44,7 +47,7 @@ vi.mock("@/lib/ocr/providers/mistral", () => ({
 import { authenticateMutation, authHasScope } from "@/lib/auth/request";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { waitForOcrJobCompletion } from "@/lib/ocr/job-wait";
-import { submitOcrJob } from "@/lib/ocr/pipeline";
+import { submitOcrJob } from "@/lib/ocr/job-submit";
 import { POST } from "@/app/api/v1/openai/chat/completions/route";
 
 const mockedAuth = authenticateMutation as ReturnType<typeof vi.fn>;

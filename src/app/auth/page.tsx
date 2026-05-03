@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import type { UiLanguage } from "@/app/page-components/types";
 
 interface AuthFormState {
   email: string;
@@ -27,7 +28,6 @@ interface SessionResponse {
   authenticated?: boolean;
 }
 
-type UiLanguage = "it" | "en" | "fr" | "es" | "de";
 const UI_LANGUAGE_STORAGE_KEY = "extracto:ui-language:v1";
 
 const UI_LANGUAGES: UiLanguage[] = ["it", "en", "fr", "es", "de"];

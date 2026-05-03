@@ -1,8 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import {
-  normalizeProvider,
-  enforceProviderEndpointPolicy,
-} from "@/lib/ocr/endpoint-policy";
+import { normalizeProvider } from "@/lib/api-types";
+import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 
 // ---------------------------------------------------------------------------
 // normalizeProvider

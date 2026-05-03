@@ -3,11 +3,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
 import { getKbDefaults } from "@/lib/kb/defaults-store";
+import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
+import {
+  getDefaultOpenAICompatApiUrl,
+  getDefaultOpenRouterApiUrl,
+  OLLAMA_DEFAULT_HOST,
+} from "@/lib/ocr/provider-config";
 
 interface DiscoverRequest extends Record<string, unknown> {
   provider?: unknown;
   apiEndpoint?: unknown;
   apiKey?: unknown;
+}
+
+function getProviderFallbackEndpoint(provider: "ollama" | "openrouter" | "openai_compat"): string {
+  if (provider === "openrouter") return getDefaultOpenRouterApiUrl();
+  if (provider === "openai_compat") return getDefaultOpenAICompatApiUrl();
+  return OLLAMA_DEFAULT_HOST;
 }
 
 const FETCH_TIMEOUT_MS = 8_000;
@@ -50,16 +62,21 @@ async function listOpenAICompatModels(endpoint: string, apiKey: string | undefin
   return list.map((m) => m.id).filter((id): id is string => typeof id === "string");
 }
 
-export const POST = withMutationAuth("settings:read", async (request: NextRequest, { auth }) => {
+export const POST = withMutationAuth("settings:write", async (request: NextRequest, { auth }) => {
   const body = await parseJsonBody<DiscoverRequest>(request);
   const provider = typeof body.provider === "string" ? body.provider : "";
   if (provider !== "ollama" && provider !== "openrouter" && provider !== "openai_compat") {
     throw new ApiRouteError("provider must be one of: ollama, openrouter, openai_compat", 400);
   }
   const defaults = await getKbDefaults(auth.userId);
-  const apiEndpoint = (typeof body.apiEndpoint === "string" && body.apiEndpoint.trim())
+  const rawEndpoint = (typeof body.apiEndpoint === "string" && body.apiEndpoint.trim())
     ? body.apiEndpoint.trim()
     : defaults.embedding.apiEndpoint;
+  const apiEndpoint = enforceProviderEndpointPolicy(
+    provider,
+    rawEndpoint,
+    getProviderFallbackEndpoint(provider),
+  );
   const apiKey = typeof body.apiKey === "string" && body.apiKey
     ? body.apiKey
     : defaults.embedding.apiKey || undefined;

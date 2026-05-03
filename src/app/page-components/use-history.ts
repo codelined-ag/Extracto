@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { useToast } from "@/hooks/use-toast";
-import { getMarkdownFromJsonPayload, getStructuredJsonPayload } from "@/app/page-utils";
+import { getMarkdownFromJsonPayload, getStructuredJsonPayload } from "@/app/page-components/page-utils";
 import type {
   HistoryJobDetail,
   HistoryJobSummary,

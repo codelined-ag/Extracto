@@ -7,7 +7,7 @@ import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
 import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
 import { waitForOcrJobCompletion } from "@/lib/ocr/job-wait";
-import { submitOcrJob } from "@/lib/ocr/pipeline";
+import { submitOcrJob } from "@/lib/ocr/job-submit";
 
 interface OpenAIChatRequest {
   model?: unknown;

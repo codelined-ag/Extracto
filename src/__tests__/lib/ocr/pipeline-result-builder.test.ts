@@ -41,7 +41,15 @@ describe("toJsonValue", () => {
 
 describe("buildJsonResult", () => {
   it("trims markdown and computes text stats inside metadata", () => {
-    const r = buildJsonResult("doc.pdf", "qwen", "ollama", settings, "  hello world  ", { extra: 1 }, { other: 2 });
+    const r = buildJsonResult({
+      fileName: "doc.pdf",
+      model: "qwen",
+      provider: "ollama",
+      settings,
+      markdown: "  hello world  ",
+      structured: { extra: 1 },
+      metadata: { other: 2 },
+    });
     expect(r.markdown).toBe("hello world");
     expect(r.text).toBe("hello world");
     expect(r.metadata.characterCount).toBe(11);
@@ -51,12 +59,26 @@ describe("buildJsonResult", () => {
   });
 
   it("stamps extractedAt as a parseable ISO timestamp", () => {
-    const r = buildJsonResult("d", "m", "mistral", settings, "x", {});
+    const r = buildJsonResult({
+      fileName: "d",
+      model: "m",
+      provider: "mistral",
+      settings,
+      markdown: "x",
+      structured: {},
+    });
     expect(Date.parse(r.extractedAt)).not.toBeNaN();
   });
 
   it("threads structured payload through verbatim", () => {
-    const r = buildJsonResult("d", "m", "ollama", settings, "x", { foo: "bar" });
+    const r = buildJsonResult({
+      fileName: "d",
+      model: "m",
+      provider: "ollama",
+      settings,
+      markdown: "x",
+      structured: { foo: "bar" },
+    });
     expect(r.structured).toEqual({ foo: "bar" });
   });
 });

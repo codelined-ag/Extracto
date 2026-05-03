@@ -76,20 +76,24 @@ vi.mock("@/lib/ocr/providers/compat", async () => {
 });
 
 import {
-  appendProgressEvent,
-  buildPostProcessingPrompt,
   buildPrompt,
-  buildProgressMetadata,
-  computeTextStats,
-  formatPageScopedText,
   normalizePreviewForHistory,
-  normalizePostProcessedText,
   parseCheckpointPages,
   sanitizePostProcessing,
   submitOcrJob,
   toJsonValue,
-  type OcrProgressEvent,
 } from "@/lib/ocr/pipeline";
+import {
+  buildPostProcessingPrompt,
+  computeTextStats,
+  formatPageScopedText,
+  normalizePostProcessedText,
+} from "@/lib/ocr/pipeline-post-processing";
+import {
+  appendProgressEvent,
+  buildProgressMetadata,
+  type OcrProgressEvent,
+} from "@/lib/ocr/pipeline-progress";
 
 const PREVIEW =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=";

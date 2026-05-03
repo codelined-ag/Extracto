@@ -1,3 +1,5 @@
+"use client";
+
 import { motion } from "motion/react";
 import { AlertCircle } from "lucide-react";
 
@@ -11,7 +13,7 @@ import { LoaderCircleIcon } from "@/components/ui/loader-circle";
 import { PauseIcon } from "@/components/ui/pause";
 import { XIcon } from "@/components/ui/x";
 
-import { formatEta, formatFileSize, translatePipelineMessage } from "@/app/page-utils";
+import { formatEta, formatFileSize, translatePipelineMessage } from "@/app/page-components/page-utils";
 import type { ProcessingFile, Translator, UiLanguage } from "@/app/page-components/types";
 
 export interface FileListItemProps {

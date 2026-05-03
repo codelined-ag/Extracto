@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 
-import type { ProviderKind } from "@/lib/ocr/endpoint-policy";
+import type { ProviderKind } from "@/lib/api-types";
 import { computeTextStats } from "@/lib/ocr/pipeline-post-processing";
 import type { AdvancedSettings } from "@/lib/ocr/settings";
 
@@ -36,29 +36,31 @@ export function toJsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
-export function buildJsonResult(
-  fileName: string,
-  model: string,
-  provider: ProviderKind,
-  settings: AdvancedSettings,
-  markdown: string,
-  structured: Record<string, unknown>,
-  metadata: Record<string, unknown> = {},
-): OcrJsonResult {
-  const normalizedMarkdown = markdown.trim();
+export interface BuildJsonResultInput {
+  fileName: string;
+  model: string;
+  provider: ProviderKind;
+  settings: AdvancedSettings;
+  markdown: string;
+  structured: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export function buildJsonResult(input: BuildJsonResultInput): OcrJsonResult {
+  const normalizedMarkdown = input.markdown.trim();
   return {
-    fileName,
+    fileName: input.fileName,
     extractedAt: new Date().toISOString(),
-    provider,
-    model,
-    settings,
+    provider: input.provider,
+    model: input.model,
+    settings: input.settings,
     text: normalizedMarkdown,
     markdown: normalizedMarkdown,
-    structured,
+    structured: input.structured,
     metadata: {
       ...computeTextStats(normalizedMarkdown),
-      provider,
-      ...metadata,
+      provider: input.provider,
+      ...(input.metadata ?? {}),
     },
   };
 }

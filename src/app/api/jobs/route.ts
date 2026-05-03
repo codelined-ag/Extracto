@@ -16,21 +16,26 @@ const parseLimit = (value: string | null): number => {
   return Math.min(parsed, MAX_PAGE_SIZE);
 };
 
-const parseStatusFilter = (value: string | null): OcrJobStatus | null | undefined => {
+type StatusFilter =
+  | { kind: "absent" }
+  | { kind: "invalid" }
+  | { kind: "value"; status: OcrJobStatus };
+
+const parseStatusFilter = (value: string | null): StatusFilter => {
   const normalized = value?.trim().toUpperCase();
-  if (!normalized) return undefined;
-  return Object.values(OcrJobStatus).includes(normalized as OcrJobStatus)
-    ? (normalized as OcrJobStatus)
-    : null;
+  if (!normalized) return { kind: "absent" };
+  if (Object.values(OcrJobStatus).includes(normalized as OcrJobStatus)) {
+    return { kind: "value", status: normalized as OcrJobStatus };
+  }
+  return { kind: "invalid" };
 };
 
 export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) => {
   const { searchParams } = new URL(request.url);
   const limit = parseLimit(searchParams.get("limit"));
-  const rawStatus = searchParams.get("status");
-  const statusFilter = parseStatusFilter(rawStatus);
+  const statusFilter = parseStatusFilter(searchParams.get("status"));
 
-  if (rawStatus && statusFilter === null) {
+  if (statusFilter.kind === "invalid") {
     return NextResponse.json(
       {
         error: "Invalid status filter",
@@ -45,7 +50,7 @@ export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) =
     take: limit,
     where: {
       userId: auth.userId,
-      ...(statusFilter ? { status: statusFilter } : {}),
+      ...(statusFilter.kind === "value" ? { status: statusFilter.status } : {}),
     },
     select: {
       id: true,
@@ -66,10 +71,9 @@ export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) =
 
 export const DELETE = withMutationAuth("ocr:control", async (request: NextRequest, { auth }) => {
   const { searchParams } = new URL(request.url);
-  const rawStatus = searchParams.get("status");
-  const statusFilter = parseStatusFilter(rawStatus);
+  const statusFilter = parseStatusFilter(searchParams.get("status"));
 
-  if (rawStatus && statusFilter === null) {
+  if (statusFilter.kind === "invalid") {
     return NextResponse.json(
       {
         error: "Invalid status filter",
@@ -82,7 +86,7 @@ export const DELETE = withMutationAuth("ocr:control", async (request: NextReques
   const bulk = await db.ocrJob.deleteMany({
     where: {
       userId: auth.userId,
-      ...(statusFilter ? { status: statusFilter } : {}),
+      ...(statusFilter.kind === "value" ? { status: statusFilter.status } : {}),
     },
   });
 

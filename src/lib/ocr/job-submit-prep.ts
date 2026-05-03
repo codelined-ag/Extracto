@@ -1,12 +1,12 @@
-import { normalizeProvider, type ProviderKind } from "@/lib/ocr/endpoint-policy";
+import { normalizeProvider, type ApiProviderSettings, type ProviderKind } from "@/lib/api-types";
 import { resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
-import { buildPrompt, sanitizePostProcessing } from "@/lib/ocr/pipeline";
+import { buildPrompt, sanitizePostProcessing } from "@/lib/ocr/job-input-helpers";
 import {
   normalizeAdvancedSettings,
   type AdvancedSettings,
   type PostProcessingSettings,
 } from "@/lib/ocr/settings";
-import { getApiSettings, type ApiProviderSettings } from "@/lib/ocr/settings-store";
+import { getApiSettings } from "@/lib/ocr/settings-store";
 
 export interface ResolvedJobInputs {
   provider: ProviderKind;

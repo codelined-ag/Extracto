@@ -76,7 +76,7 @@ import {
   getStructuredJsonPayload,
   sleep,
   translatePipelineMessage,
-} from "@/app/page-utils";
+} from "@/app/page-components/page-utils";
 import {
   HintInfo,
   SettingsSection,

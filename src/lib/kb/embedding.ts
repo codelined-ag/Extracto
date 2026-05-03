@@ -1,6 +1,5 @@
+import { fetchWithTimeout } from "@/lib/kb/stores/fetch-with-timeout";
 import type { EmbeddingProviderConfig } from "@/lib/kb/types";
-
-const EMBEDDING_TIMEOUT_MS = 60_000;
 
 export class EmbeddingError extends Error {
   constructor(message: string, public readonly provider: string, public readonly status?: number) {
@@ -88,7 +87,7 @@ async function embedWithOllama(
     : batchAttempt;
   const hint = modelMissingHint(failure.body, config.model);
   const detail = hint
-    ?? `Tutti gli endpoint embedding di Ollama hanno fallito (POST ${batchUrl} → ${batchAttempt.status ?? "?"}, POST ${v1Url} → ${v1Attempt.status ?? "?"}, POST ${singleUrl} → ${singleAttempt.status ?? "?"}). Verifica che Ollama sia in esecuzione e che il modello "${config.model}" sia installato (ollama pull ${config.model}).`;
+    ?? `All Ollama embedding endpoints failed (POST ${batchUrl} → ${batchAttempt.status ?? "?"}, POST ${v1Url} → ${v1Attempt.status ?? "?"}, POST ${singleUrl} → ${singleAttempt.status ?? "?"}). Verify Ollama is running and that model "${config.model}" is installed (ollama pull ${config.model}).`;
   throw new EmbeddingError(detail, "ollama", failure.status ?? undefined);
 }
 
@@ -200,17 +199,3 @@ async function embedWithOpenAICompat(
   throw new EmbeddingError(detail, config.provider, attempt.status ?? undefined);
 }
 
-async function fetchWithTimeout(
-  fetchImpl: typeof fetch,
-  url: string,
-  init: RequestInit,
-  timeoutMs = EMBEDDING_TIMEOUT_MS,
-): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetchImpl(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}

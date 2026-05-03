@@ -9,8 +9,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { withAuth } from "@/lib/auth/request";
-import { normalizeProvider, type ProviderKind } from "@/lib/ocr/endpoint-policy";
-import { getModelCatalog } from "@/lib/ocr/pipeline";
+import { normalizeProvider, type ProviderKind } from "@/lib/api-types";
+import { getModelCatalog } from "@/lib/ocr/model-catalog";
 import { getApiSettings } from "@/lib/ocr/settings-store";
 
 interface NormalizedModel {

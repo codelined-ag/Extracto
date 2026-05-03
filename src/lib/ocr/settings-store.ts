@@ -4,8 +4,8 @@ import path from "node:path";
 import { type ApiProviderSettings, type ClientApiSettings, type ProviderKind, normalizeProvider } from "@/lib/api-types";
 import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 import {
+  getFallbackOllamaHost,
   normalizeHostEndpoint,
-  resolveOllamaHostEndpoint,
 } from "@/lib/ocr/host-normalization";
 import {
   getDefaultMistralApiUrl,
@@ -19,9 +19,6 @@ import {
   normalizeOpenAICompatEndpoint as normalizeOpenAICompatEndpointBase,
   normalizeOpenRouterEndpoint as normalizeOpenRouterEndpointBase,
 } from "@/lib/ocr/provider-normalization";
-
-// Lazy env-derived getters — match the pattern in lib/ocr/result-store.ts +
-// lib/ocr/provider-config.ts. Tests can vi.stubEnv() without resetModules.
 
 function getDefaultOllamaHost(): string {
   return normalizeHostEndpoint(process.env.OLLAMA_HOST || "", OLLAMA_DEFAULT_HOST);
@@ -46,14 +43,6 @@ function shouldPreserveLocalhost(): boolean {
   return (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase() === "host";
 }
 
-/**
- * Resolved Ollama fallback host. Returned fresh from env on each call so
- * tests + dynamic env changes are honored.
- */
-export function getFallbackOllamaHost(): string {
-  return resolveOllamaHostEndpoint(getDefaultOllamaHost(), OLLAMA_DEFAULT_HOST);
-}
-
 function getDataRoot(): string {
   const envDatabaseUrl = process.env.DATABASE_URL?.trim();
   if (!envDatabaseUrl?.startsWith("file:")) {
@@ -64,25 +53,8 @@ function getDataRoot(): string {
 }
 
 
-// Persistence-tier endpoint normalizers. Each binds the local
-// "DEFAULT_*_ENDPOINT" derived from env, which differs from the runtime
-// per-provider default URL — these run when reading/writing user-stored
-// settings, not when issuing OCR requests.
-
 export function normalizeMistralEndpointForStorage(rawEndpoint?: string): string {
   return normalizeMistralEndpointBase(rawEndpoint || "", getDefaultMistralOcrEndpoint());
-}
-
-function normalizeOllamaEndpointForStorage(rawEndpoint?: string): string {
-  return normalizeOllamaEndpointBase(rawEndpoint || "", getFallbackOllamaHost(), shouldPreserveLocalhost());
-}
-
-function normalizeOpenRouterEndpointForStorage(rawEndpoint?: string): string {
-  return normalizeOpenRouterEndpointBase(rawEndpoint || "", getDefaultOpenRouterApiEndpoint());
-}
-
-function normalizeOpenAICompatEndpointForStorage(rawEndpoint?: string): string {
-  return normalizeOpenAICompatEndpointBase(rawEndpoint || "", getDefaultOpenAICompatApiEndpoint());
 }
 
 function getProviderDefaultEndpoints(): Record<ProviderKind, string> {
@@ -95,13 +67,12 @@ function getProviderDefaultEndpoints(): Record<ProviderKind, string> {
 }
 
 function normalizeApiEndpoint(rawEndpoint: string | undefined, provider: ProviderKind): string {
-  if (provider === "mistral") return normalizeMistralEndpointForStorage(rawEndpoint);
-  if (provider === "openrouter") return normalizeOpenRouterEndpointForStorage(rawEndpoint);
-  if (provider === "openai_compat") return normalizeOpenAICompatEndpointForStorage(rawEndpoint);
-  return normalizeOllamaEndpointForStorage(rawEndpoint);
+  const raw = rawEndpoint || "";
+  if (provider === "mistral") return normalizeMistralEndpointBase(raw, getDefaultMistralOcrEndpoint());
+  if (provider === "openrouter") return normalizeOpenRouterEndpointBase(raw, getDefaultOpenRouterApiEndpoint());
+  if (provider === "openai_compat") return normalizeOpenAICompatEndpointBase(raw, getDefaultOpenAICompatApiEndpoint());
+  return normalizeOllamaEndpointBase(raw, getFallbackOllamaHost(), shouldPreserveLocalhost());
 }
-
-export type { ApiProviderSettings, ClientApiSettings } from "@/lib/api-types";
 
 interface SaveApiSettingsInput extends Omit<Partial<ApiProviderSettings>, "provider"> {
   provider?: string;

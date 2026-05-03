@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { Code } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -26,14 +28,14 @@ import { HistoryIcon } from "@/components/ui/history";
 import { LoaderCircleIcon } from "@/components/ui/loader-circle";
 import { SearchIcon } from "@/components/ui/search";
 
-import { formatTimestamp } from "@/app/page-utils";
+import { formatTimestamp } from "@/app/page-components/page-utils";
 import type {
   HistoryJobDetail,
   HistoryJobSummary,
   Translator,
 } from "@/app/page-components/types";
 
-type HistoryFilter = "all" | "completed" | "failed" | "running" | "paused";
+type HistoryFilter = "all" | "completed" | "failed" | "running";
 
 export interface HistoryDialogProps {
   open: boolean;
@@ -76,7 +78,6 @@ export function HistoryDialog({
     completed: jobs.filter((j) => j.status === "COMPLETED").length,
     failed: jobs.filter((j) => j.status === "FAILED").length,
     running: jobs.filter((j) => j.status === "PROCESSING" || j.status === "QUEUED").length,
-    paused: jobs.filter((j) => (j.status as string) === "PAUSED").length,
   };
 
   const term = search.trim().toLowerCase();
@@ -87,8 +88,7 @@ export function HistoryDialog({
       filter === "all" ||
       (filter === "completed" && j.status === "COMPLETED") ||
       (filter === "failed" && j.status === "FAILED") ||
-      (filter === "running" && (j.status === "PROCESSING" || j.status === "QUEUED")) ||
-      (filter === "paused" && (j.status as string) === "PAUSED");
+      (filter === "running" && (j.status === "PROCESSING" || j.status === "QUEUED"));
     return matchesText && matchesFilter;
   });
 

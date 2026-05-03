@@ -1,7 +1,7 @@
-import type { ProviderKind } from "@/lib/ocr/endpoint-policy";
+import type { ApiProviderSettings, ProviderKind } from "@/lib/api-types";
 import {
-  ollamaOcrWithResolvedHost,
-  ollamaPostProcessingWithResolvedHost,
+  decorateOllamaErrors,
+  getOllamaCandidatesForOcr,
 } from "@/lib/ocr/ollama-dispatch";
 import {
   OPENAI_COMPAT_CONFIG,
@@ -13,9 +13,12 @@ import {
   runMistralOcr,
   runMistralPostProcessing,
 } from "@/lib/ocr/providers/mistral";
+import {
+  runOllamaOcr,
+  runOllamaPostProcessing,
+} from "@/lib/ocr/providers/ollama";
 import type { OcrRunResult, PostProcessResult } from "@/lib/ocr/providers/shared";
 import type { PostProcessOutputFormat } from "@/lib/ocr/settings";
-import type { ApiProviderSettings } from "@/lib/ocr/settings-store";
 
 interface ProviderHandler {
   envKey: string | null;
@@ -40,9 +43,14 @@ interface ProviderHandler {
 const PROVIDER_HANDLERS: Record<ProviderKind, ProviderHandler> = {
   ollama: {
     envKey: null,
-    runOcr: (s, m, p, pv, _k, sig) => ollamaOcrWithResolvedHost(s.apiEndpoint, m, p, pv, sig),
+    runOcr: (s, m, p, pv, _k, sig) =>
+      decorateOllamaErrors(s.apiEndpoint, () =>
+        runOllamaOcr(getOllamaCandidatesForOcr(s.apiEndpoint), m, p, pv, sig),
+      ),
     runPostProcess: (s, m, sp, up, _k, of) =>
-      ollamaPostProcessingWithResolvedHost(s.apiEndpoint, m, sp, up, of),
+      decorateOllamaErrors(s.apiEndpoint, () =>
+        runOllamaPostProcessing(getOllamaCandidatesForOcr(s.apiEndpoint), m, sp, up, of),
+      ),
   },
   openrouter: {
     envKey: "OPENROUTER_API_KEY",

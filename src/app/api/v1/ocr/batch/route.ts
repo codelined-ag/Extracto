@@ -5,8 +5,9 @@ import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
+import { normalizePreviewForHistory } from "@/lib/ocr/job-input-helpers";
 import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
-import { normalizePreviewForHistory, submitOcrJob } from "@/lib/ocr/pipeline";
+import { submitOcrJob } from "@/lib/ocr/job-submit";
 import type { AdvancedSettings, PostProcessingSettings } from "@/lib/ocr/settings";
 import { getApiSettings } from "@/lib/ocr/settings-store";
 

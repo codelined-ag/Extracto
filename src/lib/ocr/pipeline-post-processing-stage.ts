@@ -1,9 +1,11 @@
 import { errorMessage } from "@/lib/api-error";
 import { db } from "@/lib/db";
-import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
-import { ollamaWarmupWithResolvedHost } from "@/lib/ocr/ollama-dispatch";
+import { normalizeProvider } from "@/lib/api-types";
+import { getOllamaCandidatesForOcr } from "@/lib/ocr/ollama-dispatch";
+import { warmupOllamaModel } from "@/lib/ocr/providers/ollama";
 import {
   appendProgressEvent,
+  POST_PROCESSING_KICKOFF_PCT,
   type OcrProgressMetadata,
   type ProgressSnapshotInput,
 } from "@/lib/ocr/pipeline-progress";
@@ -14,7 +16,7 @@ import {
 import { toJsonValue } from "@/lib/ocr/pipeline-result-builder";
 import { runProviderPostProcessing } from "@/lib/ocr/provider-dispatch";
 import type { PostProcessingSettings } from "@/lib/ocr/settings";
-import type { ApiProviderSettings } from "@/lib/ocr/settings-store";
+import type { ApiProviderSettings } from "@/lib/api-types";
 import type { OrchestratorState } from "@/lib/ocr/pipeline-page-loop";
 
 export interface PostProcessingStageDeps {
@@ -48,7 +50,7 @@ export async function runPostProcessingStage(
   const postProcessingProvider = normalizeProvider(deps.settings.provider);
   if (postProcessingProvider === "ollama") {
     state.usedOllamaModels.add(deps.postProcessingModel);
-    await ollamaWarmupWithResolvedHost(deps.settings.apiEndpoint, deps.postProcessingModel);
+    await warmupOllamaModel(getOllamaCandidatesForOcr(deps.settings.apiEndpoint), deps.postProcessingModel);
   }
 
   state.progressEvents = appendProgressEvent(
@@ -59,7 +61,7 @@ export async function runPostProcessingStage(
   state.latestMetadata = deps.snapshot({
     stage: "post_processing",
     message: `Applying post-processing with ${deps.postProcessingModel}`,
-    progressPct: 90,
+    progressPct: POST_PROCESSING_KICKOFF_PCT,
     etaSeconds: 2,
   });
   await db.ocrJob.update({

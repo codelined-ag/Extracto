@@ -8,6 +8,13 @@ import { coerceMarkdownText } from "@/lib/ocr/markdown-routing";
 
 export const REQUEST_TIMEOUT_MS = 60_000;
 
+export interface OcrPage {
+  index?: number;
+  markdown?: string;
+  text?: string;
+  html?: string;
+}
+
 export type OcrRunResult = {
   text: string;
   structured: Record<string, unknown>;

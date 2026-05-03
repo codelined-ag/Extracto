@@ -2,12 +2,10 @@ import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { db } from "@/lib/db";
-import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
+import { normalizeProvider } from "@/lib/api-types";
+import { normalizePreviewForHistory } from "@/lib/ocr/job-input-helpers";
 import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
-import {
-  normalizePreviewForHistory,
-  submitOcrJob,
-} from "@/lib/ocr/pipeline";
+import { submitOcrJob } from "@/lib/ocr/job-submit";
 import { getApiSettings } from "@/lib/ocr/settings-store";
 
 interface WatchFolderConfig {

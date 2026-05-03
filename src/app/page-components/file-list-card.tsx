@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { AnimatePresence } from "motion/react";
 import { AlertCircle } from "lucide-react";

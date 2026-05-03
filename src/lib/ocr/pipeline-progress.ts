@@ -1,4 +1,4 @@
-import type { ProviderKind } from "@/lib/ocr/endpoint-policy";
+import type { ProviderKind } from "@/lib/api-types";
 import type { PostProcessOutputFormat } from "@/lib/ocr/settings";
 
 export type OcrProgressStage =
@@ -91,13 +91,16 @@ export function buildProgressMetadata(input: {
   };
 }
 
+export const OCR_STAGE_PCT_WITH_POST_PROCESSING = 85;
+export const POST_PROCESSING_KICKOFF_PCT = 90;
+
 export function ocrStageProgressPct(
   processedPages: number,
   totalPages: number,
   hasPostProcessing: boolean,
 ): number {
   if (totalPages <= 0) return 0;
-  return (processedPages / totalPages) * (hasPostProcessing ? 85 : 100);
+  return (processedPages / totalPages) * (hasPostProcessing ? OCR_STAGE_PCT_WITH_POST_PROCESSING : 100);
 }
 
 export interface ProgressSnapshotInput {

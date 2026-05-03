@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 
+import { OLLAMA_DEFAULT_HOST } from "@/lib/ocr/provider-config";
+
 const LOCALHOST_PATTERNS =
   /^https?:\/\/(?:127\.0\.0\.1|localhost|0\.0\.0\.0)(?::\d+)?(?:\/.*)?$/iu;
 const FALLBACK_PORT = 11434;
@@ -22,11 +24,14 @@ function parsePort(endpoint: string, fallback = FALLBACK_PORT): string {
   }
 }
 
-function getContainerGatewayHosts(fallbackPort: string): string[] {
+let cachedGatewayIps: string[] | undefined;
+
+function readContainerGatewayIps(): string[] {
+  if (cachedGatewayIps) return cachedGatewayIps;
   try {
     const raw = readFileSync("/proc/net/route", "utf8");
     const lines = raw.split("\n").filter(Boolean);
-    const gateways = lines
+    cachedGatewayIps = lines
       .slice(1)
       .map((line) => line.trim().split(/\s+/u))
       .filter((parts) => parts.length >= 3 && parts[1] === "00000000")
@@ -48,11 +53,14 @@ function getContainerGatewayHosts(fallbackPort: string): string[] {
         return `${octets[0]}.${octets[1]}.${octets[2]}.${octets[3]}`;
       })
       .filter((gateway) => gateway && gateway !== "0.0.0.0" && gateway !== "255.255.255.255");
-
-    return Array.from(new Set(gateways.map((gateway) => `http://${gateway}:${fallbackPort}`)));
   } catch {
-    return [];
+    cachedGatewayIps = [];
   }
+  return cachedGatewayIps;
+}
+
+function getContainerGatewayHosts(fallbackPort: string): string[] {
+  return Array.from(new Set(readContainerGatewayIps().map((gateway) => `http://${gateway}:${fallbackPort}`)));
 }
 
 function normalizeScheme(rawEndpoint: string): string {
@@ -120,6 +128,13 @@ function shouldUseDockerFallbacks(rawEndpoint: string, fallbackHost: string): bo
     isLikelyLocalhostEndpoint(fallbackHost) ||
     /host(?:\.docker)?\.internal|host-gateway|host\.containers\.internal|172\.17\.0\.1/i.test(rawEndpoint) ||
     /host(?:\.docker)?\.internal|host-gateway|host\.containers\.internal|172\.17\.0\.1/i.test(fallbackHost)
+  );
+}
+
+export function getFallbackOllamaHost(): string {
+  return resolveOllamaHostEndpoint(
+    normalizeHostEndpoint(process.env.OLLAMA_HOST || "", OLLAMA_DEFAULT_HOST),
+    OLLAMA_DEFAULT_HOST,
   );
 }
 

@@ -3,6 +3,7 @@ import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 import { parseServiceError } from "@/lib/ocr/error-parsing";
 import {
   buildOllamaHostCandidates,
+  getFallbackOllamaHost,
   normalizeHostEndpoint,
   resolveOllamaHostEndpoint,
 } from "@/lib/ocr/host-normalization";
@@ -12,20 +13,10 @@ import {
   OLLAMA_NETWORK_HINT,
 } from "@/lib/ocr/provider-config";
 import {
-  runOllamaOcr,
-  runOllamaPostProcessing,
-  unloadOllamaModel,
-  warmupOllamaModel,
-} from "@/lib/ocr/providers/ollama";
-import {
   fetchWithTimeout,
   OcrStopRequestedError,
   parseResponseText,
-  type OcrRunResult,
-  type PostProcessResult,
 } from "@/lib/ocr/providers/shared";
-import type { PostProcessOutputFormat } from "@/lib/ocr/settings";
-import { getFallbackOllamaHost } from "@/lib/ocr/settings-store";
 
 const OLLAMA_MODEL_CACHE_TTL_MS = 60_000;
 
@@ -156,16 +147,9 @@ export async function getOllamaModels(endpoint: string): Promise<OllamaModelCata
   throw new ApiRouteError(`No reachable Ollama host found (${errors.join(" | ")})`, 502);
 }
 
-export async function ollamaOcrWithResolvedHost(
-  endpoint: string,
-  model: string,
-  prompt: string,
-  preview: string,
-  signal?: AbortSignal,
-): Promise<OcrRunResult> {
-  const hosts = getOllamaCandidatesForOcr(endpoint);
+export async function decorateOllamaErrors<T>(endpoint: string, fn: () => Promise<T>): Promise<T> {
   try {
-    return await runOllamaOcr(hosts, model, prompt, preview, signal);
+    return await fn();
   } catch (error) {
     if (error instanceof OcrStopRequestedError) throw error;
     if (error instanceof ApiRouteError) {
@@ -182,41 +166,4 @@ export async function ollamaOcrWithResolvedHost(
     }
     throw error;
   }
-}
-
-/**
- * Shared one-line bridge for the post-processing / unload / warmup
- * helpers. Resolves the Ollama host candidate list once and passes it
- * to the underlying runner — the OCR wrapper above is the odd one
- * because it ALSO decorates errors with an Ollama-network hint.
- *
- * Use the underlying runners directly with a manually-resolved host
- * list when you need the runner without the candidate-list step.
- */
-function withResolvedOllamaHosts<T>(
-  endpoint: string,
-  fn: (hosts: string[]) => Promise<T>,
-): Promise<T> {
-  return fn(getOllamaCandidatesForOcr(endpoint));
-}
-
-export function ollamaPostProcessingWithResolvedHost(
-  endpoint: string,
-  model: string,
-  systemPrompt: string,
-  userPrompt: string,
-  outputFormat?: PostProcessOutputFormat,
-  signal?: AbortSignal,
-): Promise<PostProcessResult> {
-  return withResolvedOllamaHosts(endpoint, (hosts) =>
-    runOllamaPostProcessing(hosts, model, systemPrompt, userPrompt, outputFormat, signal),
-  );
-}
-
-export function ollamaUnloadWithResolvedHost(endpoint: string, model: string): Promise<void> {
-  return withResolvedOllamaHosts(endpoint, (hosts) => unloadOllamaModel(hosts, model));
-}
-
-export function ollamaWarmupWithResolvedHost(endpoint: string, model: string): Promise<void> {
-  return withResolvedOllamaHosts(endpoint, (hosts) => warmupOllamaModel(hosts, model));
 }

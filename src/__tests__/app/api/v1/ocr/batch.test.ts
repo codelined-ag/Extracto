@@ -42,7 +42,7 @@ vi.mock("@/lib/ocr/settings-store", () => ({
   }),
 }));
 
-vi.mock("@/lib/ocr/pipeline", () => ({
+vi.mock("@/lib/ocr/job-input-helpers", () => ({
   buildPrompt: vi.fn().mockReturnValue("PROMPT"),
   normalizePreviewForHistory: vi.fn().mockReturnValue("data:preview"),
   sanitizePostProcessing: vi.fn().mockReturnValue({
@@ -51,6 +51,9 @@ vi.mock("@/lib/ocr/pipeline", () => ({
     instruction: "",
     model: "",
   }),
+}));
+
+vi.mock("@/lib/ocr/job-submit", () => ({
   submitOcrJob: vi.fn(),
 }));
 
@@ -59,7 +62,7 @@ vi.mock("@/lib/ocr/providers/mistral", () => ({
 }));
 
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
-import { submitOcrJob } from "@/lib/ocr/pipeline";
+import { submitOcrJob } from "@/lib/ocr/job-submit";
 import { POST } from "@/app/api/v1/ocr/batch/route";
 
 const mockedRateLimit = enforceOcrSubmitRateLimit as ReturnType<typeof vi.fn>;

@@ -122,11 +122,12 @@ let waiterCounter = 0;
 const waiters: PriorityWaiter[] = [];
 
 function pumpWaiters(): void {
+  if (waiters.length === 0 || activeJobs >= getConcurrencyLimit()) return;
+  waiters.sort((a, b) => {
+    if (a.priority !== b.priority) return b.priority - a.priority;
+    return a.enqueueOrder - b.enqueueOrder;
+  });
   while (activeJobs < getConcurrencyLimit() && waiters.length > 0) {
-    waiters.sort((a, b) => {
-      if (a.priority !== b.priority) return b.priority - a.priority;
-      return a.enqueueOrder - b.enqueueOrder;
-    });
     const next = waiters.shift();
     if (!next) return;
     activeJobs++;

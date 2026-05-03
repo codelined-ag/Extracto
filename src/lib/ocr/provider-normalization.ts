@@ -63,21 +63,26 @@ export function normalizeOllamaEndpoint(
   return normalized;
 }
 
+function ensureHttpsScheme(rawEndpoint: string): string {
+  const trimmed = rawEndpoint.trim();
+  if (!trimmed) return trimmed;
+  return /^https?:\/\//iu.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 export function normalizeOpenRouterEndpoint(rawEndpoint: string, fallback: string): string {
-  const normalized = normalizeHostEndpoint(rawEndpoint || "", fallback);
+  const normalized = normalizeHostEndpoint(ensureHttpsScheme(rawEndpoint || ""), fallback);
 
   try {
     const url = new URL(normalized);
     url.search = "";
     url.hash = "";
-    const pathname = url.pathname.replace(/\/+$/u, "");
+    let pathname = url.pathname.replace(/\/+$/u, "").replace(/\/(chat\/completions|models)$/u, "");
     if (!pathname || pathname === "/") {
-      url.pathname = "/api/v1";
+      pathname = "/api/v1";
     } else if (pathname.endsWith("/api")) {
-      url.pathname = `${pathname}/v1`;
-    } else {
-      url.pathname = pathname;
+      pathname = `${pathname}/v1`;
     }
+    url.pathname = pathname;
     return url.toString().replace(/\/+$/u, "");
   } catch {
     return fallback;
@@ -85,13 +90,12 @@ export function normalizeOpenRouterEndpoint(rawEndpoint: string, fallback: strin
 }
 
 export function normalizeOpenAICompatEndpoint(rawEndpoint: string, fallback: string): string {
-  // BYO endpoint: respect operator-supplied base path verbatim. Only normalize
-  // scheme, drop search/hash, and trailing slashes.
-  const normalized = normalizeHostEndpoint(rawEndpoint || "", fallback);
+  const normalized = normalizeHostEndpoint(ensureHttpsScheme(rawEndpoint || ""), fallback);
   try {
     const url = new URL(normalized);
     url.search = "";
     url.hash = "";
+    url.pathname = url.pathname.replace(/\/+$/u, "").replace(/\/(chat\/completions|models)$/u, "");
     return url.toString().replace(/\/+$/u, "");
   } catch {
     return fallback;

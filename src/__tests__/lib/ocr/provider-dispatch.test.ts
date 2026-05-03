@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/ocr/ollama-dispatch", () => ({
-  ollamaOcrWithResolvedHost: vi.fn(),
-  ollamaPostProcessingWithResolvedHost: vi.fn(),
+  decorateOllamaErrors: vi.fn((_endpoint: string, fn: () => unknown) => fn()),
+  getOllamaCandidatesForOcr: vi.fn((endpoint: string) => [endpoint]),
+}));
+
+vi.mock("@/lib/ocr/providers/ollama", () => ({
+  runOllamaOcr: vi.fn(),
+  runOllamaPostProcessing: vi.fn(),
 }));
 
 vi.mock("@/lib/ocr/providers/compat", () => ({
@@ -17,13 +22,13 @@ vi.mock("@/lib/ocr/providers/mistral", () => ({
   runMistralPostProcessing: vi.fn(),
 }));
 
-import { ollamaOcrWithResolvedHost, ollamaPostProcessingWithResolvedHost } from "@/lib/ocr/ollama-dispatch";
+import { runOllamaOcr, runOllamaPostProcessing } from "@/lib/ocr/providers/ollama";
 import { runCompatOcr, runCompatPostProcessing } from "@/lib/ocr/providers/compat";
 import { runMistralOcr, runMistralPostProcessing } from "@/lib/ocr/providers/mistral";
 import { runProviderOcr, runProviderPostProcessing } from "@/lib/ocr/provider-dispatch";
 
-const mOllamaOcr = ollamaOcrWithResolvedHost as ReturnType<typeof vi.fn>;
-const mOllamaPP = ollamaPostProcessingWithResolvedHost as ReturnType<typeof vi.fn>;
+const mOllamaOcr = runOllamaOcr as ReturnType<typeof vi.fn>;
+const mOllamaPP = runOllamaPostProcessing as ReturnType<typeof vi.fn>;
 const mCompatOcr = runCompatOcr as ReturnType<typeof vi.fn>;
 const mCompatPP = runCompatPostProcessing as ReturnType<typeof vi.fn>;
 const mMistralOcr = runMistralOcr as ReturnType<typeof vi.fn>;
@@ -43,9 +48,9 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("runProviderOcr", () => {
-  it("routes ollama to the host-resolving wrapper without an API key", async () => {
+  it("routes ollama through the underlying runner with resolved candidates", async () => {
     await runProviderOcr("ollama", { ...baseSettings, apiEndpoint: "http://o" }, "model-1", "prompt", "preview");
-    expect(mOllamaOcr).toHaveBeenCalledWith("http://o", "model-1", "prompt", "preview", undefined);
+    expect(mOllamaOcr).toHaveBeenCalledWith(["http://o"], "model-1", "prompt", "preview", undefined);
     expect(mCompatOcr).not.toHaveBeenCalled();
     expect(mMistralOcr).not.toHaveBeenCalled();
   });
@@ -121,7 +126,7 @@ describe("runProviderOcr", () => {
 });
 
 describe("runProviderPostProcessing", () => {
-  it("routes ollama post-processing to the host-resolving wrapper", async () => {
+  it("routes ollama post-processing through the underlying runner with resolved candidates", async () => {
     await runProviderPostProcessing(
       "ollama",
       { ...baseSettings, apiEndpoint: "http://o" },
@@ -130,7 +135,7 @@ describe("runProviderPostProcessing", () => {
       "user",
       "markdown",
     );
-    expect(mOllamaPP).toHaveBeenCalledWith("http://o", "model", "sys", "user", "markdown");
+    expect(mOllamaPP).toHaveBeenCalledWith(["http://o"], "model", "sys", "user", "markdown");
   });
 
   it("routes mistral post-processing with the resolved API key", async () => {

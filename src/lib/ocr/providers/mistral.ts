@@ -17,11 +17,12 @@ import {
 } from "@/lib/ocr/provider-config";
 
 export function normalizeMistralApiBase(rawEndpoint: string): string {
-  return normalizeMistralEndpointBase(rawEndpoint, getDefaultMistralApiUrl());
+  return normalizeMistralEndpointBase(rawEndpoint || "", getDefaultMistralApiUrl());
 }
 import {
   extractChatContentText,
   fetchWithTimeout,
+  type OcrPage,
   OcrStopRequestedError,
   parseResponseText,
   REQUEST_TIMEOUT_MS,
@@ -29,13 +30,6 @@ import {
   type PostProcessResult,
 } from "@/lib/ocr/providers/shared";
 import type { PostProcessOutputFormat } from "@/lib/ocr/settings";
-
-interface OcrPage {
-  index?: number;
-  markdown?: string;
-  text?: string;
-  html?: string;
-}
 
 export function buildMistralOcrEndpointCandidates(rawEndpoint: string): string[] {
   const baseEndpoint = normalizeMistralApiBase(rawEndpoint);
@@ -118,11 +112,11 @@ export async function runMistralOcr(
   const endpointCandidates = buildMistralOcrEndpointCandidates(
     apiEndpoint || getDefaultMistralApiUrl(),
   );
+  const errors: string[] = [];
   let endpointUsed = endpointCandidates[0]
     || normalizeMistralApiBase(getDefaultMistralApiUrl());
   let payload: unknown = null;
   let response: Response | null = null;
-  let lastError: ApiRouteError | null = null;
 
   for (let index = 0; index < endpointCandidates.length; index++) {
     const candidateEndpoint = endpointCandidates[index];
@@ -166,17 +160,17 @@ export async function runMistralOcr(
       const isLastEndpoint = index === endpointCandidates.length - 1;
       const isNotFound = candidateResponse.status === 404;
       if (!isLastEndpoint && isNotFound) {
+        errors.push(`${candidateEndpoint}: 404 (trying next candidate)`);
         continue;
       }
 
-      lastError = new ApiRouteError(
+      throw new ApiRouteError(
         `Mistral OCR failed (${candidateResponse.status}): ${parseServiceError(
           candidateResponse,
           candidatePayload,
         )}`,
         candidateResponse.status,
       );
-      break;
     }
 
     response = candidateResponse;
@@ -184,12 +178,11 @@ export async function runMistralOcr(
     break;
   }
 
-  if (lastError) {
-    throw lastError;
-  }
-
   if (!response || !payload || typeof payload !== "object") {
-    throw new ApiRouteError("Invalid OCR response from Mistral", 502);
+    throw new ApiRouteError(
+      `Invalid OCR response from Mistral${errors.length ? ` (${errors.join(" | ")})` : ""}`,
+      502,
+    );
   }
 
   const payloadObject = payload as {

@@ -138,7 +138,9 @@ export function getStructuredJsonPayload(payload: unknown): Record<string, unkno
   return typed;
 }
 
-export type PipelineLanguage = "it" | "en" | "fr" | "es" | "de";
+import type { UiLanguage } from "@/app/page-components/types";
+
+export type PipelineLanguage = UiLanguage;
 
 type PipelineDict = Record<PipelineLanguage, string>;
 
