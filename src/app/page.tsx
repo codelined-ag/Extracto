@@ -19,7 +19,6 @@ import { FileTextIcon } from"@/components/ui/file-text";
 import { HistoryIcon } from"@/components/ui/history";
 import { LanguagesIcon } from"@/components/ui/languages";
 import { LoaderCircleIcon } from"@/components/ui/loader-circle";
-import { LogoutIcon } from"@/components/ui/logout";
 import { PauseIcon } from"@/components/ui/pause";
 import { PlayIcon } from"@/components/ui/play";
 import { SettingsIcon } from"@/components/ui/settings";
@@ -489,7 +488,7 @@ export default function ExtractoPage() {
  const [selectedFileId, setSelectedFileId] = React.useState<string | null>(null);
  const [copied, setCopied] = React.useState<"md"|"json"| null>(null);
  const [apiSettingsOpen, setApiSettingsOpen] = React.useState(false);
- const [settingsTab, setSettingsTab] = React.useState<"model"|"provider"|"kb"|"general"|"account">("model");
+ const [settingsTab, setSettingsTab] = React.useState<SettingsTab>("model");
  const [viewMode, setViewMode] = React.useState<"preview"|"split"|"result">("split");
  const pdfPagePreviewCacheRef = React.useRef<Record<string, string[]>>({});
  const modelSelectionsRef = React.useRef<ProviderModelSelections>({});
@@ -2008,11 +2007,11 @@ export default function ExtractoPage() {
  <DialogTitle>{t("Impostazioni","Settings","Paramètres","Configuración","Einstellungen")}</DialogTitle>
  <DialogDescription>
  {t(
-"Modello, parametri OCR, knowledge base, provider e account.",
-"Model, OCR parameters, knowledge base, provider and account.",
-"Modèle, paramètres OCR, base de connaissances, fournisseur et compte.",
-"Modelo, parámetros OCR, base de conocimiento, proveedor y cuenta.",
-"Modell, OCR-Parameter, Wissensdatenbank, Provider und Konto.",
+"Modello, parametri OCR, knowledge base e provider.",
+"Model, OCR parameters, knowledge base and provider.",
+"Modèle, paramètres OCR, base de connaissances et fournisseur.",
+"Modelo, parámetros OCR, base de conocimiento y proveedor.",
+"Modell, OCR-Parameter, Wissensdatenbank und Provider.",
  )}
  </DialogDescription>
  </DialogHeader>
@@ -2025,7 +2024,6 @@ export default function ExtractoPage() {
  <TabsTrigger value="kb"className="gap-1.5"><DatabaseBackupIcon size={14} className="inline-flex items-center justify-center"/>{t("Knowledge base","Knowledge base","Base de connaissances","Base de conocimiento","Wissensdatenbank")}</TabsTrigger>
  <TabsTrigger value="provider"className="gap-1.5"><SettingsIcon size={14} className="inline-flex items-center justify-center"/>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</TabsTrigger>
  <TabsTrigger value="general"className="gap-1.5"><LanguagesIcon size={14} className="inline-flex items-center justify-center"/>{t("Generale","General","Général","General","Allgemein")}</TabsTrigger>
- <TabsTrigger value="account"className="gap-1.5"><LogoutIcon size={14} className="inline-flex items-center justify-center"/>{t("Account","Account","Compte","Cuenta","Konto")}</TabsTrigger>
  </TabsList>
  </div>
 
@@ -2459,14 +2457,6 @@ export default function ExtractoPage() {
 
  </TabsContent>
 
- <TabsContent value="account"className="space-y-5 mt-4">
- <SettingsSection title={t("Account","Account","Compte","Cuenta","Konto")}>
- <Button variant="outline"className="w-full justify-start group"onClick={signOut} disabled={isSigningOut}>
- {isSigningOut ? <LoaderCircleIcon size={16} className="inline-flex items-center justify-center mr-2 animate-spin"/> : <LogoutIcon size={16} className="inline-flex items-center justify-center mr-2 text-destructive transition-transform duration-200 group-hover:translate-x-0.5"/>}
- {t("Esci","Sign out","Se déconnecter","Cerrar sesión","Abmelden")}
- </Button>
- </SettingsSection>
- </TabsContent>
  </ScrollArea>
  </Tabs>
 
