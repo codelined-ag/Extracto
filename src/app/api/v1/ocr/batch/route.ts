@@ -8,6 +8,7 @@ import { getClientIpAddress } from "@/lib/request-security";
 import { normalizePreviewForHistory } from "@/lib/ocr/job-input-helpers";
 import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
 import { submitOcrJob } from "@/lib/ocr/job-submit";
+import { extractAnchorsForPages } from "@/lib/ocr/pdf-anchoring-helper";
 import type { AdvancedSettings, PostProcessingSettings } from "@/lib/ocr/settings";
 import { getApiSettings } from "@/lib/ocr/settings-store";
 
@@ -18,6 +19,7 @@ interface BatchFile {
   preview: string;
   pages?: string[];
   pageNumbers?: number[];
+  sourcePdf?: string;
   model: string;
   priority?: number;
   postProcessing?: Partial<PostProcessingSettings>;
@@ -73,11 +75,13 @@ function parseBatchBody(raw: unknown): BatchFile[] | { error: string } {
       typeof f.priority === "number" && Number.isFinite(f.priority)
         ? Math.max(-10, Math.min(10, Math.trunc(f.priority)))
         : 0;
+    const sourcePdf = typeof f.sourcePdf === "string" && f.sourcePdf.trim() ? f.sourcePdf.trim() : undefined;
     parsed.push({
       fileName,
       preview,
       pages,
       pageNumbers,
+      sourcePdf,
       model,
       priority,
       postProcessing: f.postProcessing as Partial<PostProcessingSettings> | undefined,
@@ -113,6 +117,11 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
       });
       const inputPreviews = file.pages && file.pages.length > 0 ? file.pages : [file.preview];
       const sourcePreview = normalizePreviewForHistory(inputPreviews[0] || "");
+      const pageAnchors = await extractAnchorsForPages(
+        file.sourcePdf,
+        file.pageNumbers,
+        inputPreviews.length,
+      );
 
       const { jobId } = await submitOcrJob({
         ...inputs,
@@ -122,6 +131,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
         model: file.model,
         inputPreviews,
         pageNumbers: file.pageNumbers,
+        pageAnchors,
         sourcePreview,
         priority: file.priority,
         batchId,

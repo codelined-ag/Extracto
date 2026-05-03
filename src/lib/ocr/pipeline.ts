@@ -58,6 +58,7 @@ export interface ProcessOcrJobInput {
   postProcessingPayload: PostProcessingSettings;
   inputPreviews: string[];
   pageNumbers?: number[];
+  pageAnchors?: import("@/lib/ocr/pdf-anchoring").AnchorPage[];
   prompt: string;
   initialPageOutputs?: ProcessedPageOutput[];
   startIndex?: number;
@@ -236,6 +237,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       prompt: input.prompt,
       inputPreviews: input.inputPreviews,
       pageNumbers: input.pageNumbers,
+      pageAnchors: input.pageAnchors,
       startIndex,
       snapshot: snapshotMetadata,
       ocrPct,

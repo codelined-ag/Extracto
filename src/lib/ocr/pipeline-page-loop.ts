@@ -24,6 +24,8 @@ import { runProviderOcr } from "@/lib/ocr/provider-dispatch";
 import { OcrStopRequestedError } from "@/lib/ocr/providers/shared";
 import type { ProviderKind } from "@/lib/api-types";
 import type { ApiProviderSettings } from "@/lib/api-types";
+import type { AnchorPage } from "@/lib/ocr/pdf-anchoring";
+import { maybeApplyAnchoring } from "@/lib/ocr/anchoring-prompt";
 
 export interface OrchestratorState {
   pageOutputs: ProcessedPageOutput[];
@@ -48,6 +50,7 @@ export interface PageLoopDeps {
   prompt: string;
   inputPreviews: string[];
   pageNumbers?: number[];
+  pageAnchors?: AnchorPage[];
   startIndex: number;
   snapshot: (snap: ProgressSnapshotInput) => OcrProgressMetadata;
   ocrPct: () => number;
@@ -76,11 +79,13 @@ export async function runOcrPages(
     const pagePreview = inputPreviews[index];
     const pageNumber = deps.pageNumbers?.[index] ?? index + 1;
     const pageStartMs = Date.now();
+    const anchored = maybeApplyAnchoring(deps.prompt, deps.pageAnchors?.[index]);
+    const effectivePrompt = anchored.prompt;
 
     state.progressEvents = appendProgressEvent(
       state.progressEvents,
       "ocr",
-      `Running OCR on page ${pageNumber}/${inputPreviews.length}`,
+      `Running OCR on page ${pageNumber}/${inputPreviews.length}${anchored.usedAnchoring ? " (with text-layer anchoring)" : ""}`,
     );
 
     let pageText = "";
@@ -93,10 +98,13 @@ export async function runOcrPages(
         deps.provider,
         deps.settings,
         deps.ocrModel,
-        deps.prompt,
+        effectivePrompt,
         pagePreview,
         pageAbortController.signal,
       ));
+      if (anchored.usedAnchoring) {
+        pageMetadata = { ...pageMetadata, anchored: true };
+      }
     } catch (error) {
       if (error instanceof OcrStopRequestedError || (await isOcrJobStopRequested(deps.jobId))) {
         await deps.pauseAtCheckpoint(

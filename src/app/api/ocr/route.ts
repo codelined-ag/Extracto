@@ -27,6 +27,7 @@ import {
 } from "@/lib/ocr/provider-config";
 import { normalizePreviewForHistory } from "@/lib/ocr/job-input-helpers";
 import { resumeOcrJob, submitOcrJob } from "@/lib/ocr/job-submit";
+import { extractAnchorsForPages } from "@/lib/ocr/pdf-anchoring-helper";
 import { getModelCatalog } from "@/lib/ocr/model-catalog";
 
 interface OCRRequestBody {
@@ -37,6 +38,7 @@ interface OCRRequestBody {
   preview?: unknown;
   pages?: unknown;
   pageNumbers?: unknown;
+  sourcePdf?: unknown;
   priority?: unknown;
   batchId?: unknown;
   settings?: Partial<AdvancedSettings>;
@@ -163,6 +165,12 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
       preloadedSettings: storedSettings,
     });
     const sourcePreview = normalizePreviewForHistory(inputPreviews[0] || "");
+    const sourcePdfRaw = typeof body.sourcePdf === "string" ? body.sourcePdf.trim() : "";
+    const pageAnchors = await extractAnchorsForPages(
+      sourcePdfRaw || undefined,
+      pageNumbers,
+      inputPreviews.length,
+    );
 
     if (resumeRequested) {
       if (!resumeJobId) {
@@ -178,6 +186,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
         model,
         inputPreviews,
         pageNumbers,
+        pageAnchors,
         sourcePreview,
         startedAtMs,
       });
@@ -206,6 +215,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
       model,
       inputPreviews,
       pageNumbers,
+      pageAnchors,
       sourcePreview,
       priority: requestedPriority,
       batchId: requestedBatchId,

@@ -32,6 +32,7 @@ export interface SubmitOcrJobInput {
   postProcessingPayload: PostProcessingSettings;
   inputPreviews: string[];
   pageNumbers?: number[];
+  pageAnchors?: import("@/lib/ocr/pdf-anchoring").AnchorPage[];
   prompt: string;
   sourcePreview: string | null;
   priority?: number;
@@ -89,6 +90,7 @@ function kickoffProcessing(
       postProcessingPayload: input.postProcessingPayload,
       inputPreviews: input.inputPreviews,
       pageNumbers: input.pageNumbers,
+      pageAnchors: input.pageAnchors,
       prompt: input.prompt,
       ...resumeExtras,
     }),

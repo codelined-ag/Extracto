@@ -1718,6 +1718,22 @@ export default function ExtractoPage() {
  resume = false,
  pageNumbers?: number[],
  ): Promise<{ jobId: string }> => {
+ let sourcePdf: string | undefined;
+ if (file.file && isPdfFile(file.file)) {
+ try {
+ const buffer = await getPdfArrayBuffer(file.file);
+ const bytes = new Uint8Array(buffer);
+ const chunkSize = 0x8000;
+ let binary = "";
+ for (let i = 0; i < bytes.length; i += chunkSize) {
+ binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+ }
+ const b64 = typeof btoa === "function" ? btoa(binary) : Buffer.from(binary, "binary").toString("base64");
+ sourcePdf = `data:application/pdf;base64,${b64}`;
+ } catch {
+ sourcePdf = undefined;
+ }
+ }
  const response = await fetch("/api/ocr", {
  method:"POST",
  headers: {
@@ -1731,6 +1747,7 @@ export default function ExtractoPage() {
  preview: pagePreviews[0],
  pages: pagePreviews,
  ...(pageNumbers ? { pageNumbers } : {}),
+ ...(sourcePdf ? { sourcePdf } : {}),
  settings,
  postProcessing,
  }),
