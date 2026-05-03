@@ -46,7 +46,13 @@ export interface Chunk {
   metadata: ChunkMetadata;
 }
 
-export type EmbeddingProviderKind = "ollama" | "openrouter" | "openai_compat";
+import type { ProviderKind } from "@/lib/api-types";
+
+// Embedding only supports the chat-completions-style providers (Mistral
+// has no embeddings endpoint at this time). Derive from ProviderKind so
+// adding a new provider doesn't silently leave EmbeddingProviderKind
+// out of sync.
+export type EmbeddingProviderKind = Extract<ProviderKind, "ollama" | "openrouter" | "openai_compat">;
 
 export interface EmbeddingProviderConfig {
   provider: EmbeddingProviderKind;

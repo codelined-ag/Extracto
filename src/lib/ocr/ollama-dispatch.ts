@@ -184,6 +184,22 @@ export async function ollamaOcrWithResolvedHost(
   }
 }
 
+/**
+ * Shared one-line bridge for the post-processing / unload / warmup
+ * helpers. Resolves the Ollama host candidate list once and passes it
+ * to the underlying runner — the OCR wrapper above is the odd one
+ * because it ALSO decorates errors with an Ollama-network hint.
+ *
+ * Use the underlying runners directly with a manually-resolved host
+ * list when you need the runner without the candidate-list step.
+ */
+function withResolvedOllamaHosts<T>(
+  endpoint: string,
+  fn: (hosts: string[]) => Promise<T>,
+): Promise<T> {
+  return fn(getOllamaCandidatesForOcr(endpoint));
+}
+
 export function ollamaPostProcessingWithResolvedHost(
   endpoint: string,
   model: string,
@@ -192,13 +208,15 @@ export function ollamaPostProcessingWithResolvedHost(
   outputFormat?: PostProcessOutputFormat,
   signal?: AbortSignal,
 ): Promise<PostProcessResult> {
-  return runOllamaPostProcessing(getOllamaCandidatesForOcr(endpoint), model, systemPrompt, userPrompt, outputFormat, signal);
+  return withResolvedOllamaHosts(endpoint, (hosts) =>
+    runOllamaPostProcessing(hosts, model, systemPrompt, userPrompt, outputFormat, signal),
+  );
 }
 
 export function ollamaUnloadWithResolvedHost(endpoint: string, model: string): Promise<void> {
-  return unloadOllamaModel(getOllamaCandidatesForOcr(endpoint), model);
+  return withResolvedOllamaHosts(endpoint, (hosts) => unloadOllamaModel(hosts, model));
 }
 
 export function ollamaWarmupWithResolvedHost(endpoint: string, model: string): Promise<void> {
-  return warmupOllamaModel(getOllamaCandidatesForOcr(endpoint), model);
+  return withResolvedOllamaHosts(endpoint, (hosts) => warmupOllamaModel(hosts, model));
 }

@@ -21,21 +21,36 @@ export function isOcrJobRunning(jobId: string): boolean {
 }
 
 export async function requestOcrJobStop(jobId: string): Promise<void> {
-  await db.ocrJob.update({
-    where: { id: jobId },
-    data: { stopRequestedAt: new Date() },
-  }).catch(() => undefined);
+  try {
+    await db.ocrJob.update({
+      where: { id: jobId },
+      data: { stopRequestedAt: new Date() },
+    });
+  } catch (error) {
+    console.error(`[job-control] requestOcrJobStop DB write failed for ${jobId}:`, error);
+  }
   stopRequestCache.set(jobId, { value: true, expiresAt: Date.now() + STOP_REQUEST_CACHE_TTL_MS });
 }
 
 export async function clearOcrJobStop(jobId: string): Promise<void> {
-  await db.ocrJob.update({
-    where: { id: jobId },
-    data: { stopRequestedAt: null },
-  }).catch(() => undefined);
+  try {
+    await db.ocrJob.update({
+      where: { id: jobId },
+      data: { stopRequestedAt: null },
+    });
+  } catch (error) {
+    console.error(`[job-control] clearOcrJobStop DB write failed for ${jobId}:`, error);
+  }
   stopRequestCache.delete(jobId);
 }
 
+/**
+ * Cached read of the stop-requested flag. The cache write on a miss is
+ * intentional (high-frequency poll path); honest in-name predicates
+ * would have been "loadOcrJobStopRequestedThroughCache" — kept as
+ * `is*` because callers treat it as a boolean predicate, and the cache
+ * lifetime is bounded by STOP_REQUEST_CACHE_TTL_MS.
+ */
 export async function isOcrJobStopRequested(jobId: string): Promise<boolean> {
   const cached = stopRequestCache.get(jobId);
   const now = Date.now();

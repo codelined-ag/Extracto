@@ -815,7 +815,7 @@ export default function ExtractoPage() {
  setIsSavingApiSettings(true);
  try {
  const response = await fetch("/api/settings", {
- method:"POST",
+ method:"PUT",
  headers: {
 "Content-Type":"application/json",
  },

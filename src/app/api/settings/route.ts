@@ -9,7 +9,7 @@ export const GET = withAuth("settings:read", async (_request: NextRequest, { aut
   return NextResponse.json(toClientApiSettings(settings));
 });
 
-export const POST = withMutationAuth("settings:write", async (request: NextRequest, { auth }) => {
+export const PUT = withMutationAuth("settings:write", async (request: NextRequest, { auth }) => {
   const body = await parseJsonBody<{
     provider?: unknown;
     apiEndpoint?: unknown;
