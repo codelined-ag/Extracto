@@ -21,26 +21,18 @@ export function isOcrJobRunning(jobId: string): boolean {
 }
 
 export async function requestOcrJobStop(jobId: string): Promise<void> {
-  try {
-    await db.ocrJob.update({
-      where: { id: jobId },
-      data: { stopRequestedAt: new Date() },
-    });
-  } catch (error) {
-    console.error(`[job-control] requestOcrJobStop DB write failed for ${jobId}:`, error);
-  }
+  await db.ocrJob.update({
+    where: { id: jobId },
+    data: { stopRequestedAt: new Date() },
+  });
   stopRequestCache.set(jobId, { value: true, expiresAt: Date.now() + STOP_REQUEST_CACHE_TTL_MS });
 }
 
 export async function clearOcrJobStop(jobId: string): Promise<void> {
-  try {
-    await db.ocrJob.update({
-      where: { id: jobId },
-      data: { stopRequestedAt: null },
-    });
-  } catch (error) {
-    console.error(`[job-control] clearOcrJobStop DB write failed for ${jobId}:`, error);
-  }
+  await db.ocrJob.update({
+    where: { id: jobId },
+    data: { stopRequestedAt: null },
+  });
   stopRequestCache.delete(jobId);
 }
 

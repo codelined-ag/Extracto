@@ -19,11 +19,6 @@ import {
 
 const OLLAMA_MODEL_CACHE_TTL_MS = 60_000;
 
-// Re-exported under the historical name used by the api/ocr route. The
-// underlying helper now honors APP_NETWORK_MODE itself, so both call
-// sites resolve identically.
-export const getOllamaDiscoveryFallbackHost = getFallbackOllamaHost;
-
 export interface OllamaModelCatalogResult {
   models: string[];
   host: string;
@@ -36,11 +31,11 @@ let ollamaModelCache: { values: string[]; expiresAt: number; host: string } = {
 };
 
 function getOllamaHostCandidates(rawEndpoint: string): string[] {
-  const rawCandidates = buildOllamaHostCandidates(rawEndpoint, getOllamaDiscoveryFallbackHost());
+  const rawCandidates = buildOllamaHostCandidates(rawEndpoint, getFallbackOllamaHost());
   const safeCandidates = rawCandidates
     .map((candidate) => {
       try {
-        return enforceProviderEndpointPolicy("ollama", candidate, getOllamaDiscoveryFallbackHost());
+        return enforceProviderEndpointPolicy("ollama", candidate, getFallbackOllamaHost());
       } catch {
         return "";
       }
@@ -49,18 +44,18 @@ function getOllamaHostCandidates(rawEndpoint: string): string[] {
 
   return safeCandidates.length > 0
     ? Array.from(new Set(safeCandidates))
-    : [enforceProviderEndpointPolicy("ollama", rawEndpoint, getOllamaDiscoveryFallbackHost())];
+    : [enforceProviderEndpointPolicy("ollama", rawEndpoint, getFallbackOllamaHost())];
 }
 
 function normalizeOllamaApiBase(rawEndpoint: string): string {
-  return normalizeHostEndpoint(rawEndpoint, getOllamaDiscoveryFallbackHost())
+  return normalizeHostEndpoint(rawEndpoint, getFallbackOllamaHost())
     .replace(/\/api\/?$/i, "")
     .replace(/\/v1\/?$/i, "");
 }
 
 function resolveOllamaRuntimeEndpoint(rawEndpoint: string): string {
-  const resolvedHost = resolveOllamaHostEndpoint(rawEndpoint, getOllamaDiscoveryFallbackHost());
-  return normalizeHostEndpoint(resolvedHost, getOllamaDiscoveryFallbackHost())
+  const resolvedHost = resolveOllamaHostEndpoint(rawEndpoint, getFallbackOllamaHost());
+  return normalizeHostEndpoint(resolvedHost, getFallbackOllamaHost())
     .replace(/\/api\/?$/i, "")
     .replace(/\/v1\/?$/i, "");
 }
@@ -84,7 +79,7 @@ function setOllamaModelCache(host: string, values: string[]) {
 
 export function getOllamaCandidatesForOcr(endpoint: string): string[] {
   const candidates = getOllamaHostCandidates(endpoint).map(normalizeOllamaApiBase);
-  const normalizedFallback = normalizeOllamaApiBase(getOllamaDiscoveryFallbackHost());
+  const normalizedFallback = normalizeOllamaApiBase(getFallbackOllamaHost());
   if (!candidates.includes(normalizedFallback)) {
     candidates.push(normalizedFallback);
   }

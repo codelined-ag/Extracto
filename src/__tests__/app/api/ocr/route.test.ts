@@ -61,12 +61,9 @@ vi.mock("@/lib/ocr/endpoint-policy", () => ({
   enforceProviderEndpointPolicy: vi.fn().mockImplementation((_p: unknown, host: string) => host),
 }));
 
-vi.mock("@/lib/ocr/ollama-dispatch", () => ({
-  getOllamaDiscoveryFallbackHost: vi.fn().mockReturnValue("http://localhost:11434"),
-}));
-
 vi.mock("@/lib/ocr/host-normalization", () => ({
   resolveOllamaHostEndpoint: (host: string) => host,
+  getFallbackOllamaHost: () => "http://localhost:11434",
 }));
 
 vi.mock("@/lib/ocr/job-input-helpers", () => ({

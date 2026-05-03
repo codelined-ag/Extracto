@@ -11,7 +11,7 @@ import {
 import { withAuth, withMutationAuth } from "@/lib/auth/request";
 import { normalizeProvider, type ProviderKind } from "@/lib/api-types";
 import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
-import { resolveOllamaHostEndpoint } from "@/lib/ocr/host-normalization";
+import { getFallbackOllamaHost, resolveOllamaHostEndpoint } from "@/lib/ocr/host-normalization";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
 import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
@@ -28,7 +28,6 @@ import {
 import { normalizePreviewForHistory } from "@/lib/ocr/job-input-helpers";
 import { resumeOcrJob, submitOcrJob } from "@/lib/ocr/job-submit";
 import { getModelCatalog } from "@/lib/ocr/model-catalog";
-import { getOllamaDiscoveryFallbackHost } from "@/lib/ocr/ollama-dispatch";
 
 interface OCRRequestBody {
   jobId?: unknown;
@@ -58,8 +57,8 @@ const ENDPOINT_ADAPTERS: Record<ProviderKind, ProviderEndpointAdapter> = {
   openrouter: { normalize: normalizeOpenRouterApiBase, getDefault: getDefaultOpenRouterApiUrl },
   openai_compat: { normalize: normalizeOpenAICompatApiBase, getDefault: getDefaultOpenAICompatApiUrl },
   ollama: {
-    normalize: (raw) => resolveOllamaHostEndpoint(raw, getOllamaDiscoveryFallbackHost()),
-    getDefault: getOllamaDiscoveryFallbackHost,
+    normalize: (raw) => resolveOllamaHostEndpoint(raw, getFallbackOllamaHost()),
+    getDefault: getFallbackOllamaHost,
   },
 };
 

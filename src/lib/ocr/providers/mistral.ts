@@ -15,10 +15,6 @@ import {
   getDefaultMistralModels,
   getDefaultMistralOcrModel,
 } from "@/lib/ocr/provider-config";
-
-export function normalizeMistralApiBase(rawEndpoint: string): string {
-  return normalizeMistralEndpointBase(rawEndpoint || "", getDefaultMistralApiUrl());
-}
 import {
   extractChatContentText,
   fetchWithTimeout,
@@ -30,6 +26,10 @@ import {
   type PostProcessResult,
 } from "@/lib/ocr/providers/shared";
 import type { PostProcessOutputFormat } from "@/lib/ocr/settings";
+
+export function normalizeMistralApiBase(rawEndpoint: string): string {
+  return normalizeMistralEndpointBase(rawEndpoint || "", getDefaultMistralApiUrl());
+}
 
 export function buildMistralOcrEndpointCandidates(rawEndpoint: string): string[] {
   const baseEndpoint = normalizeMistralApiBase(rawEndpoint);

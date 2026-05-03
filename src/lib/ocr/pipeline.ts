@@ -36,6 +36,7 @@ import {
   type ProcessedPageOutput,
 } from "@/lib/ocr/pipeline-result-builder";
 import { unloadOllamaModel, warmupOllamaModel } from "@/lib/ocr/providers/ollama";
+import { OcrStopRequestedError } from "@/lib/ocr/providers/shared";
 import {
   maybeUploadResultJson,
   maybeUploadResultText,
@@ -310,6 +311,13 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
 
     await persistCompletedJob(input, finalMarkdown, result, extractedMetadata, state.usedOllamaModels);
   } catch (error) {
+    if (error instanceof OcrStopRequestedError) {
+      await pauseAtCheckpoint(
+        "Stopped during post-processing. Resume to continue.",
+        `Stopped during post-processing (${state.pageOutputs.length}/${input.inputPreviews.length} page(s) complete)`,
+      );
+      return;
+    }
     state.progressEvents = appendProgressEvent(
       state.progressEvents,
       "failed",
