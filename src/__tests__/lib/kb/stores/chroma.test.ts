@@ -42,7 +42,7 @@ function makeChunk(overrides: Partial<Chunk["metadata"]> = {}, embedding = [0.1,
 describe("ChromaAdapter.collectionExists", () => {
   it("returns true on 200", async () => {
     const { fetch: f, calls } = recordingFetch([(_url) => jsonResponse({ id: "col-1", name: "x" })]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://chroma:8000" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://chroma:8000" , apiVersion: "v1" }, f);
     expect(await adapter.collectionExists("x")).toBe(true);
     expect(calls[0].url).toBe("http://chroma:8000/api/v1/collections/x");
     expect(calls[0].init.method).toBe("GET");
@@ -50,27 +50,27 @@ describe("ChromaAdapter.collectionExists", () => {
 
   it("returns false on 404", async () => {
     const { fetch: f } = recordingFetch([() => new Response("not found", { status: 404 })]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://chroma:8000" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://chroma:8000" , apiVersion: "v1" }, f);
     expect(await adapter.collectionExists("missing")).toBe(false);
   });
 
   it("URL-encodes the collection name", async () => {
     const { fetch: f, calls } = recordingFetch([() => jsonResponse({ id: "x", name: "x" })]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://chroma:8000" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://chroma:8000" , apiVersion: "v1" }, f);
     await adapter.collectionExists("my docs/2026");
     expect(calls[0].url).toBe("http://chroma:8000/api/v1/collections/my%20docs%2F2026");
   });
 
   it("strips trailing slashes from baseUrl", async () => {
     const { fetch: f, calls } = recordingFetch([() => jsonResponse({ id: "x", name: "x" })]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://chroma:8000///" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://chroma:8000///" , apiVersion: "v1" }, f);
     await adapter.collectionExists("x");
     expect(calls[0].url).toBe("http://chroma:8000/api/v1/collections/x");
   });
 
   it("forwards Authorization when apiKey is set", async () => {
     const { fetch: f, calls } = recordingFetch([() => jsonResponse({ id: "x", name: "x" })]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://c", apiKey: "k1" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c", apiKey: "k1" , apiVersion: "v1" }, f);
     await adapter.collectionExists("x");
     expect((calls[0].init.headers as Record<string, string>).Authorization).toBe("Bearer k1");
   });
@@ -79,7 +79,7 @@ describe("ChromaAdapter.collectionExists", () => {
 describe("ChromaAdapter.upsert", () => {
   it("returns immediately when chunks is empty (no HTTP call)", async () => {
     const { fetch: f, calls } = recordingFetch([() => jsonResponse({})]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://c" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c" , apiVersion: "v1" }, f);
     await adapter.upsert([], "x");
     expect(calls).toHaveLength(0);
   });
@@ -106,7 +106,7 @@ describe("ChromaAdapter.upsert", () => {
         return jsonResponse({});
       },
     ]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://c" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c" , apiVersion: "v1" }, f);
     await adapter.upsert(
       [
         makeChunk({ chunkIndex: 0 }),
@@ -125,7 +125,7 @@ describe("ChromaAdapter.upsert", () => {
       },
       () => jsonResponse({}),
     ]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://c", dimensions: 384 }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c", dimensions: 384 , apiVersion: "v1" }, f);
     await adapter.upsert([makeChunk()], "kb-1");
   });
 
@@ -138,7 +138,7 @@ describe("ChromaAdapter.upsert", () => {
         return jsonResponse({});
       },
     ]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://c" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c" , apiVersion: "v1" }, f);
     await adapter.upsert(
       [makeChunk({ contentHash: "deadbeefcafef00d1234567890abcdef" })],
       "x",
@@ -154,7 +154,7 @@ describe("ChromaAdapter.upsert", () => {
         return jsonResponse({});
       },
     ]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://c" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c" , apiVersion: "v1" }, f);
     await adapter.upsert([makeChunk({ pageNumber: 3, chunkIndex: 2 })], "x");
   });
 
@@ -170,7 +170,7 @@ describe("ChromaAdapter.upsert", () => {
         return jsonResponse({});
       },
     ]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://c" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c" , apiVersion: "v1" }, f);
     await adapter.upsert([makeChunk()], "x");
   });
 
@@ -184,7 +184,7 @@ describe("ChromaAdapter.upsert", () => {
         return jsonResponse({});
       },
     ]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://c" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c" , apiVersion: "v1" }, f);
     await adapter.upsert([makeChunk()], "x");
   });
 
@@ -193,7 +193,7 @@ describe("ChromaAdapter.upsert", () => {
       () => jsonResponse({ id: "col", name: "x" }),
       () => jsonResponse({ error: "dimension mismatch" }, 500),
     ]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://c" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c" , apiVersion: "v1" }, f);
     await expect(adapter.upsert([makeChunk()], "x")).rejects.toThrow(/dimension mismatch/);
   });
 
@@ -201,13 +201,101 @@ describe("ChromaAdapter.upsert", () => {
     const { fetch: f } = recordingFetch([
       () => jsonResponse({ detail: "name reserved" }, 400),
     ]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://c" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c" , apiVersion: "v1" }, f);
     await expect(adapter.upsert([makeChunk()], "reserved")).rejects.toThrow(/name reserved/);
   });
 
   it("throws when collection-create response is missing id", async () => {
     const { fetch: f } = recordingFetch([() => jsonResponse({ name: "x" })]);
-    const adapter = new ChromaAdapter({ baseUrl: "http://c" }, f);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c" , apiVersion: "v1" }, f);
     await expect(adapter.upsert([makeChunk()], "x")).rejects.toThrow(/missing id/);
+  });
+});
+
+describe("ChromaAdapter v2 paths", () => {
+  it("uses /api/v2/tenants/.../databases/.../collections when apiVersion=v2", async () => {
+    const { fetch: f, calls } = recordingFetch([
+      () => jsonResponse({ id: "col-v2", name: "kb" }),
+      () => jsonResponse({}),
+    ]);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c", apiVersion: "v2" }, f);
+    await adapter.upsert([makeChunk()], "kb");
+    expect(calls[0].url).toBe("http://c/api/v2/tenants/default_tenant/databases/default_database/collections");
+    expect(calls[1].url).toBe("http://c/api/v2/tenants/default_tenant/databases/default_database/collections/col-v2/upsert");
+  });
+
+  it("honors custom tenant + database in v2 paths", async () => {
+    const { fetch: f, calls } = recordingFetch([
+      () => jsonResponse({ id: "col-x", name: "kb" }),
+      () => jsonResponse({}),
+    ]);
+    const adapter = new ChromaAdapter(
+      { baseUrl: "http://c", apiVersion: "v2", tenant: "acme", database: "prod" },
+      f,
+    );
+    await adapter.upsert([makeChunk()], "kb");
+    expect(calls[0].url).toBe("http://c/api/v2/tenants/acme/databases/prod/collections");
+  });
+
+  it("URL-encodes tenant and database segments", async () => {
+    const { fetch: f, calls } = recordingFetch([() => jsonResponse({ id: "x", name: "kb" })]);
+    const adapter = new ChromaAdapter(
+      { baseUrl: "http://c", apiVersion: "v2", tenant: "acme/staging", database: "team data" },
+      f,
+    );
+    await adapter.collectionExists("kb");
+    expect(calls[0].url).toBe("http://c/api/v2/tenants/acme%2Fstaging/databases/team%20data/collections/kb");
+  });
+});
+
+describe("ChromaAdapter auto-detection (default)", () => {
+  it("probes /api/v2/heartbeat first and uses v2 paths on success", async () => {
+    const { fetch: f, calls } = recordingFetch([
+      () => jsonResponse({ "nanosecond heartbeat": 1 }),
+      () => jsonResponse({ id: "col-v2", name: "kb" }),
+      () => jsonResponse({}),
+    ]);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c" }, f);
+    await adapter.upsert([makeChunk()], "kb");
+    expect(calls[0].url).toBe("http://c/api/v2/heartbeat");
+    expect(calls[1].url).toBe("http://c/api/v2/tenants/default_tenant/databases/default_database/collections");
+  });
+
+  it("falls back to v1 when /api/v2/heartbeat returns 404", async () => {
+    const { fetch: f, calls } = recordingFetch([
+      () => new Response("not found", { status: 404 }),
+      () => jsonResponse({ "nanosecond heartbeat": 1 }),
+      () => jsonResponse({ id: "col-v1", name: "kb" }),
+      () => jsonResponse({}),
+    ]);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c" }, f);
+    await adapter.upsert([makeChunk()], "kb");
+    expect(calls[0].url).toBe("http://c/api/v2/heartbeat");
+    expect(calls[1].url).toBe("http://c/api/v1/heartbeat");
+    expect(calls[2].url).toBe("http://c/api/v1/collections");
+  });
+
+  it("throws if both heartbeats fail", async () => {
+    const { fetch: f } = recordingFetch([
+      () => new Response("nope", { status: 500 }),
+      () => new Response("nope", { status: 500 }),
+    ]);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c" }, f);
+    await expect(adapter.upsert([makeChunk()], "kb")).rejects.toThrow(/unable to resolve Chroma API version/);
+  });
+
+  it("caches the resolved version across calls", async () => {
+    const { fetch: f, calls } = recordingFetch([
+      () => jsonResponse({ "nanosecond heartbeat": 1 }),
+      () => jsonResponse({ id: "col-1", name: "kb" }),
+      () => jsonResponse({}),
+      () => jsonResponse({ id: "col-2", name: "kb2" }),
+      () => jsonResponse({}),
+    ]);
+    const adapter = new ChromaAdapter({ baseUrl: "http://c" }, f);
+    await adapter.upsert([makeChunk()], "kb");
+    await adapter.upsert([makeChunk()], "kb2");
+    const heartbeats = calls.filter((c) => c.url.includes("/heartbeat"));
+    expect(heartbeats).toHaveLength(1);
   });
 });

@@ -1,29 +1,27 @@
-// Chroma vector store adapter.
-//
-// Talks to a Chroma server's REST API (default :8000) without the official
-// chromadb client to keep the dependency footprint small. Implements the
-// shared VectorStoreAdapter contract; fetch is injectable for testability.
-//
-// Chroma REST endpoints we use (v1):
-//   GET    /api/v1/collections/<name>          — collectionExists check
-//   POST   /api/v1/collections                 — get-or-create collection
-//   POST   /api/v1/collections/<id>/upsert     — push documents+embeddings
-
 import type { Chunk, VectorStoreAdapter } from "@/lib/kb/types";
 import { VectorStoreError } from "@/lib/kb/stores/error";
 import { fetchWithTimeout } from "@/lib/kb/stores/fetch-with-timeout";
 
+export type ChromaApiVersion = "auto" | "v1" | "v2";
+
 export interface ChromaAdapterConfig {
   baseUrl: string;
-  /** Optional: forwarded as Authorization: Bearer for proxied/protected setups. */
   apiKey?: string;
-  /** Vector dimensionality, used at create time. */
   dimensions?: number;
+  apiVersion?: ChromaApiVersion;
+  tenant?: string;
+  database?: string;
 }
+
+const DEFAULT_TENANT = "default_tenant";
+const DEFAULT_DATABASE = "default_database";
 
 export class ChromaAdapter implements VectorStoreAdapter {
   private readonly fetchImpl: typeof fetch;
   private readonly base: string;
+  private readonly tenant: string;
+  private readonly database: string;
+  private resolvedVersion: "v1" | "v2" | null = null;
 
   constructor(
     private readonly config: ChromaAdapterConfig,
@@ -31,10 +29,16 @@ export class ChromaAdapter implements VectorStoreAdapter {
   ) {
     this.fetchImpl = fetchImpl;
     this.base = config.baseUrl.replace(/\/+$/u, "");
+    this.tenant = config.tenant ?? DEFAULT_TENANT;
+    this.database = config.database ?? DEFAULT_DATABASE;
+    if (config.apiVersion === "v1" || config.apiVersion === "v2") {
+      this.resolvedVersion = config.apiVersion;
+    }
   }
 
   async collectionExists(name: string): Promise<boolean> {
-    const resp = await this.req(`/api/v1/collections/${encodeURIComponent(name)}`, "GET");
+    const version = await this.resolveVersion();
+    const resp = await this.req(`${this.collectionsPath(version)}/${encodeURIComponent(name)}`, "GET");
     return resp.ok;
   }
 
@@ -43,7 +47,8 @@ export class ChromaAdapter implements VectorStoreAdapter {
     collectionName: string,
   ): Promise<void> {
     if (chunks.length === 0) return;
-    const collectionId = await this.getOrCreateCollection(collectionName);
+    const version = await this.resolveVersion();
+    const collectionId = await this.getOrCreateCollection(version, collectionName);
 
     const ids: string[] = [];
     const documents: string[] = [];
@@ -55,9 +60,6 @@ export class ChromaAdapter implements VectorStoreAdapter {
       ids.push(id);
       documents.push(chunk.text);
       embeddings.push(chunk.embedding);
-      // Chroma metadata only accepts string|number|boolean|null at top level —
-      // flatten the nested ChunkMetadata to a single level by JSON-stringifying
-      // anything else. Skip undefined values entirely.
       const flat: Record<string, string | number | boolean | null> = {};
       for (const [k, v] of Object.entries(chunk.metadata)) {
         if (v === undefined) continue;
@@ -76,7 +78,7 @@ export class ChromaAdapter implements VectorStoreAdapter {
     }
 
     const resp = await this.req(
-      `/api/v1/collections/${collectionId}/upsert`,
+      `${this.collectionsPath(version)}/${collectionId}/upsert`,
       "POST",
       { ids, documents, embeddings, metadatas },
     );
@@ -85,9 +87,41 @@ export class ChromaAdapter implements VectorStoreAdapter {
     }
   }
 
+  private collectionsPath(version: "v1" | "v2"): string {
+    if (version === "v2") {
+      return `/api/v2/tenants/${encodeURIComponent(this.tenant)}/databases/${encodeURIComponent(this.database)}/collections`;
+    }
+    return "/api/v1/collections";
+  }
+
+  private async resolveVersion(): Promise<"v1" | "v2"> {
+    if (this.resolvedVersion) return this.resolvedVersion;
+    const v2 = await this.tryHeartbeat("v2");
+    if (v2) {
+      this.resolvedVersion = "v2";
+      return "v2";
+    }
+    const v1 = await this.tryHeartbeat("v1");
+    if (v1) {
+      this.resolvedVersion = "v1";
+      return "v1";
+    }
+    throw new VectorStoreError(
+      "chroma",
+      `unable to resolve Chroma API version: neither /api/v2/heartbeat nor /api/v1/heartbeat responded successfully at ${this.base}`,
+    );
+  }
+
+  private async tryHeartbeat(version: "v1" | "v2"): Promise<boolean> {
+    try {
+      const resp = await this.req(`/api/${version}/heartbeat`, "GET");
+      return resp.ok;
+    } catch {
+      return false;
+    }
+  }
+
   private computeId(chunk: Chunk & { embedding: number[] }): string {
-    // Prefer contentHash when caller computed one; otherwise build a stable
-    // composite from jobId + chunkIndex (+ pageNumber if present).
     if (chunk.metadata.contentHash) {
       return `${chunk.metadata.jobId}-${chunk.metadata.contentHash.slice(0, 16)}`;
     }
@@ -97,13 +131,12 @@ export class ChromaAdapter implements VectorStoreAdapter {
     return `${chunk.metadata.jobId}-c${chunk.metadata.chunkIndex}`;
   }
 
-  private async getOrCreateCollection(name: string): Promise<string> {
-    // POST /api/v1/collections is a get-or-create when get_or_create=true.
+  private async getOrCreateCollection(version: "v1" | "v2", name: string): Promise<string> {
     const body: Record<string, unknown> = { name, get_or_create: true };
     if (this.config.dimensions) {
       body.metadata = { dimension: this.config.dimensions };
     }
-    const resp = await this.req("/api/v1/collections", "POST", body);
+    const resp = await this.req(this.collectionsPath(version), "POST", body);
     if (!resp.ok) {
       throw await this.parseChromaError(resp, "get_or_create_collection");
     }
@@ -135,7 +168,7 @@ export class ChromaAdapter implements VectorStoreAdapter {
       const json = (await resp.json()) as { error?: string; detail?: string };
       detail = json.error ?? json.detail ?? detail;
     } catch {
-      /* response wasn't JSON */
+      void 0;
     }
     return new VectorStoreError("chroma", `${op} failed: ${detail}`, resp.status);
   }

@@ -52,22 +52,34 @@ describe("testVectorStoreConnection: validation", () => {
 });
 
 describe("testVectorStoreConnection: chroma", () => {
-  it("probes /api/v1/collections (auth-aware) and returns ok on 200", async () => {
+  it("probes /api/v2/tenants/.../collections (auth-aware) and returns ok on 200", async () => {
     mockedFetch
       .mockResolvedValueOnce(json([]))
-      .mockResolvedValueOnce(json({ version: "0.4.18" }));
+      .mockResolvedValueOnce(json({ version: "0.5.18" }));
+    const result = await testVectorStoreConnection(
+      { kind: "chroma", baseUrl: "http://localhost:8000" },
+      mockedFetch as unknown as typeof fetch,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.endpoint).toBe("/api/v2/tenants/default_tenant/databases/default_database/collections");
+    expect(result.status).toBe(200);
+    expect(result.version).toBe("0.5.18");
+    const [url, init] = mockedFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections");
+    expect((init.headers as Record<string, string>).Accept).toBe("application/json");
+    expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
+  });
+
+  it("falls back to /api/v1/collections when v2 returns 404 (older Chroma)", async () => {
+    mockedFetch
+      .mockResolvedValueOnce(new Response("nope", { status: 404 }))
+      .mockResolvedValueOnce(json([]));
     const result = await testVectorStoreConnection(
       { kind: "chroma", baseUrl: "http://localhost:8000" },
       mockedFetch as unknown as typeof fetch,
     );
     expect(result.ok).toBe(true);
     expect(result.endpoint).toBe("/api/v1/collections");
-    expect(result.status).toBe(200);
-    expect(result.version).toBe("0.4.18");
-    const [url, init] = mockedFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("http://localhost:8000/api/v1/collections");
-    expect((init.headers as Record<string, string>).Accept).toBe("application/json");
-    expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
   });
 
   it("returns 401 detail when auth is required and key is missing", async () => {
@@ -83,16 +95,16 @@ describe("testVectorStoreConnection: chroma", () => {
     expect(result.error).toMatch(/401/);
   });
 
-  it("falls back through 404/405/410 to /api/v1/heartbeat", async () => {
+  it("falls back through 405 to /api/v1/collections", async () => {
     mockedFetch
       .mockResolvedValueOnce(new Response("nope", { status: 405 }))
-      .mockResolvedValueOnce(json({ "nanosecond heartbeat": 12345 }));
+      .mockResolvedValueOnce(json([]));
     const result = await testVectorStoreConnection(
       { kind: "chroma", baseUrl: "http://localhost:8000" },
       mockedFetch as unknown as typeof fetch,
     );
     expect(result.ok).toBe(true);
-    expect(result.endpoint).toBe("/api/v1/heartbeat");
+    expect(result.endpoint).toBe("/api/v1/collections");
   });
 
   it("forwards apiKey as Bearer when provided", async () => {
@@ -112,7 +124,7 @@ describe("testVectorStoreConnection: chroma", () => {
       mockedFetch as unknown as typeof fetch,
     );
     const [url] = mockedFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("http://localhost:8000/api/v1/collections");
+    expect(url).toBe("http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections");
   });
 });
 

@@ -17,6 +17,8 @@ $LogDir      = if ($env:EXTRACTO_LOG_DIR)     { $env:EXTRACTO_LOG_DIR }     else
 $RuntimeEnv  = Join-Path $ProjectDir ".extracto.env"
 $UserBinDir  = Join-Path $env:LOCALAPPDATA "Extracto"
 $UserBinFile = Join-Path $UserBinDir "extracto.cmd"
+$ExtractoUrl = if ($env:EXTRACTO_URL) { $env:EXTRACTO_URL } else { "http://127.0.0.1:3000" }
+$ConfigFile  = Join-Path $env:USERPROFILE ".extracto\config"
 
 if (-not (Test-Path $LogDir)) {
     New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
@@ -91,6 +93,69 @@ function Invoke-Step {
     }
 }
 
+function Resolve-ApiToken {
+    if ($env:EXTRACTO_TOKEN) { return $env:EXTRACTO_TOKEN }
+    if (Test-Path $ConfigFile) {
+        foreach ($line in Get-Content -LiteralPath $ConfigFile) {
+            if ($line -match '^\s*EXTRACTO_TOKEN\s*=\s*(.+)$') {
+                return $Matches[1].Trim().Trim('"', "'")
+            }
+        }
+    }
+    return $null
+}
+
+function Require-ApiToken {
+    $token = Resolve-ApiToken
+    if (-not $token) {
+        Fail "no API token found. Set EXTRACTO_TOKEN, or run 'extracto api-key create <email> <name>' and store the result in $ConfigFile as EXTRACTO_TOKEN=<key>."
+    }
+    return $token
+}
+
+function Invoke-Api {
+    param(
+        [string]$Method,
+        [string]$Path,
+        [object]$Body
+    )
+    $token = Require-ApiToken
+    $headers = @{ Authorization = "Bearer $token"; Accept = "application/json" }
+    $url = "${ExtractoUrl}${Path}"
+    $params = @{
+        Uri = $url
+        Method = $Method
+        Headers = $headers
+        ErrorAction = "Stop"
+    }
+    if ($PSBoundParameters.ContainsKey("Body") -and $null -ne $Body) {
+        $params.ContentType = "application/json"
+        if ($Body -is [string]) {
+            $params.Body = $Body
+        } else {
+            $params.Body = ($Body | ConvertTo-Json -Depth 10 -Compress)
+        }
+    }
+    try {
+        $resp = Invoke-WebRequest @params
+        return $resp.Content
+    } catch {
+        $statusCode = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+        $bodyText = ""
+        try {
+            if ($_.Exception.Response) {
+                $stream = $_.Exception.Response.GetResponseStream()
+                $reader = New-Object System.IO.StreamReader($stream)
+                $bodyText = $reader.ReadToEnd()
+            }
+        } catch { }
+        if ($statusCode -gt 0) {
+            Fail "HTTP $statusCode from ${url}: $bodyText"
+        }
+        Fail "$url failed: $($_.Exception.Message)"
+    }
+}
+
 function Cmd-On {
     Assert-Project
     Ensure-AuthSecret
@@ -137,7 +202,6 @@ function Cmd-Install {
     $launcher = @"
 @echo off
 setlocal
-set SCRIPT="%~dp0extracto.ps1"
 powershell -NoProfile -ExecutionPolicy Bypass -File "$($PSCommandPath)" %*
 endlocal
 "@
@@ -149,7 +213,7 @@ endlocal
         Write-Ok "Added $UserBinDir to user PATH (open a new shell to pick it up)"
     }
     Write-Ok "Installed launcher at $UserBinFile"
-    Write-Info "Use:  extracto on | off | logs | status | update | uninstall"
+    Write-Info "Use:  extracto on | off | logs | status | upgrade | uninstall | api-key | ocr | jobs | presets | kb | settings"
 }
 
 function Cmd-Uninstall {
@@ -178,37 +242,330 @@ function Cmd-Uninstall {
     Write-Ok "Extracto uninstalled"
 }
 
+function Cmd-ApiKey {
+    Assert-Project
+    if ($RemainingArguments.Count -lt 1) {
+        Fail "usage: extracto api-key <create|list|revoke> [args...]"
+    }
+    $execScript = @'
+if [ -z "${AUTH_SECRET:-}" ] && [ -f /app/data/.auth_secret ]; then
+  AUTH_SECRET="$(tr -d "\r\n" < /app/data/.auth_secret)"
+  export AUTH_SECRET
+fi
+exec bun run scripts/api-key-cli.ts "$@"
+'@
+    $composeArgs = @("compose", "--env-file", "docker.env")
+    if (Test-Path $RuntimeEnv) { $composeArgs += @("--env-file", $RuntimeEnv) }
+    $composeArgs += @("exec", "-T", "app", "sh", "-c", $execScript, "--") + $RemainingArguments
+    Push-Location $ProjectDir
+    try {
+        & docker @composeArgs
+        if ($LASTEXITCODE -ne 0) { Fail "api-key command failed (exit $LASTEXITCODE)" }
+    } finally {
+        Pop-Location
+    }
+}
+
+function Get-FileMimeType ($Path) {
+    switch -regex ($Path) {
+        '\.pdf$'  { return "application/pdf" }
+        '\.png$'  { return "image/png" }
+        '\.jpe?g$' { return "image/jpeg" }
+        '\.webp$' { return "image/webp" }
+        default   { Fail "unsupported file type: $($Path -replace '.*\.', '')" }
+    }
+    return $null
+}
+
+function Cmd-Ocr {
+    if ($RemainingArguments.Count -lt 1) {
+        Fail "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait]"
+    }
+    $file = $RemainingArguments[0]
+    if (-not (Test-Path -LiteralPath $file)) { Fail "file not found: $file" }
+
+    $model = ""
+    $outPath = ""
+    $waitFlag = $true
+    $i = 1
+    while ($i -lt $RemainingArguments.Count) {
+        $arg = $RemainingArguments[$i]
+        switch ($arg) {
+            "--model"   { $model = $RemainingArguments[$i + 1]; $i += 2 }
+            "--out"     { $outPath = $RemainingArguments[$i + 1]; $i += 2 }
+            "--no-wait" { $waitFlag = $false; $i += 1 }
+            default     { Fail "unknown ocr flag: $arg" }
+        }
+    }
+    if (-not $model) { Fail "--model is required (e.g. --model llava:13b or --model mistral-ocr-latest)" }
+
+    $sizeBytes = (Get-Item -LiteralPath $file).Length
+    if ($sizeBytes -gt 33554432) {
+        $sizeMb = [math]::Round($sizeBytes / 1024 / 1024)
+        Fail "file is too large for the CLI uploader ($sizeMb MiB > 32 MiB). Use the web UI for big files."
+    }
+
+    $mime = Get-FileMimeType $file
+    $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $file).Path)
+    $b64 = [Convert]::ToBase64String($bytes)
+    $dataUrl = "data:${mime};base64,${b64}"
+    $fileBaseName = Split-Path -Leaf $file
+
+    $body = @{
+        files = @(
+            @{ fileName = $fileBaseName; model = $model; preview = $dataUrl }
+        )
+    }
+
+    Write-Info "submitting OCR for $fileBaseName..."
+    $response = Invoke-Api -Method POST -Path "/api/v1/ocr/batch" -Body $body
+    if ($outPath) {
+        Set-Content -LiteralPath $outPath -Value $response -Encoding UTF8
+        Write-Ok "saved response to $outPath"
+    } else {
+        Write-Output $response
+    }
+
+    if ($waitFlag) {
+        $jobId = $null
+        try {
+            $parsed = $response | ConvertFrom-Json
+            if ($parsed.files -and $parsed.files.Count -gt 0 -and $parsed.files[0].jobId) {
+                $jobId = $parsed.files[0].jobId
+            } elseif ($parsed.jobId) {
+                $jobId = $parsed.jobId
+            }
+        } catch { }
+        if ($jobId) {
+            Write-Info "waiting for job $jobId..."
+            Invoke-JobWait -JobId $jobId
+        } else {
+            Write-Warn "no jobId in response — the submission may have failed. Inspect the JSON above."
+        }
+    }
+}
+
+function Invoke-JobWait {
+    param([string]$JobId)
+    $status = "QUEUED"
+    while ($status -eq "QUEUED" -or $status -eq "RUNNING") {
+        Start-Sleep -Seconds 2
+        $body = Invoke-Api -Method GET -Path "/api/jobs/$JobId"
+        try {
+            $parsed = $body | ConvertFrom-Json
+            $status = $parsed.status
+        } catch { $status = "UNKNOWN" }
+        Write-Info "  status=$status"
+    }
+    Write-Output $body
+}
+
+function Cmd-Jobs {
+    $sub = if ($RemainingArguments.Count -ge 1) { $RemainingArguments[0] } else { "list" }
+    $rest = if ($RemainingArguments.Count -ge 2) { $RemainingArguments[1..($RemainingArguments.Count - 1)] } else { @() }
+    switch ($sub) {
+        "list" {
+            $limit = if ($rest.Count -ge 1) { $rest[0] } else { "20" }
+            Write-Output (Invoke-Api -Method GET -Path "/api/jobs?limit=$limit")
+        }
+        "get" {
+            if ($rest.Count -lt 1) { Fail "usage: extracto jobs get <job-id>" }
+            Write-Output (Invoke-Api -Method GET -Path "/api/jobs/$($rest[0])")
+        }
+        "delete" {
+            if ($rest.Count -lt 1) { Fail "usage: extracto jobs delete <job-id>" }
+            Write-Output (Invoke-Api -Method DELETE -Path "/api/jobs/$($rest[0])")
+        }
+        "cancel" {
+            if ($rest.Count -lt 1) { Fail "usage: extracto jobs cancel <job-id>" }
+            Write-Output (Invoke-Api -Method POST -Path "/api/jobs/$($rest[0])/control" -Body @{ action = "stop" })
+        }
+        "wait" {
+            if ($rest.Count -lt 1) { Fail "usage: extracto jobs wait <job-id>" }
+            Invoke-JobWait -JobId $rest[0]
+        }
+        default { Fail "usage: extracto jobs <list|get|delete|cancel|wait> [args...]" }
+    }
+}
+
+function Cmd-Presets {
+    $sub = if ($RemainingArguments.Count -ge 1) { $RemainingArguments[0] } else { "list" }
+    $rest = if ($RemainingArguments.Count -ge 2) { $RemainingArguments[1..($RemainingArguments.Count - 1)] } else { @() }
+    switch ($sub) {
+        "list" {
+            Write-Output (Invoke-Api -Method GET -Path "/api/v1/presets")
+        }
+        "create" {
+            if ($rest.Count -lt 2) { Fail "usage: extracto presets create <name> <instruction> [markdown|json]" }
+            $name = $rest[0]
+            $instruction = $rest[1]
+            $format = if ($rest.Count -ge 3) { $rest[2] } else { "markdown" }
+            Write-Output (Invoke-Api -Method POST -Path "/api/v1/presets" -Body @{
+                name = $name; instruction = $instruction; outputFormat = $format
+            })
+        }
+        "delete" {
+            if ($rest.Count -lt 1) { Fail "usage: extracto presets delete <preset-id>" }
+            Write-Output (Invoke-Api -Method DELETE -Path "/api/v1/presets/$($rest[0])")
+        }
+        default { Fail "usage: extracto presets <list|create|delete> [args...]" }
+    }
+}
+
+function Cmd-Settings {
+    $sub = if ($RemainingArguments.Count -ge 1) { $RemainingArguments[0] } else { "get" }
+    switch ($sub) {
+        "get" { Write-Output (Invoke-Api -Method GET -Path "/api/settings") }
+        default { Fail "usage: extracto settings get   (use the web UI to change settings)" }
+    }
+}
+
+function Parse-KbExportFlags {
+    param([string[]]$Args)
+    $opts = @{
+        Collection = ""; StoreUrl = ""; StoreKind = "chroma"; StoreKey = ""
+        EmbedModel = ""; EmbedProvider = "ollama"; EmbedEndpoint = "http://127.0.0.1:11434"; EmbedKey = ""
+        Strategy = "paragraph"; ChunkSize = 1200; Overlap = $null; MinChunkSize = 0
+        BreakpointPercentile = $null; MaxHeadingDepth = $null
+    }
+    $i = 0
+    while ($i -lt $Args.Count) {
+        $arg = $Args[$i]
+        switch ($arg) {
+            "--collection"            { $opts.Collection = $Args[$i + 1]; $i += 2 }
+            "--store"                 { $opts.StoreKind = $Args[$i + 1]; $i += 2 }
+            "--store-url"             { $opts.StoreUrl = $Args[$i + 1]; $i += 2 }
+            "--store-key"             { $opts.StoreKey = $Args[$i + 1]; $i += 2 }
+            "--embed-model"           { $opts.EmbedModel = $Args[$i + 1]; $i += 2 }
+            "--embed-provider"        { $opts.EmbedProvider = $Args[$i + 1]; $i += 2 }
+            "--embed-endpoint"        { $opts.EmbedEndpoint = $Args[$i + 1]; $i += 2 }
+            "--embed-key"             { $opts.EmbedKey = $Args[$i + 1]; $i += 2 }
+            "--strategy"              { $opts.Strategy = $Args[$i + 1]; $i += 2 }
+            "--chunk-size"            { $opts.ChunkSize = [int]$Args[$i + 1]; $i += 2 }
+            "--overlap"               { $opts.Overlap = [int]$Args[$i + 1]; $i += 2 }
+            "--min-chunk-size"        { $opts.MinChunkSize = [int]$Args[$i + 1]; $i += 2 }
+            "--breakpoint-percentile" { $opts.BreakpointPercentile = [double]$Args[$i + 1]; $i += 2 }
+            "--max-heading-depth"     { $opts.MaxHeadingDepth = [int]$Args[$i + 1]; $i += 2 }
+            default                   { Fail "unknown kb export flag: $arg" }
+        }
+    }
+    return $opts
+}
+
+function Cmd-Kb {
+    if ($RemainingArguments.Count -lt 1) {
+        Fail "usage: extracto kb {export|test-connection} [flags]"
+    }
+    $sub = $RemainingArguments[0]
+    $rest = if ($RemainingArguments.Count -ge 2) { $RemainingArguments[1..($RemainingArguments.Count - 1)] } else { @() }
+    switch ($sub) {
+        "export" {
+            if ($rest.Count -lt 1) {
+                Fail "usage: extracto kb export <job-id> --collection NAME --store-url URL --embed-model MODEL [flags]"
+            }
+            $jobId = $rest[0]
+            $flags = if ($rest.Count -ge 2) { $rest[1..($rest.Count - 1)] } else { @() }
+            $opts = Parse-KbExportFlags -Args $flags
+            if (-not $opts.Collection) { Fail "--collection is required" }
+            if (-not $opts.StoreUrl) { Fail "--store-url is required" }
+            if (-not $opts.EmbedModel) { Fail "--embed-model is required" }
+
+            $payload = [ordered]@{
+                jobId = $jobId
+                collectionName = $opts.Collection
+                vectorStore = [ordered]@{ kind = $opts.StoreKind; baseUrl = $opts.StoreUrl }
+                embedding = [ordered]@{
+                    provider = $opts.EmbedProvider
+                    apiEndpoint = $opts.EmbedEndpoint
+                    model = $opts.EmbedModel
+                }
+                chunking = [ordered]@{ strategy = $opts.Strategy; maxChunkSize = $opts.ChunkSize }
+            }
+            if ($opts.StoreKey) { $payload.vectorStore.apiKey = $opts.StoreKey }
+            if ($opts.EmbedKey) { $payload.embedding.apiKey = $opts.EmbedKey }
+            if ($null -ne $opts.Overlap -and $opts.Strategy -eq "fixed") { $payload.chunking.overlap = $opts.Overlap }
+            if ($opts.MinChunkSize -gt 0) { $payload.chunking.minChunkSize = $opts.MinChunkSize }
+            if ($null -ne $opts.BreakpointPercentile) { $payload.chunking.breakpointPercentile = $opts.BreakpointPercentile }
+            if ($null -ne $opts.MaxHeadingDepth) { $payload.chunking.maxHeadingDepth = $opts.MaxHeadingDepth }
+
+            Write-Info "exporting job $jobId to $($opts.StoreKind)://$($opts.StoreUrl)/$($opts.Collection)..."
+            Write-Output (Invoke-Api -Method POST -Path "/api/v1/export/kb" -Body $payload)
+        }
+        "test-connection" {
+            $kind = "chroma"; $url = ""; $key = ""
+            $i = 0
+            while ($i -lt $rest.Count) {
+                switch ($rest[$i]) {
+                    "--store"     { $kind = $rest[$i + 1]; $i += 2 }
+                    "--store-url" { $url = $rest[$i + 1]; $i += 2 }
+                    "--store-key" { $key = $rest[$i + 1]; $i += 2 }
+                    default       { Fail "unknown kb test-connection flag: $($rest[$i])" }
+                }
+            }
+            if (-not $url) { Fail "usage: extracto kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]" }
+            $body = [ordered]@{ kind = $kind; baseUrl = $url }
+            if ($key) { $body.apiKey = $key }
+            Write-Info "testing $kind at $url..."
+            Write-Output (Invoke-Api -Method POST -Path "/api/v1/kb/test-connection" -Body $body)
+        }
+        default { Fail "usage: extracto kb {export|test-connection} [flags]" }
+    }
+}
+
 function Cmd-Help {
-    Write-Host "Extracto — Windows installer / runner" -ForegroundColor Magenta
+    Write-Host "Extracto: Windows installer / runner / API client" -ForegroundColor Magenta
     Write-Host ""
     Write-Host "Usage:"
-    Write-Host "  scripts\extracto.ps1 install      # add 'extracto' to your PATH (one time)"
-    Write-Host "  extracto on                        # pull image from ghcr.io and start"
-    Write-Host "  extracto on --build                # build locally from source and start"
-    Write-Host "  extracto off                       # stop container"
-    Write-Host "  extracto upgrade                   # pull latest image, recreate container"
-    Write-Host "  extracto logs                      # tail container logs"
-    Write-Host "  extracto status                    # show docker compose ps"
-    Write-Host "  extracto uninstall                 # full teardown (removes volumes)"
+    Write-Host "  scripts\extracto.ps1 install      add 'extracto' to your PATH (one time)"
+    Write-Host ""
+    Write-Host "Lifecycle:"
+    Write-Host "  extracto on [--build]              start (pulls image; --build = source build)"
+    Write-Host "  extracto off                       stop container"
+    Write-Host "  extracto upgrade                   pull latest image, recreate container"
+    Write-Host "  extracto status                    docker compose ps"
+    Write-Host "  extracto logs                      tail container logs"
+    Write-Host "  extracto uninstall                 full teardown (removes volumes)"
+    Write-Host ""
+    Write-Host "API:"
+    Write-Host "  extracto api-key <create|list|revoke> [args...]"
+    Write-Host "  extracto ocr <file> --model NAME [--out PATH] [--no-wait]"
+    Write-Host "  extracto jobs <list|get|delete|cancel|wait> [args...]"
+    Write-Host "  extracto presets <list|create|delete> [args...]"
+    Write-Host "  extracto settings get"
+    Write-Host "  extracto kb export <job-id> --collection N --store-url URL --embed-model M"
+    Write-Host "                                     export an OCR job's text to a vector store"
+    Write-Host "                                     (requires KB_EXPORT_ENABLED=1 on the server)"
+    Write-Host "  extracto kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]"
+    Write-Host "                                     probe a vector store for reachability + auth"
+    Write-Host ""
+    Write-Host "Environment:" -ForegroundColor DarkGray
+    Write-Host "  EXTRACTO_URL      Base URL (default http://127.0.0.1:3000)" -ForegroundColor DarkGray
+    Write-Host "  EXTRACTO_TOKEN    Bearer token for /api/v1/* requests" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "Requirements: Docker Desktop for Windows" -ForegroundColor DarkGray
-    Write-Host "Docs:         https://github.com/codelined-ag" -ForegroundColor DarkGray
+    Write-Host "Docs:         https://extracto.help" -ForegroundColor DarkGray
 }
 
 switch ($Command.ToLowerInvariant()) {
-    "on"        { Cmd-On }
-    "up"        { Cmd-On }
-    "start"     { Cmd-On }
-    "off"       { Cmd-Off }
-    "down"      { Cmd-Off }
-    "stop"      { Cmd-Off }
-    "logs"      { Cmd-Logs }
-    "status"    { Cmd-Status }
-    "ps"        { Cmd-Status }
-    "upgrade"   { Cmd-Upgrade }
-    "update"    { Cmd-Upgrade }
-    "install"   { Cmd-Install }
-    "uninstall" { Cmd-Uninstall }
-    "help"      { Cmd-Help }
-    default     { Cmd-Help }
+    "on"             { Cmd-On }
+    "up"             { Cmd-On }
+    "start"          { Cmd-On }
+    "off"            { Cmd-Off }
+    "down"           { Cmd-Off }
+    "stop"           { Cmd-Off }
+    "logs"           { Cmd-Logs }
+    "status"         { Cmd-Status }
+    "ps"             { Cmd-Status }
+    "upgrade"        { Cmd-Upgrade }
+    "update"         { Cmd-Upgrade }
+    "install"        { Cmd-Install }
+    "uninstall"      { Cmd-Uninstall }
+    "api-key"        { Cmd-ApiKey }
+    "ocr"            { Cmd-Ocr }
+    "jobs"           { Cmd-Jobs }
+    "presets"        { Cmd-Presets }
+    "settings"       { Cmd-Settings }
+    "kb"             { Cmd-Kb }
+    "help"           { Cmd-Help }
+    default          { Cmd-Help }
 }
