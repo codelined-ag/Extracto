@@ -41,6 +41,7 @@ export function ChangePasswordDialog({ open, onOpenChange, t }: ChangePasswordDi
   };
 
   const handleOpenChange = (next: boolean) => {
+    if (!next && isSubmitting) return;
     if (!next) reset();
     onOpenChange(next);
   };
@@ -126,6 +127,13 @@ export function ChangePasswordDialog({ open, onOpenChange, t }: ChangePasswordDi
           "Mot de passe mis à jour",
           "Contraseña actualizada",
           "Passwort aktualisiert",
+        ),
+        description: t(
+          "Usa la nuova password al prossimo accesso.",
+          "Use the new password the next time you sign in.",
+          "Utilisez le nouveau mot de passe lors de votre prochaine connexion.",
+          "Usa la nueva contraseña la próxima vez que inicies sesión.",
+          "Verwende das neue Passwort bei der nächsten Anmeldung.",
         ),
       });
       reset();
