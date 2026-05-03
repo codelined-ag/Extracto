@@ -1,12 +1,27 @@
 import { normalizeProvider, type ApiProviderSettings, type ProviderKind } from "@/lib/api-types";
+import { db } from "@/lib/db";
 import { resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
 import { buildPrompt, sanitizePostProcessing } from "@/lib/ocr/job-input-helpers";
 import {
+  DEFAULT_SETTINGS,
+  OCR_SETTINGS_KEY,
   normalizeAdvancedSettings,
   type AdvancedSettings,
   type PostProcessingSettings,
 } from "@/lib/ocr/settings";
 import { getApiSettings } from "@/lib/ocr/settings-store";
+
+async function loadStoredAdvancedSettings(userId: string): Promise<AdvancedSettings> {
+  try {
+    const row = await db.ocrSetting.findUnique({
+      where: { userId_key: { userId, key: OCR_SETTINGS_KEY } },
+    });
+    if (!row) return { ...DEFAULT_SETTINGS };
+    return normalizeAdvancedSettings(row);
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
 
 export interface ResolvedJobInputs {
   provider: ProviderKind;
@@ -40,7 +55,9 @@ export async function resolveOcrJobInputs(args: {
   const provider = normalizeProvider(stored.provider);
   const settings: ApiProviderSettings = { ...stored, provider };
 
-  const settingsPayload = normalizeAdvancedSettings(args.perRequestSettings);
+  const storedAdvanced = await loadStoredAdvancedSettings(args.userId);
+  const merged = { ...storedAdvanced, ...(args.perRequestSettings ?? {}) };
+  const settingsPayload = normalizeAdvancedSettings(merged);
   const postProcessingPayload = sanitizePostProcessing(args.perRequestPostProcessing);
   const ocrModel = provider === "mistral" ? resolveMistralOcrModel(args.model) : args.model;
   const prompt = buildPrompt(settingsPayload);

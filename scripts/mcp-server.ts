@@ -66,6 +66,12 @@ server.tool(
           fileName: z.string(),
           model: z.string(),
           preview: z.string().describe("Data URL (data:image/* or data:application/pdf;base64,...)"),
+          sourcePdf: z
+            .string()
+            .optional()
+            .describe(
+              "Original PDF as a data URL. Enables document anchoring and the text-layer fast-path on the server. Optional; pass the same bytes you'd put in `preview` when the caller pre-rendered images.",
+            ),
           pages: z
             .array(z.string())
             .optional()

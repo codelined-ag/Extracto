@@ -424,7 +424,12 @@ cmd_ocr() {
         pages_spec="${2:-}"; shift 2
         ;;
       --preset)
-        preset="${2:-}"; shift 2
+        preset="${2:-}"
+        case "$preset" in
+          generic|academic|invoice|contract|form) ;;
+          *) die "--preset must be one of: generic, academic, invoice, contract, form (got '${preset}')" ;;
+        esac
+        shift 2
         ;;
       --no-text-layer)
         prefer_text_layer="false"; shift

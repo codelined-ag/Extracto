@@ -371,7 +371,13 @@ function Cmd-Ocr {
             "--out"            { $outPath = $RemainingArguments[$i + 1]; $i += 2 }
             "--no-wait"        { $waitFlag = $false; $i += 1 }
             "--pages"          { $pagesSpec = $RemainingArguments[$i + 1]; $i += 2 }
-            "--preset"         { $preset = $RemainingArguments[$i + 1]; $i += 2 }
+            "--preset"         {
+                $preset = $RemainingArguments[$i + 1]
+                if ($preset -notin @("generic", "academic", "invoice", "contract", "form")) {
+                    Fail "--preset must be one of: generic, academic, invoice, contract, form (got '$preset')"
+                }
+                $i += 2
+            }
             "--no-text-layer"  { $preferTextLayer = $false; $i += 1 }
             "--text-layer"     { $preferTextLayer = $true; $i += 1 }
             default            { Fail "unknown ocr flag: $arg" }

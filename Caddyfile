@@ -6,7 +6,7 @@
 
 :81 {
 	request_body {
-		max_size 64MB
+		max_size 128MB
 	}
 	handle {
 		reverse_proxy localhost:3000 {
