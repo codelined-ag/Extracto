@@ -23,6 +23,8 @@ export interface HistoryState {
   loadJobs: () => Promise<void>;
   loadDetail: (jobId: string) => Promise<void>;
   deleteSelected: () => Promise<void>;
+  deleteMany: (ids: string[]) => Promise<void>;
+  exportManyAsZip: (ids: string[]) => Promise<void>;
   resetSelection: () => void;
 }
 
@@ -185,6 +187,88 @@ export function useHistory(t: Translator): HistoryState {
     }
   }, [selectedId, loadJobs, t, toast]);
 
+  const deleteMany = React.useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    setIsDeleting(true);
+    try {
+      const results = await Promise.allSettled(
+        ids.map((id) => fetch(`/api/jobs/${id}`, { method: "DELETE" }).then((r) => {
+          if (!r.ok) throw new Error(`${id}: ${r.status}`);
+        })),
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      const ok = ids.length - failed;
+      setSelectedJob((current) => (current && ids.includes(current.id) ? null : current));
+      setSelectedId((current) => (current && ids.includes(current) ? null : current));
+      await loadJobs();
+      toast({
+        title: t(
+          `${ok} esecuzioni eliminate`,
+          `${ok} runs deleted`,
+          `${ok} exécutions supprimées`,
+          `${ok} ejecuciones eliminadas`,
+          `${ok} Läufe gelöscht`,
+        ),
+        description: failed > 0
+          ? t(`${failed} non riuscite`, `${failed} failed`, `${failed} échouées`, `${failed} fallidas`, `${failed} fehlgeschlagen`)
+          : undefined,
+        variant: failed > 0 ? "destructive" : undefined,
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [loadJobs, t, toast]);
+
+  const exportManyAsZip = React.useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    try {
+      const { default: JSZip } = await import("jszip");
+      const zip = new JSZip();
+      const fetched = await Promise.all(
+        ids.map(async (id) => {
+          const r = await fetch(`/api/jobs/${id}`, { cache: "no-store" });
+          if (!r.ok) return null;
+          const payload = (await r.json()) as { job?: HistoryJobDetail };
+          return payload.job ?? null;
+        }),
+      );
+      let included = 0;
+      for (const job of fetched) {
+        if (!job) continue;
+        const safeName = (job.fileName || job.id).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
+        const md = getMarkdownFromJsonPayload(job.result, job.extractedText || "");
+        const json = getStructuredJsonPayload(job.result);
+        zip.file(`${safeName}/${job.id}.md`, md || "");
+        zip.file(`${safeName}/${job.id}.json`, JSON.stringify(json, null, 2));
+        included += 1;
+      }
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `extracto-export-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({
+        title: t(
+          `${included} esecuzioni esportate`,
+          `${included} runs exported`,
+          `${included} exécutions exportées`,
+          `${included} ejecuciones exportadas`,
+          `${included} Läufe exportiert`,
+        ),
+      });
+    } catch (error) {
+      toast({
+        title: t("Esportazione non riuscita", "Export failed", "Échec de l'export", "Error al exportar", "Export fehlgeschlagen"),
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    }
+  }, [t, toast]);
+
   const resetSelection = React.useCallback(() => {
     setSelectedId(null);
     setSelectedJob(null);
@@ -208,6 +292,8 @@ export function useHistory(t: Translator): HistoryState {
     loadJobs,
     loadDetail,
     deleteSelected,
+    deleteMany,
+    exportManyAsZip,
     resetSelection,
   };
 }

@@ -1278,9 +1278,42 @@ export default function ExtractoPage() {
  setIsDragOver(false);
  };
 
- const handleDrop = (e: React.DragEvent) => {
+ const handleDrop = async (e: React.DragEvent) => {
  e.preventDefault();
  setIsDragOver(false);
+ const items = e.dataTransfer.items;
+ if (items && items.length > 0 && typeof items[0].webkitGetAsEntry === "function") {
+ const collected: File[] = [];
+ const walk = async (entry: FileSystemEntry): Promise<void> => {
+ if (entry.isFile) {
+ const file = await new Promise<File | null>((resolve) =>
+ (entry as FileSystemFileEntry).file(resolve, () => resolve(null)),
+ );
+ if (file) collected.push(file);
+ } else if (entry.isDirectory) {
+ const reader = (entry as FileSystemDirectoryEntry).createReader();
+ const readBatch = (): Promise<FileSystemEntry[]> =>
+ new Promise((resolve) => reader.readEntries(resolve, () => resolve([])));
+ let batch = await readBatch();
+ while (batch.length > 0) {
+ await Promise.all(batch.map(walk));
+ batch = await readBatch();
+ }
+ }
+ };
+ const entries: FileSystemEntry[] = [];
+ for (let i = 0; i < items.length; i++) {
+ const entry = items[i].webkitGetAsEntry();
+ if (entry) entries.push(entry);
+ }
+ await Promise.all(entries.map(walk));
+ if (collected.length > 0) {
+ const dt = new DataTransfer();
+ collected.forEach((f) => dt.items.add(f));
+ handleFiles(dt.files);
+ return;
+ }
+ }
  if (e.dataTransfer.files.length > 0) {
  handleFiles(e.dataTransfer.files);
  }
@@ -2245,6 +2278,8 @@ export default function ExtractoPage() {
         isDeleting={history.isDeleting}
         onDelete={history.deleteSelected}
         onDownload={downloadHistoryResult}
+        onBulkDelete={history.deleteMany}
+        onBulkExport={history.exportManyAsZip}
       />
 
  {/* Main Content */}

@@ -52,6 +52,8 @@ export interface HistoryDialogProps {
   isDeleting: boolean;
   onDelete: () => void;
   onDownload: (format: "md" | "json") => void;
+  onBulkDelete: (ids: string[]) => void;
+  onBulkExport: (ids: string[]) => void;
 }
 
 export function HistoryDialog({
@@ -69,9 +71,22 @@ export function HistoryDialog({
   isDeleting,
   onDelete,
   onDownload,
+  onBulkDelete,
+  onBulkExport,
 }: HistoryDialogProps) {
   const [search, setSearch] = React.useState("");
   const [filter, setFilter] = React.useState<HistoryFilter>("all");
+  const [checked, setChecked] = React.useState<Set<string>>(new Set());
+
+  const toggleChecked = (id: string) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const checkedCount = checked.size;
 
   const counts = {
     all: jobs.length,
@@ -97,8 +112,11 @@ export function HistoryDialog({
     if (!next) {
       setSearch("");
       setFilter("all");
+      setChecked(new Set());
     }
   };
+
+  const checkedIds = React.useMemo(() => Array.from(checked), [checked]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -177,6 +195,41 @@ export function HistoryDialog({
           ) : null}
         </header>
 
+        {checkedCount > 0 ? (
+          <div className="px-7 pb-3 flex items-center gap-2 hairline-b">
+            <span className="text-xs text-muted-foreground">
+              {t(`${checkedCount} selezionate`, `${checkedCount} selected`, `${checkedCount} sélectionnées`, `${checkedCount} seleccionadas`, `${checkedCount} ausgewählt`)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7"
+              onClick={() => { onBulkExport(checkedIds); }}
+              disabled={isDeleting}
+            >
+              <DownloadIcon size={12} className="inline-flex items-center justify-center mr-1.5" />
+              {t("Esporta ZIP", "Export ZIP", "Exporter ZIP", "Exportar ZIP", "Als ZIP")}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-7"
+              onClick={() => { onBulkDelete(checkedIds); setChecked(new Set()); }}
+              disabled={isDeleting}
+            >
+              <DeleteIcon size={12} className="inline-flex items-center justify-center mr-1.5" />
+              {t("Elimina selezionate", "Delete selected", "Supprimer la sélection", "Eliminar seleccionadas", "Auswahl löschen")}
+            </Button>
+            <button
+              type="button"
+              className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setChecked(new Set())}
+            >
+              {t("Annulla", "Clear", "Annuler", "Cancelar", "Aufheben")}
+            </button>
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] flex-1 min-h-0 min-w-0 overflow-hidden hairline-t">
           <aside className="min-h-0 min-w-0 lg:hairline-b-0 surface-soft/50 border-r border-transparent">
             <ScrollArea className="h-full">
@@ -215,6 +268,7 @@ export function HistoryDialog({
                         : job.status === "COMPLETED"
                           ? t("completato", "completed", "terminé", "completado", "abgeschlossen")
                           : t("in corso", "running", "en cours", "en curso", "läuft");
+                    const isChecked = checked.has(job.id);
                     return (
                       <button
                         key={job.id}
@@ -231,14 +285,24 @@ export function HistoryDialog({
                           <span className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-primary" />
                         ) : null}
                         <div className="flex items-start justify-between gap-2">
-                          <p
-                            className={cn(
-                              "text-sm font-medium truncate",
-                              active ? "text-foreground" : "text-foreground/85",
-                            )}
-                          >
-                            {job.fileName}
-                          </p>
+                          <div className="flex items-start gap-2 min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => { e.stopPropagation(); toggleChecked(job.id); }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="mt-0.5 h-3.5 w-3.5 rounded border-muted-foreground/40 cursor-pointer"
+                              aria-label={t("Seleziona", "Select", "Sélectionner", "Seleccionar", "Auswählen")}
+                            />
+                            <p
+                              className={cn(
+                                "text-sm font-medium truncate",
+                                active ? "text-foreground" : "text-foreground/85",
+                              )}
+                            >
+                              {job.fileName}
+                            </p>
+                          </div>
                         </div>
                         <div className="mt-1 flex items-center gap-2 text-[11px]">
                           <span className={cn("inline-flex items-center gap-1 font-medium", statusTone)}>
