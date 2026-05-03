@@ -84,6 +84,7 @@ import {
 import { FileListCard } from "@/app/page-components/file-list-card";
 import { Footer } from "@/app/page-components/footer";
 import { HeaderBar } from "@/app/page-components/header-bar";
+import { ChangePasswordDialog } from "@/app/page-components/change-password-dialog";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { useHistory } from "@/app/page-components/use-history";
 import { PreviewHeader } from "@/app/page-components/preview-header";
@@ -497,6 +498,7 @@ export default function ExtractoPage() {
  const [isLoadingModels, setIsLoadingModels] = React.useState(false);
  const [isSavingApiSettings, setIsSavingApiSettings] = React.useState(false);
  const [isSigningOut, setIsSigningOut] = React.useState(false);
+ const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
  const [modelError, setModelError] = React.useState("");
  const [historyOpen, setHistoryOpen] = React.useState(false);
 
@@ -1984,8 +1986,15 @@ export default function ExtractoPage() {
       <HeaderBar
         t={t}
         onOpenSettings={openSettingsTab}
+        onChangePassword={() => setChangePasswordOpen(true)}
         onSignOut={signOut}
         isSigningOut={isSigningOut}
+      />
+
+      <ChangePasswordDialog
+        open={changePasswordOpen}
+        onOpenChange={setChangePasswordOpen}
+        t={t}
       />
 
  <Dialog
