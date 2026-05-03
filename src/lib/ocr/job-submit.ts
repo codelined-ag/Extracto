@@ -31,6 +31,7 @@ export interface SubmitOcrJobInput {
   settingsPayload: AdvancedSettings;
   postProcessingPayload: PostProcessingSettings;
   inputPreviews: string[];
+  pageNumbers?: number[];
   prompt: string;
   sourcePreview: string | null;
   priority?: number;
@@ -87,6 +88,7 @@ function kickoffProcessing(
       settingsPayload: input.settingsPayload,
       postProcessingPayload: input.postProcessingPayload,
       inputPreviews: input.inputPreviews,
+      pageNumbers: input.pageNumbers,
       prompt: input.prompt,
       ...resumeExtras,
     }),

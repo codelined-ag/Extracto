@@ -47,6 +47,7 @@ export interface PageLoopDeps {
   ocrModel: string;
   prompt: string;
   inputPreviews: string[];
+  pageNumbers?: number[];
   startIndex: number;
   snapshot: (snap: ProgressSnapshotInput) => OcrProgressMetadata;
   ocrPct: () => number;
@@ -73,7 +74,7 @@ export async function runOcrPages(
     }
 
     const pagePreview = inputPreviews[index];
-    const pageNumber = index + 1;
+    const pageNumber = deps.pageNumbers?.[index] ?? index + 1;
     const pageStartMs = Date.now();
 
     state.progressEvents = appendProgressEvent(

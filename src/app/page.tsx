@@ -89,6 +89,7 @@ import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { useHistory } from "@/app/page-components/use-history";
 import { PreviewHeader } from "@/app/page-components/preview-header";
 import { NoSelectionCard } from "@/app/page-components/no-selection-card";
+import { PagePicker } from "@/app/page-components/page-picker";
 import { UploadArea } from "@/app/page-components/upload-area";
 import type {
   OcrPageCheckpointView,
@@ -528,6 +529,9 @@ export default function ExtractoPage() {
  const [isSavingKbDefaults, setIsSavingKbDefaults] = React.useState(false);
  const [isTestingStore, setIsTestingStore] = React.useState(false);
  const [storeTestResult, setStoreTestResult] = React.useState<{ ok: boolean; latencyMs: number; version?: string; endpoint?: string; error?: string } | null>(null);
+ const [allPagePreviews, setAllPagePreviews] = React.useState<string[]>([]);
+ const [allPagePreviewsForFileId, setAllPagePreviewsForFileId] = React.useState<string | null>(null);
+ const [isLoadingAllPagePreviews, setIsLoadingAllPagePreviews] = React.useState(false);
  const kbDefaultsLoadedRef = React.useRef(false);
  const [embeddingModelOptions, setEmbeddingModelOptions] = React.useState<{ value: string; label: string; hint?: string }[]>([]);
  const [embeddingModelsLoading, setEmbeddingModelsLoading] = React.useState(false);
@@ -1480,6 +1484,60 @@ export default function ExtractoPage() {
  });
  };
 
+ React.useEffect(() => {
+ if (!selectedFile || !selectedFile.file || !isPdfFile(selectedFile.file)) {
+ setAllPagePreviews([]);
+ setAllPagePreviewsForFileId(null);
+ return;
+ }
+ if (allPagePreviewsForFileId === selectedFile.id && allPagePreviews.length > 0) {
+ return;
+ }
+ if (selectedFile.status !== "pending" && selectedFile.status !== "completed") {
+ return;
+ }
+ const cached = pdfPagePreviewCacheRef.current[selectedFile.id];
+ if (Array.isArray(cached) && cached.length > 0) {
+ setAllPagePreviews(cached);
+ setAllPagePreviewsForFileId(selectedFile.id);
+ return;
+ }
+ if ((selectedFile.pageCount ?? 1) <= 1) {
+ const single = selectedFile.preview?.trim();
+ setAllPagePreviews(single ? [single] : []);
+ setAllPagePreviewsForFileId(selectedFile.id);
+ return;
+ }
+ let cancelled = false;
+ setIsLoadingAllPagePreviews(true);
+ (async () => {
+ try {
+ const pages = await ensurePagePreviews(selectedFile);
+ if (!cancelled) {
+ setAllPagePreviews(pages);
+ setAllPagePreviewsForFileId(selectedFile.id);
+ if (pages.length > 1) {
+ updateFileById(selectedFile.id, (entry) =>
+ entry.selectedPages && entry.selectedPages.length > 0
+ ? entry
+ : { ...entry, selectedPages: Array.from({ length: pages.length }, (_, i) => i + 1) },
+ );
+ }
+ }
+ } catch {
+ if (!cancelled) {
+ setAllPagePreviews([]);
+ setAllPagePreviewsForFileId(null);
+ }
+ } finally {
+ if (!cancelled) setIsLoadingAllPagePreviews(false);
+ }
+ })();
+ return () => {
+ cancelled = true;
+ };
+ }, [selectedFile?.id, selectedFile?.pageCount, selectedFile?.status]);
+
  const ensurePagePreviews = async (file: ProcessingFile): Promise<string[]> => {
  if (file.file && isPdfFile(file.file)) {
  const inMemoryPages = pdfPagePreviewCacheRef.current[file.id];
@@ -1657,7 +1715,8 @@ export default function ExtractoPage() {
  const startOrResumeOcr = async (
  file: ProcessingFile,
  pagePreviews: string[],
- resume = false
+ resume = false,
+ pageNumbers?: number[],
  ): Promise<{ jobId: string }> => {
  const response = await fetch("/api/ocr", {
  method:"POST",
@@ -1671,6 +1730,7 @@ export default function ExtractoPage() {
  model: selectedModel,
  preview: pagePreviews[0],
  pages: pagePreviews,
+ ...(pageNumbers ? { pageNumbers } : {}),
  settings,
  postProcessing,
  }),
@@ -1692,9 +1752,20 @@ export default function ExtractoPage() {
  };
 
  const processSingleFile = async (file: ProcessingFile, resume = false) => {
- const pagePreviews = await ensurePagePreviews(file);
- if (pagePreviews.length === 0) {
+ const allPreviews = await ensurePagePreviews(file);
+ if (allPreviews.length === 0) {
  throw new Error("No image preview available for OCR");
+ }
+ let pagePreviews = allPreviews;
+ let pageNumbers: number[] | undefined;
+ const selection = file.selectedPages;
+ if (selection && selection.length > 0 && selection.length < allPreviews.length) {
+ const sorted = [...selection].sort((a, b) => a - b);
+ const valid = sorted.filter((n) => n >= 1 && n <= allPreviews.length);
+ if (valid.length > 0) {
+ pagePreviews = valid.map((n) => allPreviews[n - 1]);
+ pageNumbers = valid;
+ }
  }
 
  updateFileById(file.id, (entry) => ({
@@ -1717,7 +1788,7 @@ export default function ExtractoPage() {
  error: undefined,
  }));
 
- const startPayload = await startOrResumeOcr(file, pagePreviews, resume);
+ const startPayload = await startOrResumeOcr(file, pagePreviews, resume, pageNumbers);
  updateFileById(file.id, (entry) => ({
  ...entry,
  jobId: startPayload.jobId,
@@ -2855,32 +2926,36 @@ export default function ExtractoPage() {
  </motion.div>
  </div>
  ) : (
- <div className="flex-1 flex items-center justify-center">
- {/* Show preview for pending files */}
- {selectedFile.preview ? (
- <div className="flex flex-col items-center justify-center w-full p-6">
- <motion.img
- initial={{ opacity: 0, scale: 0.95 }}
- animate={{ opacity: 1, scale: 1 }}
- src={selectedFile.preview}
- alt={selectedFile.name}
- className="max-w-full max-h-[400px] object-contain rounded-md shadow-sm mb-4"/>
- <p className="text-sm font-medium mb-1">{t("Pronto per OCR","Ready for OCR","Prêt pour l'OCR","Listo para OCR","Bereit für OCR")}</p>
- <p className="text-xs text-muted-foreground">
- {t(
-'Clicca "Avvia OCR" per estrarre il testo da questo documento',
-'Click "Run OCR" to extract text from this document',
-'Cliquez sur « Lancer l\'OCR » pour extraire le texte de ce document',
-'Pulsa "Iniciar OCR" para extraer el texto de este documento',
-'Klicke auf „OCR starten", um den Text zu extrahieren',
-)}
- </p>
- </div>
+ <div className="flex-1 flex flex-col min-h-0">
+ {selectedFile.preview || allPagePreviews.length > 0 ? (
+ <PagePicker
+ pagePreviews={
+ allPagePreviewsForFileId === selectedFile.id && allPagePreviews.length > 0
+ ? allPagePreviews
+ : selectedFile.preview
+ ? [selectedFile.preview]
+ : []
+ }
+ selected={
+ Array.isArray(selectedFile.selectedPages)
+ ? selectedFile.selectedPages
+ : []
+ }
+ onChange={(next) =>
+ updateFileById(selectedFile.id, (entry) => ({
+ ...entry,
+ selectedPages: next,
+ }))
+ }
+ t={t}
+ fileName={selectedFile.name}
+ isLoading={isLoadingAllPagePreviews && allPagePreviewsForFileId !== selectedFile.id}
+ />
  ) : (
  <motion.div
  initial={{ opacity: 0, y: 10 }}
  animate={{ opacity: 1, y: 0 }}
- className="text-center">
+ className="text-center m-auto">
  <div className="mx-auto mb-4 flex items-center justify-center text-muted-foreground/70">
  <ScanLine className="h-10 w-10"/>
  </div>

@@ -405,9 +405,9 @@ cmd_settings() {
 
 cmd_ocr() {
   local file="${1:-}"
-  [ -n "$file" ] || die "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait]"
+  [ -n "$file" ] || die "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7]"
   [ -f "$file" ] || die "file not found: $file"
-  local out="" model="" wait_flag=1
+  local out="" model="" wait_flag=1 pages_spec=""
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -420,6 +420,9 @@ cmd_ocr() {
       --no-wait)
         wait_flag=0; shift
         ;;
+      --pages)
+        pages_spec="${2:-}"; shift 2
+        ;;
       *)
         die "unknown ocr flag: $1"
         ;;
@@ -427,9 +430,6 @@ cmd_ocr() {
   done
   [ -n "$model" ] || die "--model is required (e.g. --model llava:13b or --model mistral-ocr-latest)"
 
-  # Refuse files larger than 32 MiB raw — base64 inflates ~33% on top, so a
-  # 32 MiB PDF becomes a ~43 MiB shell variable and curl arg. Above this the
-  # OS ARG_MAX often bites before the API does.
   local file_size_bytes
   file_size_bytes="$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo 0)"
   if [ "$file_size_bytes" -gt 33554432 ]; then
@@ -445,20 +445,96 @@ cmd_ocr() {
     *) die "unsupported file type: ${file##*.}" ;;
   esac
 
-  local b64
-  if base64 --help 2>&1 | grep -q -- "-w"; then
-    b64="$(base64 -w 0 < "$file")"
-  else
-    b64="$(base64 < "$file" | tr -d '\n')"
-  fi
-  local data_url="data:${mime};base64,${b64}"
   local file_basename
   file_basename="$(basename "$file")"
 
-  # Build the request body via python3 — passes user input on stdin only,
-  # so filenames/data URLs cannot escape into shell or python source.
+  local pages_payload="" preview_payload=""
+  if [ -n "$pages_spec" ]; then
+    [ "$mime" = "application/pdf" ] || die "--pages only applies to PDF input"
+    command -v pdftoppm >/dev/null 2>&1 || die "--pages requires 'pdftoppm' (poppler-utils). Install via your package manager (e.g. apt-get install poppler-utils, brew install poppler)."
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+    trap 'rm -rf "$tmpdir"' RETURN
+    local resolved_pages
+    resolved_pages="$(python3 -c '
+import sys
+spec = sys.argv[1]
+out = []
+seen = set()
+for part in spec.split(","):
+    part = part.strip()
+    if not part:
+        continue
+    if "-" in part:
+        a, b = part.split("-", 1)
+        a = int(a); b = int(b)
+        lo, hi = (a, b) if a <= b else (b, a)
+        for n in range(lo, hi + 1):
+            if n >= 1 and n not in seen:
+                seen.add(n); out.append(n)
+    else:
+        n = int(part)
+        if n >= 1 and n not in seen:
+            seen.add(n); out.append(n)
+print(",".join(str(n) for n in out))
+' "$pages_spec")"
+    [ -n "$resolved_pages" ] || die "--pages produced no valid page numbers"
+    local pages_b64_list="" page_numbers_list=""
+    local IFS_BAK="$IFS"
+    IFS=','
+    for page_num in $resolved_pages; do
+      pdftoppm -f "$page_num" -l "$page_num" -jpeg -r 150 "$file" "$tmpdir/page" >/dev/null 2>&1 || die "pdftoppm failed on page $page_num"
+      local rendered
+      rendered="$(ls "$tmpdir"/page-*.jpg 2>/dev/null | head -1)"
+      [ -n "$rendered" ] || die "no rendered output for page $page_num"
+      local pb64
+      if base64 --help 2>&1 | grep -q -- "-w"; then
+        pb64="$(base64 -w 0 < "$rendered")"
+      else
+        pb64="$(base64 < "$rendered" | tr -d '\n')"
+      fi
+      rm -f "$rendered"
+      local page_durl="data:image/jpeg;base64,${pb64}"
+      if [ -z "$pages_b64_list" ]; then
+        pages_b64_list="$page_durl"
+        page_numbers_list="$page_num"
+      else
+        pages_b64_list="${pages_b64_list}"$'\x1e'"$page_durl"
+        page_numbers_list="${page_numbers_list},${page_num}"
+      fi
+    done
+    IFS="$IFS_BAK"
+    pages_payload="$pages_b64_list"
+    preview_payload="${pages_b64_list%%$'\x1e'*}"
+    info "extracted ${#page_numbers_list} page(s) via pdftoppm: pages=${page_numbers_list}"
+  else
+    local b64
+    if base64 --help 2>&1 | grep -q -- "-w"; then
+      b64="$(base64 -w 0 < "$file")"
+    else
+      b64="$(base64 < "$file" | tr -d '\n')"
+    fi
+    preview_payload="data:${mime};base64,${b64}"
+  fi
+
   local body
-  body="$(python3 -c '
+  if [ -n "$pages_payload" ]; then
+    body="$(python3 -c '
+import json, sys
+data = sys.stdin.read().split("\x1f")
+file_name, model, page_numbers_csv, pages_concat = data[0], data[1], data[2], data[3]
+pages = pages_concat.split("\x1e") if pages_concat else []
+page_numbers = [int(n) for n in page_numbers_csv.split(",") if n]
+preview = pages[0] if pages else ""
+payload = {
+  "files": [
+    {"fileName": file_name, "model": model, "preview": preview, "pages": pages, "pageNumbers": page_numbers}
+  ]
+}
+print(json.dumps(payload, separators=(",", ":")))
+' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${page_numbers_list}"$'\x1f'"${pages_payload}")"
+  else
+    body="$(python3 -c '
 import json, sys
 file_name, model, preview = sys.stdin.read().split("\x1f", 2)
 print(json.dumps({
@@ -466,7 +542,8 @@ print(json.dumps({
     {"fileName": file_name, "model": model, "preview": preview}
   ]
 }, separators=(",", ":")))
-' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${data_url}")"
+' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${preview_payload}")"
+  fi
 
   info "submitting OCR for ${file_basename}..."
   local response

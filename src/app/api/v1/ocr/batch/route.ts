@@ -17,6 +17,7 @@ interface BatchFile {
   fileName: string;
   preview: string;
   pages?: string[];
+  pageNumbers?: number[];
   model: string;
   priority?: number;
   postProcessing?: Partial<PostProcessingSettings>;
@@ -46,6 +47,20 @@ function parseBatchBody(raw: unknown): BatchFile[] | { error: string } {
     const pages = Array.isArray(f.pages)
       ? f.pages.filter((p): p is string => typeof p === "string")
       : undefined;
+    let pageNumbers: number[] | undefined;
+    if (Array.isArray(f.pageNumbers)) {
+      const cleaned = f.pageNumbers.filter(
+        (p): p is number => typeof p === "number" && Number.isInteger(p) && p >= 1 && p <= 10_000,
+      );
+      if (cleaned.length !== f.pageNumbers.length) {
+        return { error: "pageNumbers must be a list of positive integers (1-indexed)" };
+      }
+      const targetLength = pages?.length ?? 1;
+      if (cleaned.length !== targetLength) {
+        return { error: `pageNumbers length (${cleaned.length}) must equal pages length (${targetLength})` };
+      }
+      pageNumbers = cleaned;
+    }
     const priority =
       typeof f.priority === "number" && Number.isFinite(f.priority)
         ? Math.max(-10, Math.min(10, Math.trunc(f.priority)))
@@ -54,6 +69,7 @@ function parseBatchBody(raw: unknown): BatchFile[] | { error: string } {
       fileName,
       preview,
       pages,
+      pageNumbers,
       model,
       priority,
       postProcessing: f.postProcessing as Partial<PostProcessingSettings> | undefined,
@@ -97,6 +113,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
         fileName: file.fileName,
         model: file.model,
         inputPreviews,
+        pageNumbers: file.pageNumbers,
         sourcePreview,
         priority: file.priority,
         batchId,

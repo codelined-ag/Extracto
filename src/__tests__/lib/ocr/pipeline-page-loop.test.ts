@@ -142,6 +142,31 @@ describe("runOcrPages", () => {
     expect(state.pageOutputs).toHaveLength(0);
   });
 
+  it("uses pageNumbers for the result's pageNumber when provided (subset OCR)", async () => {
+    mockedRunProvider
+      .mockResolvedValueOnce({ text: "p3", structured: { markdown: "p3" }, metadata: {} })
+      .mockResolvedValueOnce({ text: "p7", structured: { markdown: "p7" }, metadata: {} });
+
+    const state = freshState();
+    const result = await runOcrPages(state, makeDeps({ pageNumbers: [3, 7] }));
+
+    expect(result.paused).toBe(false);
+    expect(state.pageOutputs.map((p) => p.pageNumber)).toEqual([3, 7]);
+    expect(state.pageOutputs.map((p) => p.text)).toEqual(["p3", "p7"]);
+    expect(state.checkpoints.map((c) => c.pageNumber)).toEqual([3, 7]);
+  });
+
+  it("falls back to index+1 when pageNumbers is omitted", async () => {
+    mockedRunProvider
+      .mockResolvedValueOnce({ text: "page 1", structured: { markdown: "page 1" }, metadata: {} })
+      .mockResolvedValueOnce({ text: "page 2", structured: { markdown: "page 2" }, metadata: {} });
+
+    const state = freshState();
+    await runOcrPages(state, makeDeps());
+
+    expect(state.pageOutputs.map((p) => p.pageNumber)).toEqual([1, 2]);
+  });
+
   it("respects startIndex when resuming partway", async () => {
     mockedRunProvider.mockResolvedValueOnce({
       text: "page 2",

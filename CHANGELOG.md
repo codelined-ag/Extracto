@@ -6,6 +6,52 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-05-03
+
+### Added
+- **Per-page selection for PDFs.** New page picker in the workspace shows
+  every PDF page as a thumbnail with a checkbox; pick which pages to
+  OCR instead of always processing the whole document. Range input
+  (`1-5,7,10`), Select all / Select none, and double-click any thumbnail
+  for a full-size single-page view.
+- **`pageNumbers` parallel array** on `POST /api/v1/ocr/batch` and
+  `POST /api/ocr` to preserve original page numbering when the caller
+  pre-splits a PDF and submits a subset.
+- **CLI**: `extracto ocr <file> --pages 1-5,7` extracts the requested
+  pages locally via `pdftoppm` (poppler-utils) and submits the subset.
+  Errors clearly if `pdftoppm` is not installed.
+- **MCP**: `ocr_submit` tool gained `pages` + `pageNumbers` params.
+- **PowerShell launcher (`scripts/extracto.ps1`)** gained full parity
+  with the Bash CLI: `api-key`, `ocr`, `jobs`, `presets`, `kb`
+  (export + test-connection), `settings`. Install now broadcasts
+  `WM_SETTINGCHANGE` so new terminals pick up the PATH update without
+  logout, and verifies the launcher post-install.
+- **Vector-store test-connection** across all surfaces (UI button,
+  `POST /api/kb/test-connection`, `POST /api/v1/kb/test-connection`,
+  `extracto kb test-connection`, MCP `kb_test_connection`). Probes
+  Chroma `/api/v1/collections` (with `/api/v2/...` auto-detection),
+  Qdrant `/collections`, Weaviate `/v1/schema` so a 401 surfaces here
+  instead of after the embedding step.
+- **Chroma /api/v2 auto-detection** in the adapter. Probes
+  `/api/v2/heartbeat` first, falls back to `/api/v1/heartbeat`, caches
+  the resolved version. Configurable `apiVersion`, `tenant`,
+  `database` on the adapter; defaults `default_tenant` /
+  `default_database`.
+- **Vector-store endpoint allowlist** (`VECTOR_STORE_ALLOWED_HOSTS`)
+  enforced on both KB test-connection routes AND on the existing
+  `/api/v1/export/kb` route. Cloud-metadata addresses
+  (`169.254.169.254`, `metadata.google.internal`,
+  `metadata.azure.com`) blocked unconditionally.
+
+### Changed
+- File-list filename now wraps to multiple lines instead of being
+  truncated, with the full path on the title attribute.
+
+### Fixed
+- `Account` dropdown in the workspace header now shows only **Sign
+  out** (Provider / Knowledge base were redundant: both live in
+  Settings).
+
 ## [0.3.1] - 2026-05-03
 
 ### Changed

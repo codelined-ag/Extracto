@@ -57,6 +57,7 @@ export interface ProcessOcrJobInput {
   settingsPayload: AdvancedSettings;
   postProcessingPayload: PostProcessingSettings;
   inputPreviews: string[];
+  pageNumbers?: number[];
   prompt: string;
   initialPageOutputs?: ProcessedPageOutput[];
   startIndex?: number;
@@ -234,6 +235,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       ocrModel: input.ocrModel,
       prompt: input.prompt,
       inputPreviews: input.inputPreviews,
+      pageNumbers: input.pageNumbers,
       startIndex,
       snapshot: snapshotMetadata,
       ocrPct,

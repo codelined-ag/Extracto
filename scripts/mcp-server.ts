@@ -66,6 +66,18 @@ server.tool(
           fileName: z.string(),
           model: z.string(),
           preview: z.string().describe("Data URL (data:image/* or data:application/pdf;base64,...)"),
+          pages: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Per-page data URLs when the caller has pre-split a PDF into images. Length must equal pageNumbers when both are provided.",
+            ),
+          pageNumbers: z
+            .array(z.number().int().min(1))
+            .optional()
+            .describe(
+              "1-indexed original page numbers parallel to `pages`. Use to OCR a subset of a PDF (e.g. [1,2,5,7]). Required only when pre-splitting; otherwise the server processes every page in order.",
+            ),
           priority: z
             .number()
             .int()

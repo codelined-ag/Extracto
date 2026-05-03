@@ -36,6 +36,7 @@ interface OCRRequestBody {
   model?: unknown;
   preview?: unknown;
   pages?: unknown;
+  pageNumbers?: unknown;
   priority?: unknown;
   batchId?: unknown;
   settings?: Partial<AdvancedSettings>;
@@ -118,6 +119,23 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
         ? [preview]
         : [];
 
+    let pageNumbers: number[] | undefined;
+    if (Array.isArray(body.pageNumbers)) {
+      const cleaned = body.pageNumbers.filter(
+        (p): p is number => typeof p === "number" && Number.isInteger(p) && p >= 1 && p <= 10_000,
+      );
+      if (cleaned.length !== body.pageNumbers.length) {
+        throw new ApiRouteError("pageNumbers must be a list of positive integers (1-indexed)", 400);
+      }
+      if (cleaned.length !== inputPreviews.length) {
+        throw new ApiRouteError(
+          `pageNumbers length (${cleaned.length}) must equal inputPreviews length (${inputPreviews.length})`,
+          400,
+        );
+      }
+      pageNumbers = cleaned;
+    }
+
     if (!model) {
       throw new ApiRouteError("Model is required", 400);
     }
@@ -151,6 +169,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
         fileName,
         model,
         inputPreviews,
+        pageNumbers,
         sourcePreview,
         startedAtMs,
       });
@@ -178,6 +197,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
       fileName,
       model,
       inputPreviews,
+      pageNumbers,
       sourcePreview,
       priority: requestedPriority,
       batchId: requestedBatchId,

@@ -194,26 +194,66 @@ function Cmd-Upgrade {
     Write-Ok "Extracto upgraded and running at http://localhost:3000"
 }
 
+function Broadcast-EnvChange {
+    try {
+        if (-not ('Native.Win32EnvBroadcast' -as [type])) {
+            $sig = @'
+[DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)]
+public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
+'@
+            Add-Type -MemberDefinition $sig -Name "Win32EnvBroadcast" -Namespace "Native"
+        }
+        $HWND_BROADCAST = [IntPtr]0xFFFF
+        $WM_SETTINGCHANGE = 0x1A
+        $SMTO_ABORTIFHUNG = 0x2
+        [UIntPtr]$out = [UIntPtr]::Zero
+        [Native.Win32EnvBroadcast]::SendMessageTimeout($HWND_BROADCAST, $WM_SETTINGCHANGE, [UIntPtr]::Zero, "Environment", $SMTO_ABORTIFHUNG, 5000, [ref]$out) | Out-Null
+    } catch {
+        Write-Warn "Could not broadcast PATH update; you may need to log out and back in."
+    }
+}
+
 function Cmd-Install {
     Assert-Project
     if (-not (Test-Path $UserBinDir)) {
         New-Item -ItemType Directory -Path $UserBinDir -Force | Out-Null
     }
+    $scriptPath = $PSCommandPath
     $launcher = @"
 @echo off
-setlocal
-powershell -NoProfile -ExecutionPolicy Bypass -File "$($PSCommandPath)" %*
-endlocal
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$scriptPath" %*
 "@
     Set-Content -LiteralPath $UserBinFile -Value $launcher -Encoding ASCII
+    Write-Ok "Installed launcher at $UserBinFile"
+
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    if (-not ($userPath.Split(";") | Where-Object { $_ -ieq $UserBinDir })) {
+    $userPathParts = if ($userPath) { $userPath.Split(";") } else { @() }
+    $alreadyOnPath = $userPathParts | Where-Object { $_ -and ($_.TrimEnd('\') -ieq $UserBinDir.TrimEnd('\')) }
+    if (-not $alreadyOnPath) {
         $newPath = if ([string]::IsNullOrWhiteSpace($userPath)) { $UserBinDir } else { "$userPath;$UserBinDir" }
         [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-        Write-Ok "Added $UserBinDir to user PATH (open a new shell to pick it up)"
+        Broadcast-EnvChange
+        Write-Ok "Added $UserBinDir to user PATH"
+    } else {
+        Write-Info "$UserBinDir was already on the user PATH"
     }
-    Write-Ok "Installed launcher at $UserBinFile"
-    Write-Info "Use:  extracto on | off | logs | status | upgrade | uninstall | api-key | ocr | jobs | presets | kb | settings"
+
+    if ($env:Path -notlike "*$UserBinDir*") {
+        $env:Path = "$env:Path;$UserBinDir"
+    }
+
+    try {
+        $verify = & $UserBinFile help 2>&1 | Select-Object -First 1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Ok "Verified: '$UserBinFile help' returned: $verify"
+        } else {
+            Write-Warn "Launcher verification returned exit $LASTEXITCODE: $verify"
+        }
+    } catch {
+        Write-Warn "Could not verify launcher: $($_.Exception.Message)"
+    }
+
+    Write-Info "Open a NEW terminal, then run: extracto on"
 }
 
 function Cmd-Uninstall {

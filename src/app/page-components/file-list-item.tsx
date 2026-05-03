@@ -57,7 +57,7 @@ export function FileListItem({
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{file.name}</p>
+        <p className="text-sm font-medium break-words leading-tight" title={file.name}>{file.name}</p>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">{formatFileSize(file.size)}</span>
           {typeof file.pageCount === "number" ? (

@@ -49,6 +49,7 @@ export interface ProcessingFile {
   preview?: string;
   pagePreviews?: string[];
   pageCount?: number;
+  selectedPages?: number[];
   processedPages?: number;
   etaSeconds?: number | null;
   stage?: string;
