@@ -110,10 +110,11 @@ Same backend, four surfaces. Pick what fits.
 |---|---|---|
 | **Browser UI** | You're a human with a stack of PDFs | [How it works](https://extracto.help/how-it-works) |
 | **REST API** (`/api/v1/*`) | You're building a document-intake pipeline | [API reference](https://extracto.help/api/overview) |
-| **MCP server** | Your agent (Claude / Cursor / Codex / OpenClaw / Hermes) needs eyes | [Agents](https://extracto.help/agents/overview) |
+| **MCP server** | Your agent speaks MCP (Claude Desktop, Cursor, Codex, OpenClaw, Hermes) | [Agents](https://extracto.help/agents/overview) |
+| **CLI + [`SKILL.md`](./SKILL.md)** | Your agent only has a shell tool (Claude Code, shell-based runners) | [Skill file](./SKILL.md) |
 | **OpenAI-Chat adapter** | You already have OpenAI-SDK code; just point it at Extracto | [OpenAI compat](https://extracto.help/api/openai-compat) |
 
-The MCP server is shipped first-class with seven tools (`ocr_submit`, `ocr_get`, `jobs_list`, `job_stop`, `kb_search`, `kb_export`, `presets_list`) and a pre-written [`SKILL.md`](./SKILL.md) describing when to use each.
+Agents get two first-class paths. The **MCP server** exposes seven tools (`ocr_submit`, `ocr_get`, `jobs_list`, `job_stop`, `kb_search`, `kb_export`, `presets_list`). The **`SKILL.md`** + typed CLI path is for agents that don't speak MCP: drop the skill file into the agent's context and it knows when to call `extracto ocr`, `extracto kb search`, `extracto jobs ...` from a shell.
 
 ---
 
