@@ -102,7 +102,7 @@ import ReactMarkdown from"react-markdown";
 // Types
 
 type KbEmbeddingProvider ="ollama"|"openrouter"|"openai_compat";
-type KbChunkingStrategy ="fixed"|"sentence"|"paragraph";
+type KbChunkingStrategy ="fixed"|"sentence"|"paragraph"|"hierarchical"|"semantic";
 type KbStoreKind ="chroma"|"qdrant"|"weaviate";
 
 const STORE_DEFAULT_BASE_URLS: Record<KbStoreKind, string> = {
@@ -128,6 +128,8 @@ interface KbDefaultsForm {
  chunkingMaxSize: string;
  chunkingOverlap: string;
  chunkingMinSize: string;
+ chunkingBreakpointPercentile: string;
+ chunkingMaxHeadingDepth: string;
  storeKind: KbStoreKind;
  storeBaseUrl: string;
  storeApiKey: string;
@@ -147,6 +149,8 @@ const DEFAULT_KB_FORM: KbDefaultsForm = {
  chunkingMaxSize:"1200",
  chunkingOverlap:"100",
  chunkingMinSize:"200",
+ chunkingBreakpointPercentile:"95",
+ chunkingMaxHeadingDepth:"6",
  storeKind:"chroma",
  storeBaseUrl:"http://127.0.0.1:8000",
  storeApiKey:"",
@@ -998,7 +1002,7 @@ export default function ExtractoPage() {
  if (!resp.ok) return;
  const payload = await resp.json() as {
  embedding?: { provider?: KbEmbeddingProvider; apiEndpoint?: string; model?: string; dimensions?: number; hasApiKey?: boolean };
- chunking?: { strategy?: KbChunkingStrategy; maxChunkSize?: number; overlap?: number; minChunkSize?: number };
+ chunking?: { strategy?: KbChunkingStrategy; maxChunkSize?: number; overlap?: number; minChunkSize?: number; breakpointPercentile?: number; maxHeadingDepth?: number };
  vectorStore?: { kind?: KbStoreKind; baseUrl?: string; dimensions?: number; hasApiKey?: boolean };
  collectionNameTemplate?: string;
  };
@@ -1013,6 +1017,8 @@ export default function ExtractoPage() {
  chunkingMaxSize: String(payload.chunking?.maxChunkSize ?? DEFAULT_KB_FORM.chunkingMaxSize),
  chunkingOverlap: payload.chunking?.overlap != null ? String(payload.chunking.overlap) : DEFAULT_KB_FORM.chunkingOverlap,
  chunkingMinSize: payload.chunking?.minChunkSize != null ? String(payload.chunking.minChunkSize) : DEFAULT_KB_FORM.chunkingMinSize,
+ chunkingBreakpointPercentile: payload.chunking?.breakpointPercentile != null ? String(payload.chunking.breakpointPercentile) : DEFAULT_KB_FORM.chunkingBreakpointPercentile,
+ chunkingMaxHeadingDepth: payload.chunking?.maxHeadingDepth != null ? String(payload.chunking.maxHeadingDepth) : DEFAULT_KB_FORM.chunkingMaxHeadingDepth,
  storeKind: payload.vectorStore?.kind ?? DEFAULT_KB_FORM.storeKind,
  storeBaseUrl: payload.vectorStore?.baseUrl ?? DEFAULT_KB_FORM.storeBaseUrl,
  storeApiKey:"",
@@ -1035,6 +1041,10 @@ export default function ExtractoPage() {
  const n = Number.parseInt(v, 10);
  return Number.isFinite(n) ? n : undefined;
  };
+ const parseFloat10 = (v: string): number | undefined => {
+ const n = Number.parseFloat(v);
+ return Number.isFinite(n) ? n : undefined;
+ };
  const body = {
  embedding: {
  provider: kbDefaultsDraft.embeddingProvider,
@@ -1048,6 +1058,8 @@ export default function ExtractoPage() {
  maxChunkSize: parseInt10(kbDefaultsDraft.chunkingMaxSize) ?? 1200,
  overlap: parseInt10(kbDefaultsDraft.chunkingOverlap),
  minChunkSize: parseInt10(kbDefaultsDraft.chunkingMinSize),
+ breakpointPercentile: parseFloat10(kbDefaultsDraft.chunkingBreakpointPercentile),
+ maxHeadingDepth: parseInt10(kbDefaultsDraft.chunkingMaxHeadingDepth),
  },
  vectorStore: {
  kind: kbDefaultsDraft.storeKind,
@@ -2028,6 +2040,8 @@ export default function ExtractoPage() {
  <SelectItem value="fixed">{t("Lunghezza fissa","Fixed length","Longueur fixe","Longitud fija","Feste Länge")}</SelectItem>
  <SelectItem value="sentence">{t("Per frase","Per sentence","Par phrase","Por frase","Pro Satz")}</SelectItem>
  <SelectItem value="paragraph">{t("Per paragrafo","Per paragraph","Par paragraphe","Por párrafo","Pro Absatz")}</SelectItem>
+ <SelectItem value="hierarchical">{t("Gerarchico (titoli)","Hierarchical (headings)","Hiérarchique (titres)","Jerárquico (títulos)","Hierarchisch (Überschriften)")}</SelectItem>
+ <SelectItem value="semantic">{t("Semantico (embedding)","Semantic (embedding)","Sémantique (embedding)","Semántico (embedding)","Semantisch (Embedding)")}</SelectItem>
  </SelectContent>
  </Select>
  </div>
@@ -2056,17 +2070,51 @@ export default function ExtractoPage() {
  <span className="inline-flex items-center gap-1">
  Min
  <HintInfo text={t(
-"Lunghezza minima di un chunk: i frammenti più corti vengono uniti al successivo. Vale per le strategie 'per frase' e 'per paragrafo'.",
-"Minimum chunk length: anything shorter gets glued onto the next one. Applies to the sentence and paragraph strategies.",
-"Longueur minimale d'un chunk : tout fragment plus court est fusionné avec le suivant. S'applique aux stratégies par phrase ou paragraphe.",
-"Longitud mínima del fragmento: si es menor se fusiona con el siguiente. Solo para las estrategias por frase y por párrafo.",
-"Mindestlänge eines Chunks: Kürzere werden an den nächsten angehängt. Gilt für Satz- und Absatzstrategie.",
+"Lunghezza minima di un chunk: i frammenti più corti vengono uniti al successivo. Vale per tutte le strategie tranne 'lunghezza fissa'.",
+"Minimum chunk length: anything shorter gets glued onto the next one. Applies to every strategy except fixed-length.",
+"Longueur minimale d'un chunk : tout fragment plus court est fusionné avec le suivant. S'applique à toutes les stratégies sauf longueur fixe.",
+"Longitud mínima del fragmento: si es menor se fusiona con el siguiente. Aplica a todas las estrategias excepto longitud fija.",
+"Mindestlänge eines Chunks: Kürzere werden an den nächsten angehängt. Gilt für alle Strategien außer fester Länge.",
 )}/>
  </span>
  </Label>
  <Input type="number"min={0} value={kbDefaultsDraft.chunkingMinSize} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMinSize: e.target.value }))} disabled={kbDefaultsDraft.chunkingStrategy ==="fixed"}/>
  </div>
  </div>
+ {kbDefaultsDraft.chunkingStrategy === "semantic" ? (
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
+ <span className="inline-flex items-center gap-1">
+ {t("Soglia (percentile)","Threshold (percentile)","Seuil (percentile)","Umbral (percentil)","Schwelle (Perzentil)")}
+ <HintInfo text={t(
+"Distanze tra embedding di frasi consecutive sopra questo percentile diventano confini di chunk. Più alto = chunk meno numerosi e più grandi. Default 95.",
+"Cosine distances between consecutive sentence embeddings above this percentile become chunk boundaries. Higher = fewer, larger chunks. Default 95.",
+"Les distances cosinus entre embeddings de phrases consécutives au-dessus de ce percentile deviennent des frontières de chunk. Plus haut = chunks plus rares et plus gros. Défaut 95.",
+"Las distancias coseno entre embeddings de frases consecutivas por encima de este percentil se convierten en límites de fragmento. Más alto = menos fragmentos y más grandes. Por defecto 95.",
+"Kosinus-Distanzen zwischen aufeinanderfolgenden Satz-Embeddings über diesem Perzentil werden zu Chunk-Grenzen. Höher = weniger, größere Chunks. Standard 95.",
+)}/>
+ </span>
+ </Label>
+ <Input type="number"min={0} max={100} step={1} value={kbDefaultsDraft.chunkingBreakpointPercentile} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingBreakpointPercentile: e.target.value }))}/>
+ </div>
+ ) : null}
+ {kbDefaultsDraft.chunkingStrategy === "hierarchical" ? (
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
+ <span className="inline-flex items-center gap-1">
+ {t("Profondità titoli","Heading depth","Profondeur titres","Profundidad titulares","Überschriftentiefe")}
+ <HintInfo text={t(
+"Massimo livello di titolo Markdown (H1..H6) trattato come confine di sezione. Titoli più profondi vengono inclusi nel corpo del genitore. Default 6.",
+"Maximum Markdown heading level (H1..H6) treated as a section boundary. Deeper headings get folded into the parent's body. Default 6.",
+"Niveau de titre Markdown maximum (H1..H6) traité comme frontière de section. Les titres plus profonds sont fusionnés dans le corps du parent. Défaut 6.",
+"Nivel máximo de título Markdown (H1..H6) tratado como frontera de sección. Los titulares más profundos se incluyen en el cuerpo del padre. Por defecto 6.",
+"Maximale Markdown-Überschriftenebene (H1..H6), die als Abschnittsgrenze gilt. Tiefere Überschriften werden in den Inhalt der Eltern integriert. Standard 6.",
+)}/>
+ </span>
+ </Label>
+ <Input type="number"min={1} max={6} step={1} value={kbDefaultsDraft.chunkingMaxHeadingDepth} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMaxHeadingDepth: e.target.value }))}/>
+ </div>
+ ) : null}
  </div>
  </SettingsSection>
 

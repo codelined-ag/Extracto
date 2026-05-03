@@ -47,7 +47,13 @@ function getEmbeddingProviderFallback(provider: EmbeddingProviderKind): string {
   return OLLAMA_DEFAULT_HOST;
 }
 
-const VALID_STRATEGIES: readonly ChunkingStrategy[] = ["fixed", "sentence", "paragraph"];
+const VALID_STRATEGIES: readonly ChunkingStrategy[] = [
+  "fixed",
+  "sentence",
+  "paragraph",
+  "hierarchical",
+  "semantic",
+];
 const VALID_PROVIDERS: readonly EmbeddingProviderKind[] = ["ollama", "openrouter", "openai_compat"];
 const VALID_STORES = ["chroma", "qdrant", "weaviate"] as const;
 type StoreKind = (typeof VALID_STORES)[number];
@@ -140,10 +146,32 @@ function parseChunking(raw: unknown): ChunkingOptions {
     throw new ApiRouteError("chunking.overlap must be an integer in 0..(maxChunkSize-1)", 400);
   }
   const minChunkSize = typeof r.minChunkSize === "number" ? r.minChunkSize : undefined;
-  if (minChunkSize != null && (!Number.isInteger(minChunkSize) || minChunkSize < 0)) {
-    throw new ApiRouteError("chunking.minChunkSize must be a non-negative integer", 400);
+  if (
+    minChunkSize != null &&
+    (!Number.isInteger(minChunkSize) || minChunkSize < 0 || minChunkSize > maxChunkSize)
+  ) {
+    throw new ApiRouteError(
+      "chunking.minChunkSize must be an integer in 0..maxChunkSize",
+      400,
+    );
   }
-  return { strategy, maxChunkSize, overlap, minChunkSize };
+  const breakpointPercentile = typeof r.breakpointPercentile === "number"
+    ? r.breakpointPercentile
+    : undefined;
+  if (
+    breakpointPercentile != null &&
+    (!Number.isFinite(breakpointPercentile) || breakpointPercentile < 0 || breakpointPercentile > 100)
+  ) {
+    throw new ApiRouteError("chunking.breakpointPercentile must be a number in 0..100", 400);
+  }
+  const maxHeadingDepth = typeof r.maxHeadingDepth === "number" ? r.maxHeadingDepth : undefined;
+  if (
+    maxHeadingDepth != null &&
+    (!Number.isInteger(maxHeadingDepth) || maxHeadingDepth < 1 || maxHeadingDepth > 6)
+  ) {
+    throw new ApiRouteError("chunking.maxHeadingDepth must be an integer in 1..6", 400);
+  }
+  return { strategy, maxChunkSize, overlap, minChunkSize, breakpointPercentile, maxHeadingDepth };
 }
 
 function parseEmbedding(raw: unknown): EmbeddingProviderConfig {

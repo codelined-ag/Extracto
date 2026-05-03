@@ -302,6 +302,14 @@ extracto kb export <job-id> \
   --strategy paragraph \
   --chunk-size 1200
 
+# Hierarchical (markdown-heading aware) — keep section breadcrumbs in metadata
+extracto kb export <job-id> --collection my-docs --store-url http://chroma:8000 \
+  --embed-model nomic-embed-text --strategy hierarchical --max-heading-depth 4
+
+# Semantic (embedding-similarity boundaries) — chunks follow topic shifts
+extracto kb export <job-id> --collection my-docs --store-url http://chroma:8000 \
+  --embed-model nomic-embed-text --strategy semantic --breakpoint-percentile 95
+
 # Provider settings (read-only from CLI; change in the UI)
 extracto settings get
 ```
@@ -312,7 +320,7 @@ The CLI lives at `scripts/extracto.sh` (Bash, Linux + macOS) and `scripts/extrac
 
 ### MCP server (Claude Desktop / Cursor / Codex)
 
-Extracto ships a Model Context Protocol server at `scripts/mcp-server.ts`. It exposes the v1 API as agent tools (`ocr_submit`, `ocr_get`, `jobs_list`, `job_stop`, `kb_search`, `presets_list`) over stdio.
+Extracto ships a Model Context Protocol server at `scripts/mcp-server.ts`. It exposes the v1 API as agent tools (`ocr_submit`, `ocr_get`, `jobs_list`, `job_stop`, `kb_search`, `kb_export`, `presets_list`) over stdio.
 
 ```jsonc
 // Claude Desktop config
@@ -482,7 +490,12 @@ Set defaults in Settings → Knowledge base:
 
 - **Embedding provider:** Ollama, OpenRouter, or OpenAI-compatible.
 - **Embedding model:** searchable picker, fetches `/api/tags` or `/v1/models` and surfaces likely embedding models first (heuristic on `embed`, `bge`, `nomic`, `minilm`, `e5`, `gte`, `mxbai`, `jina`, `arctic-embed`).
-- **Chunking:** fixed-length, per-sentence, or per-paragraph. Configurable max-size, overlap (fixed only), and minimum chunk length (sentence/paragraph).
+- **Chunking:** five strategies, pick per use case.
+  - `fixed` — character window with optional overlap. Cheapest, predictable.
+  - `sentence` — split on sentence-end punctuation, merge until size. Good for prose.
+  - `paragraph` — split on blank lines, merge until size. The default.
+  - `hierarchical` — markdown-heading aware. Each chunk inherits its parent heading breadcrumb (`headingPath`, `headingLevel`) so retrieval can filter or weight by section. Configurable `maxHeadingDepth`.
+  - `semantic` — embeds every sentence once, finds boundaries where consecutive cosine distance exceeds the configured `breakpointPercentile` (default 95). Most expensive (one extra embedding round) but the boundaries follow topic shifts rather than character offsets.
 - **Vector store:** kind, base URL, optional API key, vector dimensions.
 - **Collection name template** with `{jobId}` and `{fileName}` substitutions.
 

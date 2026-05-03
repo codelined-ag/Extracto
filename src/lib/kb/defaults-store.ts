@@ -45,7 +45,13 @@ export type ClientKbDefaults = Omit<KbDefaults, "embedding" | "vectorStore"> & {
   vectorStore: Omit<VectorStoreDefaults, "apiKey"> & { hasApiKey: boolean };
 };
 
-const VALID_STRATEGIES: ReadonlySet<ChunkingStrategy> = new Set(["fixed", "sentence", "paragraph"]);
+const VALID_STRATEGIES: ReadonlySet<ChunkingStrategy> = new Set([
+  "fixed",
+  "sentence",
+  "paragraph",
+  "hierarchical",
+  "semantic",
+]);
 const VALID_PROVIDERS: ReadonlySet<EmbeddingProviderKind> = new Set(["ollama", "openrouter", "openai_compat"]);
 
 const DEFAULTS: KbDefaults = {
@@ -61,6 +67,8 @@ const DEFAULTS: KbDefaults = {
     maxChunkSize: 1200,
     overlap: 100,
     minChunkSize: 200,
+    breakpointPercentile: 95,
+    maxHeadingDepth: 6,
   },
   vectorStore: {
     kind: "chroma",
@@ -97,6 +105,12 @@ function intOrUndef(v: unknown, min: number, max: number): number | undefined {
   return v;
 }
 
+function floatInRange(v: unknown, min: number, max: number): number | undefined {
+  if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
+  if (v < min || v > max) return undefined;
+  return v;
+}
+
 function normalize(raw: Partial<KbDefaults>): KbDefaults {
   const eRaw = (raw.embedding ?? {}) as Partial<EmbeddingProviderConfig>;
   const cRaw = (raw.chunking ?? {}) as Partial<ChunkingOptions>;
@@ -114,6 +128,10 @@ function normalize(raw: Partial<KbDefaults>): KbDefaults {
   const maxChunkSize = intOrUndef(cRaw.maxChunkSize, 1, 10_000) ?? DEFAULTS.chunking.maxChunkSize;
   const overlap = intOrUndef(cRaw.overlap, 0, maxChunkSize - 1);
   const minChunkSize = intOrUndef(cRaw.minChunkSize, 0, maxChunkSize);
+  const breakpointPercentile =
+    floatInRange(cRaw.breakpointPercentile, 0, 100) ?? DEFAULTS.chunking.breakpointPercentile;
+  const maxHeadingDepth =
+    intOrUndef(cRaw.maxHeadingDepth, 1, 6) ?? DEFAULTS.chunking.maxHeadingDepth;
 
   const storeKind: VectorStoreKind = typeof sRaw.kind === "string" && VALID_STORE_KINDS.has(sRaw.kind as VectorStoreKind)
     ? (sRaw.kind as VectorStoreKind)
@@ -129,7 +147,7 @@ function normalize(raw: Partial<KbDefaults>): KbDefaults {
       model: typeof eRaw.model === "string" && eRaw.model.trim() ? eRaw.model.trim() : DEFAULTS.embedding.model,
       dimensions: intOrUndef(eRaw.dimensions, 1, 32_768) ?? DEFAULTS.embedding.dimensions,
     },
-    chunking: { strategy, maxChunkSize, overlap, minChunkSize },
+    chunking: { strategy, maxChunkSize, overlap, minChunkSize, breakpointPercentile, maxHeadingDepth },
     vectorStore: {
       kind: storeKind,
       baseUrl: typeof sRaw.baseUrl === "string" && sRaw.baseUrl.trim()

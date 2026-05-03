@@ -187,10 +187,31 @@ components:
           properties:
             strategy:
               type: string
-              enum: [fixed, sentence, paragraph]
+              enum: [fixed, sentence, paragraph, hierarchical, semantic]
+              description: |
+                * `fixed` — char-window with optional overlap.
+                * `sentence` — split on sentence-end punctuation, merge until size.
+                * `paragraph` — split on blank lines, merge until size.
+                * `hierarchical` — markdown-heading aware: each chunk inherits its parent heading breadcrumb (`headingPath`, `headingLevel` in chunk metadata).
+                * `semantic` — embed every sentence once, find boundaries where consecutive cosine distance exceeds `breakpointPercentile`. Most expensive (one extra embedding round) but the boundaries follow topic shifts rather than character offsets.
             maxChunkSize: { type: integer, minimum: 1, maximum: 10000 }
-            overlap: { type: integer, minimum: 0 }
-            minChunkSize: { type: integer, minimum: 0 }
+            overlap: { type: integer, minimum: 0, description: "Fixed-strategy only. Char overlap between adjacent chunks." }
+            minChunkSize:
+              type: integer
+              minimum: 0
+              description: "Sentence / paragraph / hierarchical: tail chunks shorter than this get merged into the previous one. Must be <= maxChunkSize. Ignored by the fixed and semantic strategies."
+            breakpointPercentile:
+              type: number
+              minimum: 0
+              maximum: 100
+              default: 95
+              description: "Semantic only. Percentile (0..100) of consecutive sentence-pair cosine distances above which a boundary is created."
+            maxHeadingDepth:
+              type: integer
+              minimum: 1
+              maximum: 6
+              default: 6
+              description: "Hierarchical only. Maximum markdown heading depth (1..6) to honor as a section boundary. Deeper headings get folded into the parent's body."
 
     Error:
       type: object

@@ -109,4 +109,52 @@ describe("POST /api/v1/export/kb", () => {
     expect(res.status).toBe(200);
     expect(mockedExport).toHaveBeenCalled();
   });
+
+  it("accepts strategy=hierarchical with maxHeadingDepth", async () => {
+    mockedFindFirst.mockResolvedValueOnce({
+      id: "j1", fileName: "doc.pdf", extractedText: "# H\n\nbody",
+      model: "qwen", completedAt: new Date(), createdAt: new Date(), metadata: {},
+    });
+    mockedExport.mockResolvedValueOnce({ jobId: "j1", collectionName: "docs", chunkCount: 1, embeddingDimensions: 768 });
+    const res = await POST(makeReq({
+      ...validBody,
+      chunking: { strategy: "hierarchical", maxChunkSize: 1000, maxHeadingDepth: 3 },
+    }));
+    expect(res.status).toBe(200);
+    const fwd = mockedExport.mock.calls[0][0];
+    expect(fwd.chunking.strategy).toBe("hierarchical");
+    expect(fwd.chunking.maxHeadingDepth).toBe(3);
+  });
+
+  it("accepts strategy=semantic with breakpointPercentile", async () => {
+    mockedFindFirst.mockResolvedValueOnce({
+      id: "j1", fileName: "doc.pdf", extractedText: "A. B. C.",
+      model: "qwen", completedAt: new Date(), createdAt: new Date(), metadata: {},
+    });
+    mockedExport.mockResolvedValueOnce({ jobId: "j1", collectionName: "docs", chunkCount: 2, embeddingDimensions: 768 });
+    const res = await POST(makeReq({
+      ...validBody,
+      chunking: { strategy: "semantic", maxChunkSize: 1000, breakpointPercentile: 80 },
+    }));
+    expect(res.status).toBe(200);
+    const fwd = mockedExport.mock.calls[0][0];
+    expect(fwd.chunking.strategy).toBe("semantic");
+    expect(fwd.chunking.breakpointPercentile).toBe(80);
+  });
+
+  it("rejects out-of-range breakpointPercentile", async () => {
+    const res = await POST(makeReq({
+      ...validBody,
+      chunking: { strategy: "semantic", maxChunkSize: 1000, breakpointPercentile: 150 },
+    }));
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects out-of-range maxHeadingDepth", async () => {
+    const res = await POST(makeReq({
+      ...validBody,
+      chunking: { strategy: "hierarchical", maxChunkSize: 1000, maxHeadingDepth: 9 },
+    }));
+    expect(res.status).toBe(400);
+  });
 });

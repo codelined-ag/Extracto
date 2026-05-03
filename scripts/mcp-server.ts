@@ -161,5 +161,36 @@ server.tool(
   async () => asTextResult(await call("/api/v1/presets")),
 );
 
+server.tool(
+  "kb_export",
+  "Chunk + embed + push a completed OCR job's text to a vector store. Strategies: fixed (char-window with overlap), sentence (sentence-merge), paragraph (paragraph-merge), hierarchical (markdown-heading-aware with breadcrumb metadata), semantic (embedding-similarity boundary detection — embeds sentences once, splits where consecutive cosine distance exceeds the breakpointPercentile).",
+  {
+    jobId: z.string(),
+    collectionName: z.string(),
+    vectorStore: z.object({
+      kind: z.enum(["chroma", "qdrant", "weaviate"]),
+      baseUrl: z.string().url(),
+      apiKey: z.string().optional(),
+      dimensions: z.number().int().positive().optional(),
+    }),
+    embedding: z.object({
+      provider: z.enum(["ollama", "openrouter", "openai_compat"]),
+      apiEndpoint: z.string().url(),
+      apiKey: z.string().optional(),
+      model: z.string(),
+      dimensions: z.number().int().positive().optional(),
+    }),
+    chunking: z.object({
+      strategy: z.enum(["fixed", "sentence", "paragraph", "hierarchical", "semantic"]),
+      maxChunkSize: z.number().int().min(1).max(10000),
+      overlap: z.number().int().min(0).optional(),
+      minChunkSize: z.number().int().min(0).optional(),
+      breakpointPercentile: z.number().min(0).max(100).optional(),
+      maxHeadingDepth: z.number().int().min(1).max(6).optional(),
+    }),
+  },
+  async (input) => asTextResult(await call("/api/v1/export/kb", { method: "POST", body: input })),
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
