@@ -218,7 +218,13 @@ cmd_api_key() {
   local sub="${1:-}"
   [ -n "$sub" ] || die "usage: extracto api-key <create|list|revoke> [args...]"
   shift
-  compose exec -T app bun run scripts/api-key-cli.ts "$sub" "$@"
+  compose exec -T app sh -c '
+    if [ -z "${AUTH_SECRET:-}" ] && [ -f /app/data/.auth_secret ]; then
+      AUTH_SECRET="$(tr -d "\r\n" < /app/data/.auth_secret)"
+      export AUTH_SECRET
+    fi
+    exec bun run scripts/api-key-cli.ts "$@"
+  ' -- "$sub" "$@"
 }
 
 # ----------------------------------------------------------------------

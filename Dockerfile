@@ -31,6 +31,8 @@ COPY --from=builder /app/db ./db
 
 COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
 COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
+COPY --from=builder /app/src/lib ./src/lib
 RUN chmod +x ./docker-entrypoint.sh
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=10 \
