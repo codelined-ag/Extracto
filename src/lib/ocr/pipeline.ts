@@ -169,7 +169,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
     state.progressEvents,
     "analyzing",
     input.resumed
-      ? `Resuming from page ${startIndex + 1}/${input.inputPreviews.length}`
+      ? `Resuming from page ${input.pageNumbers?.[startIndex] ?? startIndex + 1}/${input.inputPreviews.length}`
       : `Document analyzed: ${input.inputPreviews.length} page(s) ready`,
   );
   if (input.provider === "mistral" && input.ocrModel !== input.model) {

@@ -156,6 +156,7 @@ export async function submitOcrJob(
     startedAt: startedAtIso,
     events: buildQueuedEvents(startedAtIso, "Job created", input.provider, input.ocrModel, input.model),
     checkpoints: [],
+    pageNumbers: input.pageNumbers,
     postProcessing: seedPostProcessingMeta(
       input.postProcessingPayload,
       input.postProcessingPayload.model || input.model,
@@ -217,6 +218,35 @@ export async function resumeOcrJob(input: ResumeOcrJobInput): Promise<ResumeOcrJ
     throw new ApiRouteError("All pages were already checkpointed for this job", 400);
   }
 
+  const persistedPageNumbers = (() => {
+    if (!existingJob.metadata || typeof existingJob.metadata !== "object" || Array.isArray(existingJob.metadata)) {
+      return undefined;
+    }
+    const raw = (existingJob.metadata as { pageNumbers?: unknown }).pageNumbers;
+    if (!Array.isArray(raw)) return undefined;
+    const cleaned = raw.filter(
+      (n): n is number => typeof n === "number" && Number.isInteger(n) && n >= 1,
+    );
+    return cleaned.length === raw.length ? cleaned : undefined;
+  })();
+
+  const effectivePageNumbers =
+    persistedPageNumbers && persistedPageNumbers.length === input.inputPreviews.length
+      ? persistedPageNumbers
+      : input.pageNumbers;
+
+  if (
+    persistedPageNumbers &&
+    input.pageNumbers &&
+    (input.pageNumbers.length !== persistedPageNumbers.length ||
+      input.pageNumbers.some((n, i) => n !== persistedPageNumbers[i]))
+  ) {
+    throw new ApiRouteError(
+      "Resume pageNumbers does not match the original sparse selection persisted on the job",
+      400,
+    );
+  }
+
   const resumeMetadata = buildProgressMetadata({
     stage: "queued",
     message: `Resume requested from page ${startIndex + 1}/${input.inputPreviews.length}`,
@@ -228,6 +258,7 @@ export async function resumeOcrJob(input: ResumeOcrJobInput): Promise<ResumeOcrJ
     startedAt: startedAtIso,
     events: buildQueuedEvents(startedAtIso, "Resume requested", input.provider, input.ocrModel, input.model),
     checkpoints: initialPageOutputs.map(toPageCheckpoint),
+    pageNumbers: effectivePageNumbers,
     postProcessing: seedPostProcessingMeta(
       input.postProcessingPayload,
       input.postProcessingPayload.model || input.model,
@@ -252,11 +283,17 @@ export async function resumeOcrJob(input: ResumeOcrJobInput): Promise<ResumeOcrJ
   });
 
   const priority = existingJob.priority ?? input.priority ?? 0;
-  kickoffProcessing(existingJob.id, priority, input, startedAtMs, {
-    initialPageOutputs,
-    startIndex,
-    resumed: true,
-  });
+  kickoffProcessing(
+    existingJob.id,
+    priority,
+    { ...input, pageNumbers: effectivePageNumbers },
+    startedAtMs,
+    {
+      initialPageOutputs,
+      startIndex,
+      resumed: true,
+    },
+  );
 
   return { jobId: existingJob.id, pageCount: input.inputPreviews.length, pageRecords: startIndex };
 }

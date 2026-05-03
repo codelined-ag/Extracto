@@ -59,6 +59,14 @@ function parseBatchBody(raw: unknown): BatchFile[] | { error: string } {
       if (cleaned.length !== targetLength) {
         return { error: `pageNumbers length (${cleaned.length}) must equal pages length (${targetLength})` };
       }
+      if (new Set(cleaned).size !== cleaned.length) {
+        return { error: "pageNumbers must not contain duplicates" };
+      }
+      for (let i = 1; i < cleaned.length; i++) {
+        if (cleaned[i] <= cleaned[i - 1]) {
+          return { error: "pageNumbers must be strictly ascending" };
+        }
+      }
       pageNumbers = cleaned;
     }
     const priority =

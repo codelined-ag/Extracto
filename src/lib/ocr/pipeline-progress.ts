@@ -38,6 +38,7 @@ export interface OcrProgressMetadata {
   updatedAt: string;
   events: OcrProgressEvent[];
   checkpoints: OcrPageCheckpoint[];
+  pageNumbers?: number[];
   postProcessing: {
     enabled: boolean;
     applied?: boolean;
@@ -73,6 +74,7 @@ export function buildProgressMetadata(input: {
   startedAt: string;
   events: OcrProgressEvent[];
   checkpoints: OcrPageCheckpoint[];
+  pageNumbers?: number[];
   postProcessing: OcrProgressMetadata["postProcessing"];
 }): OcrProgressMetadata {
   return {
@@ -87,6 +89,7 @@ export function buildProgressMetadata(input: {
     updatedAt: new Date().toISOString(),
     events: input.events,
     checkpoints: input.checkpoints,
+    ...(input.pageNumbers ? { pageNumbers: input.pageNumbers } : {}),
     postProcessing: input.postProcessing,
   };
 }

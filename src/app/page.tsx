@@ -1518,7 +1518,7 @@ export default function ExtractoPage() {
  setAllPagePreviewsForFileId(selectedFile.id);
  if (pages.length > 1) {
  updateFileById(selectedFile.id, (entry) =>
- entry.selectedPages && entry.selectedPages.length > 0
+ Array.isArray(entry.selectedPages)
  ? entry
  : { ...entry, selectedPages: Array.from({ length: pages.length }, (_, i) => i + 1) },
  );
@@ -1759,9 +1759,15 @@ export default function ExtractoPage() {
  let pagePreviews = allPreviews;
  let pageNumbers: number[] | undefined;
  const selection = file.selectedPages;
+ if (Array.isArray(selection) && selection.length === 0 && allPreviews.length > 1) {
+ throw new Error(
+ t("Seleziona almeno una pagina prima di avviare l'OCR.","Select at least one page before running OCR.","Sélectionnez au moins une page avant de lancer l'OCR.","Selecciona al menos una página antes de iniciar OCR.","Wähle mindestens eine Seite, bevor du OCR startest."),
+ );
+ }
  if (selection && selection.length > 0 && selection.length < allPreviews.length) {
  const sorted = [...selection].sort((a, b) => a - b);
- const valid = sorted.filter((n) => n >= 1 && n <= allPreviews.length);
+ const deduped = Array.from(new Set(sorted));
+ const valid = deduped.filter((n) => n >= 1 && n <= allPreviews.length);
  if (valid.length > 0) {
  pagePreviews = valid.map((n) => allPreviews[n - 1]);
  pageNumbers = valid;

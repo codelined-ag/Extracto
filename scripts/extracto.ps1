@@ -243,17 +243,17 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$scriptPath" %*
     }
 
     try {
-        $verify = & $UserBinFile help 2>&1 | Select-Object -First 1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Ok "Verified: '$UserBinFile help' returned: $verify"
+        $verify = & cmd /c "where extracto" 2>&1
+        if ($LASTEXITCODE -eq 0 -and $verify -match [regex]::Escape($UserBinFile)) {
+            Write-Ok "Resolved on PATH: $verify"
         } else {
-            Write-Warn "Launcher verification returned exit $LASTEXITCODE: $verify"
+            Write-Warn "Launcher not yet on PATH for child cmd processes (this is expected; restart your terminal)."
         }
     } catch {
-        Write-Warn "Could not verify launcher: $($_.Exception.Message)"
+        Write-Warn "Could not verify launcher resolution: $($_.Exception.Message)"
     }
 
-    Write-Info "Open a NEW terminal, then run: extracto on"
+    Write-Info "Open a NEW terminal WINDOW (not just a new tab in an existing session: tabs inherit the parent env). Then run: extracto on"
 }
 
 function Cmd-Uninstall {
@@ -317,9 +317,42 @@ function Get-FileMimeType ($Path) {
     return $null
 }
 
+function Resolve-PageSpec {
+    param([string]$Spec)
+    $out = New-Object System.Collections.Generic.List[int]
+    $seen = @{}
+    foreach ($raw in $Spec.Split(",")) {
+        $part = $raw.Trim()
+        if (-not $part) { continue }
+        if ($part.Contains("-")) {
+            $sides = $part.Split("-")
+            if ($sides.Count -ne 2) { Fail "malformed range: '$raw'" }
+            $aStr = $sides[0].Trim(); $bStr = $sides[1].Trim()
+            if (-not $aStr -or -not $bStr) { Fail "malformed range: '$raw' (missing endpoint)" }
+            $a = 0; $b = 0
+            if (-not [int]::TryParse($aStr, [ref]$a) -or -not [int]::TryParse($bStr, [ref]$b)) {
+                Fail "malformed range: '$raw' (non-integer endpoint)"
+            }
+            if ($a -lt 1 -or $b -lt 1) { Fail "page numbers must be >= 1 ('$raw')" }
+            $lo = [Math]::Min($a, $b); $hi = [Math]::Max($a, $b)
+            if ($hi - $lo -gt 9999) { Fail "range too wide: '$raw'" }
+            for ($n = $lo; $n -le $hi; $n++) {
+                if (-not $seen.ContainsKey($n)) { $seen[$n] = $true; $out.Add($n) | Out-Null }
+            }
+        } else {
+            $n = 0
+            if (-not [int]::TryParse($part, [ref]$n)) { Fail "not an integer: '$raw'" }
+            if ($n -lt 1) { Fail "page numbers must be >= 1 ('$raw')" }
+            if (-not $seen.ContainsKey($n)) { $seen[$n] = $true; $out.Add($n) | Out-Null }
+        }
+    }
+    if ($out.Count -eq 0) { Fail "no valid page numbers" }
+    return ($out | Sort-Object)
+}
+
 function Cmd-Ocr {
     if ($RemainingArguments.Count -lt 1) {
-        Fail "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait]"
+        Fail "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7]"
     }
     $file = $RemainingArguments[0]
     if (-not (Test-Path -LiteralPath $file)) { Fail "file not found: $file" }
@@ -327,6 +360,7 @@ function Cmd-Ocr {
     $model = ""
     $outPath = ""
     $waitFlag = $true
+    $pagesSpec = ""
     $i = 1
     while ($i -lt $RemainingArguments.Count) {
         $arg = $RemainingArguments[$i]
@@ -334,6 +368,7 @@ function Cmd-Ocr {
             "--model"   { $model = $RemainingArguments[$i + 1]; $i += 2 }
             "--out"     { $outPath = $RemainingArguments[$i + 1]; $i += 2 }
             "--no-wait" { $waitFlag = $false; $i += 1 }
+            "--pages"   { $pagesSpec = $RemainingArguments[$i + 1]; $i += 2 }
             default     { Fail "unknown ocr flag: $arg" }
         }
     }
@@ -346,16 +381,52 @@ function Cmd-Ocr {
     }
 
     $mime = Get-FileMimeType $file
-    $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $file).Path)
-    $b64 = [Convert]::ToBase64String($bytes)
-    $dataUrl = "data:${mime};base64,${b64}"
     $fileBaseName = Split-Path -Leaf $file
+    $resolvedPath = (Resolve-Path -LiteralPath $file).Path
 
-    $body = @{
-        files = @(
-            @{ fileName = $fileBaseName; model = $model; preview = $dataUrl }
-        )
+    $bodyEntry = $null
+    if ($pagesSpec) {
+        if ($mime -ne "application/pdf") { Fail "--pages only applies to PDF input" }
+        if (-not (Get-Command pdftoppm -ErrorAction SilentlyContinue)) {
+            Fail "--pages requires 'pdftoppm' (poppler-utils). Install on Windows via: scoop install poppler  OR  choco install poppler"
+        }
+        $resolvedPages = Resolve-PageSpec -Spec $pagesSpec
+        $tmpdir = Join-Path $env:TEMP "extracto-pages-$([Guid]::NewGuid().ToString('N'))"
+        New-Item -ItemType Directory -Path $tmpdir -Force | Out-Null
+        try {
+            $pageEntries = New-Object System.Collections.Generic.List[object]
+            $pageNumberArr = New-Object System.Collections.Generic.List[int]
+            foreach ($pageNum in $resolvedPages) {
+                $stem = Join-Path $tmpdir "page-$pageNum"
+                & pdftoppm -singlefile -f $pageNum -l $pageNum -jpeg -r 150 $resolvedPath $stem 2>$null
+                if ($LASTEXITCODE -ne 0) { Fail "pdftoppm failed on page $pageNum" }
+                $rendered = "$stem.jpg"
+                if (-not (Test-Path -LiteralPath $rendered)) { Fail "no rendered output for page $pageNum" }
+                $renderedBytes = [System.IO.File]::ReadAllBytes($rendered)
+                $renderedB64 = [Convert]::ToBase64String($renderedBytes)
+                $pageEntries.Add("data:image/jpeg;base64,$renderedB64") | Out-Null
+                $pageNumberArr.Add([int]$pageNum) | Out-Null
+                Remove-Item -LiteralPath $rendered -Force
+            }
+            Write-Info "extracted $($pageNumberArr.Count) page(s) via pdftoppm: pages=$($pageNumberArr -join ',')"
+            $bodyEntry = [ordered]@{
+                fileName = $fileBaseName
+                model = $model
+                preview = $pageEntries[0]
+                pages = $pageEntries.ToArray()
+                pageNumbers = $pageNumberArr.ToArray()
+            }
+        } finally {
+            Remove-Item -LiteralPath $tmpdir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    } else {
+        $bytes = [System.IO.File]::ReadAllBytes($resolvedPath)
+        $b64 = [Convert]::ToBase64String($bytes)
+        $dataUrl = "data:${mime};base64,${b64}"
+        $bodyEntry = [ordered]@{ fileName = $fileBaseName; model = $model; preview = $dataUrl }
     }
+
+    $body = @{ files = @($bodyEntry) }
 
     Write-Info "submitting OCR for $fileBaseName..."
     $response = Invoke-Api -Method POST -Path "/api/v1/ocr/batch" -Body $body
@@ -380,7 +451,7 @@ function Cmd-Ocr {
             Write-Info "waiting for job $jobId..."
             Invoke-JobWait -JobId $jobId
         } else {
-            Write-Warn "no jobId in response — the submission may have failed. Inspect the JSON above."
+            Write-Warn "no jobId in response: the submission may have failed. Inspect the JSON above."
         }
     }
 }
@@ -568,7 +639,7 @@ function Cmd-Help {
     Write-Host ""
     Write-Host "API:"
     Write-Host "  extracto api-key <create|list|revoke> [args...]"
-    Write-Host "  extracto ocr <file> --model NAME [--out PATH] [--no-wait]"
+    Write-Host "  extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7]"
     Write-Host "  extracto jobs <list|get|delete|cancel|wait> [args...]"
     Write-Host "  extracto presets <list|create|delete> [args...]"
     Write-Host "  extracto settings get"

@@ -133,6 +133,14 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
           400,
         );
       }
+      if (new Set(cleaned).size !== cleaned.length) {
+        throw new ApiRouteError("pageNumbers must not contain duplicates", 400);
+      }
+      for (let i = 1; i < cleaned.length; i++) {
+        if (cleaned[i] <= cleaned[i - 1]) {
+          throw new ApiRouteError("pageNumbers must be strictly ascending", 400);
+        }
+      }
       pageNumbers = cleaned;
     }
 

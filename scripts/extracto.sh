@@ -452,41 +452,64 @@ cmd_ocr() {
   if [ -n "$pages_spec" ]; then
     [ "$mime" = "application/pdf" ] || die "--pages only applies to PDF input"
     command -v pdftoppm >/dev/null 2>&1 || die "--pages requires 'pdftoppm' (poppler-utils). Install via your package manager (e.g. apt-get install poppler-utils, brew install poppler)."
-    local tmpdir
-    tmpdir="$(mktemp -d)"
-    trap 'rm -rf "$tmpdir"' RETURN
+    local extracto_tmpdir
+    extracto_tmpdir="$(mktemp -d)"
+    trap 'rm -rf "$extracto_tmpdir"' EXIT INT TERM
     local resolved_pages
-    resolved_pages="$(python3 -c '
+    resolved_pages="$(python3 - "$pages_spec" <<'PY'
 import sys
 spec = sys.argv[1]
-out = []
-seen = set()
-for part in spec.split(","):
-    part = part.strip()
+out, seen = [], set()
+def fail(msg):
+    sys.stderr.write(msg + "\n")
+    sys.exit(2)
+for raw in spec.split(","):
+    part = raw.strip()
     if not part:
         continue
     if "-" in part:
-        a, b = part.split("-", 1)
-        a = int(a); b = int(b)
+        sides = part.split("-")
+        if len(sides) != 2:
+            fail(f"malformed range: '{raw}'")
+        a, b = sides[0].strip(), sides[1].strip()
+        if not a or not b:
+            fail(f"malformed range: '{raw}' (missing endpoint)")
+        try:
+            a = int(a); b = int(b)
+        except ValueError:
+            fail(f"malformed range: '{raw}' (non-integer endpoint)")
+        if a < 1 or b < 1:
+            fail(f"page numbers must be >= 1 ('{raw}')")
         lo, hi = (a, b) if a <= b else (b, a)
+        if hi - lo > 9999:
+            fail(f"range too wide: '{raw}'")
         for n in range(lo, hi + 1):
-            if n >= 1 and n not in seen:
+            if n not in seen:
                 seen.add(n); out.append(n)
     else:
-        n = int(part)
-        if n >= 1 and n not in seen:
+        try:
+            n = int(part)
+        except ValueError:
+            fail(f"not an integer: '{raw}'")
+        if n < 1:
+            fail(f"page numbers must be >= 1 ('{raw}')")
+        if n not in seen:
             seen.add(n); out.append(n)
+if not out:
+    fail("no valid page numbers")
+out.sort()
 print(",".join(str(n) for n in out))
-' "$pages_spec")"
-    [ -n "$resolved_pages" ] || die "--pages produced no valid page numbers"
-    local pages_b64_list="" page_numbers_list=""
+PY
+)" || die "--pages parse error (see above)"
+    local pages_b64_list="" page_numbers_list="" page_count=0
     local IFS_BAK="$IFS"
     IFS=','
     for page_num in $resolved_pages; do
-      pdftoppm -f "$page_num" -l "$page_num" -jpeg -r 150 "$file" "$tmpdir/page" >/dev/null 2>&1 || die "pdftoppm failed on page $page_num"
-      local rendered
-      rendered="$(ls "$tmpdir"/page-*.jpg 2>/dev/null | head -1)"
-      [ -n "$rendered" ] || die "no rendered output for page $page_num"
+      local stem="$extracto_tmpdir/page-$page_num"
+      pdftoppm -singlefile -f "$page_num" -l "$page_num" -jpeg -r 150 "$file" "$stem" >/dev/null 2>&1 \
+        || die "pdftoppm failed on page $page_num"
+      local rendered="${stem}.jpg"
+      [ -f "$rendered" ] || die "no rendered output for page $page_num at $rendered"
       local pb64
       if base64 --help 2>&1 | grep -q -- "-w"; then
         pb64="$(base64 -w 0 < "$rendered")"
@@ -502,11 +525,12 @@ print(",".join(str(n) for n in out))
         pages_b64_list="${pages_b64_list}"$'\x1e'"$page_durl"
         page_numbers_list="${page_numbers_list},${page_num}"
       fi
+      page_count=$((page_count + 1))
     done
     IFS="$IFS_BAK"
     pages_payload="$pages_b64_list"
     preview_payload="${pages_b64_list%%$'\x1e'*}"
-    info "extracted ${#page_numbers_list} page(s) via pdftoppm: pages=${page_numbers_list}"
+    info "extracted ${page_count} page(s) via pdftoppm: pages=${page_numbers_list}"
   else
     local b64
     if base64 --help 2>&1 | grep -q -- "-w"; then
@@ -708,7 +732,7 @@ API keys (require running container):
   api-key revoke <key-id>       Revoke an API key by id
 
 Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
-  ocr <file> [--model N] [--out P] [--no-wait]
+  ocr <file> --model N [--out P] [--no-wait] [--pages 1-5,7]
                                 Submit a file for OCR (pdf/png/jpg/webp)
   jobs list [limit]             List recent OCR jobs (default 20)
   jobs get <id>                 Show one job
