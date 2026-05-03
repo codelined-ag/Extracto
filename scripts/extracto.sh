@@ -565,8 +565,31 @@ print(json.dumps(payload, separators=(",", ":")))
       info "exporting job ${job_id} to ${store_kind}://${store_url}/${collection}..."
       api_post_json "/api/v1/export/kb" "$body"
       ;;
+    test-connection)
+      local store_kind="chroma" store_url="" store_key=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --store)     store_kind="${2:-}"; shift 2 ;;
+          --store-url) store_url="${2:-}"; shift 2 ;;
+          --store-key) store_key="${2:-}"; shift 2 ;;
+          *) die "unknown kb test-connection flag: $1" ;;
+        esac
+      done
+      [ -n "$store_url" ] || die "usage: extracto kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]"
+      local tc_body
+      tc_body="$(python3 -c '
+import json, sys
+kind, base_url, api_key = sys.stdin.read().split("\x1f")
+payload = {"kind": kind, "baseUrl": base_url}
+if api_key:
+    payload["apiKey"] = api_key
+print(json.dumps(payload, separators=(",", ":")))
+' <<<"${store_kind}"$'\x1f'"${store_url}"$'\x1f'"${store_key}")"
+      info "testing ${store_kind} at ${store_url}..."
+      api_post_json "/api/v1/kb/test-connection" "$tc_body"
+      ;;
     *)
-      die "usage: extracto kb export <job-id> [flags]"
+      die "usage: extracto kb {export|test-connection} [flags]"
       ;;
   esac
 }
@@ -620,6 +643,7 @@ Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
   presets delete <id>
   settings get                  Show current API provider settings
   kb export <job-id> --collection N --store-url URL --embed-model M
+  kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]
                                 Export an OCR job's text to a vector store
                                 (requires KB_EXPORT_ENABLED=1 on the server)
 

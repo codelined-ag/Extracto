@@ -526,6 +526,8 @@ export default function ExtractoPage() {
  const [kbEmbeddingKeyDirty, setKbEmbeddingKeyDirty] = React.useState(false);
  const [kbStoreKeyDirty, setKbStoreKeyDirty] = React.useState(false);
  const [isSavingKbDefaults, setIsSavingKbDefaults] = React.useState(false);
+ const [isTestingStore, setIsTestingStore] = React.useState(false);
+ const [storeTestResult, setStoreTestResult] = React.useState<{ ok: boolean; latencyMs: number; version?: string; endpoint?: string; error?: string } | null>(null);
  const kbDefaultsLoadedRef = React.useRef(false);
  const [embeddingModelOptions, setEmbeddingModelOptions] = React.useState<{ value: string; label: string; hint?: string }[]>([]);
  const [embeddingModelsLoading, setEmbeddingModelsLoading] = React.useState(false);
@@ -1105,6 +1107,67 @@ export default function ExtractoPage() {
  });
  } finally {
  setIsSavingKbDefaults(false);
+ }
+ };
+
+ const testStoreConnection = async () => {
+ setIsTestingStore(true);
+ setStoreTestResult(null);
+ try {
+ const baseUrl = kbDefaultsDraft.storeBaseUrl.trim() || STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind];
+ const apiKey = kbStoreKeyDirty && kbDefaultsDraft.storeApiKey
+ ? kbDefaultsDraft.storeApiKey
+ : (kbDefaults.storeApiKey || undefined);
+ const resp = await fetch("/api/kb/test-connection", {
+ method: "POST",
+ headers: { "Content-Type": "application/json" },
+ body: JSON.stringify({
+ kind: kbDefaultsDraft.storeKind,
+ baseUrl,
+ ...(apiKey ? { apiKey } : {}),
+ }),
+ });
+ const payload = await resp.json().catch(() => ({})) as { ok?: boolean; latencyMs?: number; version?: string; endpoint?: string; error?: string };
+ if (!resp.ok && !payload?.ok) {
+ setStoreTestResult({ ok: false, latencyMs: payload.latencyMs ?? 0, error: payload.error || `HTTP ${resp.status}` });
+ toast({
+ title: t("Connessione fallita","Connection failed","Échec de la connexion","Conexión fallida","Verbindung fehlgeschlagen"),
+ description: payload.error || `HTTP ${resp.status}`,
+ variant: "destructive",
+ });
+ return;
+ }
+ setStoreTestResult({
+ ok: payload.ok === true,
+ latencyMs: payload.latencyMs ?? 0,
+ version: payload.version,
+ endpoint: payload.endpoint,
+ error: payload.error,
+ });
+ if (payload.ok) {
+ toast({
+ title: t("Connessione riuscita","Connection ok","Connexion ok","Conexión ok","Verbindung ok"),
+ description: payload.version
+ ? t(`v${payload.version} (${payload.latencyMs}ms)`, `v${payload.version} (${payload.latencyMs}ms)`)
+ : t(`${payload.latencyMs}ms`, `${payload.latencyMs}ms`),
+ });
+ } else {
+ toast({
+ title: t("Connessione fallita","Connection failed","Échec de la connexion","Conexión fallida","Verbindung fehlgeschlagen"),
+ description: payload.error || "",
+ variant: "destructive",
+ });
+ }
+ } catch (error) {
+ const msg = error instanceof Error ? error.message : String(error);
+ setStoreTestResult({ ok: false, latencyMs: 0, error: msg });
+ toast({
+ title: t("Connessione fallita","Connection failed","Échec de la connexion","Conexión fallida","Verbindung fehlgeschlagen"),
+ description: msg,
+ variant: "destructive",
+ });
+ } finally {
+ setIsTestingStore(false);
  }
  };
 
@@ -2127,6 +2190,7 @@ export default function ExtractoPage() {
  value={kbDefaultsDraft.storeKind}
  onValueChange={(value) => {
  const nextKind = value as KbStoreKind;
+ setStoreTestResult(null);
  setKbDefaultsDraft((p) => ({
  ...p,
  storeKind: nextKind,
@@ -2151,7 +2215,7 @@ export default function ExtractoPage() {
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">Base URL</Label>
  <Input
  value={kbDefaultsDraft.storeBaseUrl}
- onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, storeBaseUrl: e.target.value }))}
+ onChange={(e) => { setStoreTestResult(null); setKbDefaultsDraft((p) => ({ ...p, storeBaseUrl: e.target.value })); }}
  placeholder={STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind]}
  />
  <p className="text-[11px] text-muted-foreground/70">
@@ -2164,9 +2228,28 @@ export default function ExtractoPage() {
  <Input
  type="password"
  value={kbDefaultsDraft.storeApiKey}
- onChange={(e) => { setKbStoreKeyDirty(true); setKbDefaultsDraft((p) => ({ ...p, storeApiKey: e.target.value })); }}
+ onChange={(e) => { setKbStoreKeyDirty(true); setStoreTestResult(null); setKbDefaultsDraft((p) => ({ ...p, storeApiKey: e.target.value })); }}
  placeholder={!kbStoreKeyDirty && kbDefaultsDraft.storeHasApiKey ? t("Salvata (nascosta)","Saved (hidden)","Enregistrée (masquée)","Guardada (oculta)","Gespeichert (verborgen)") :""}
  />
+ </div>
+ <div className="flex items-center gap-3">
+ <Button
+ type="button"
+ variant="outline"
+ size="sm"
+ onClick={testStoreConnection}
+ disabled={isTestingStore || !kbDefaultsDraft.storeBaseUrl.trim()}
+ >
+ {isTestingStore ? <LoaderCircleIcon size={14} className="inline-flex items-center justify-center mr-1.5 animate-spin"/> : null}
+ {t("Prova connessione","Test connection","Tester la connexion","Probar conexión","Verbindung testen")}
+ </Button>
+ {storeTestResult && (
+ <span className={`text-[11px] ${storeTestResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+ {storeTestResult.ok
+ ? `✓ ${storeTestResult.version ? `v${storeTestResult.version} · ` : ""}${storeTestResult.latencyMs}ms`
+ : `✗ ${storeTestResult.error || "failed"}`}
+ </span>
+ )}
  </div>
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">

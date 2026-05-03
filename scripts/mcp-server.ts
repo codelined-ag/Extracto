@@ -192,5 +192,16 @@ server.tool(
   async (input) => asTextResult(await call("/api/v1/export/kb", { method: "POST", body: input })),
 );
 
+server.tool(
+  "kb_test_connection",
+  "Probe a vector store (Chroma/Qdrant/Weaviate) for reachability and auth before running a KB export. Returns latency, server version when available, and the probed endpoint path. Use this to surface connection errors fast instead of after embedding.",
+  {
+    kind: z.enum(["chroma", "qdrant", "weaviate"]),
+    baseUrl: z.string().url(),
+    apiKey: z.string().optional(),
+  },
+  async (input) => asTextResult(await call("/api/v1/kb/test-connection", { method: "POST", body: input })),
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
