@@ -48,7 +48,7 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "tailwind-merge": "^3.5.0",
-    "zod": "4.3.5"
+    "zod": "4.4.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
