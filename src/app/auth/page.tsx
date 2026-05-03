@@ -78,19 +78,21 @@ export default function AuthPage() {
   );
 
   React.useEffect(() => {
-    try {
-      const storedLanguage = window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
-      if (isUiLanguage(storedLanguage)) {
-        setUiLanguage(storedLanguage);
-        return;
+    queueMicrotask(() => {
+      try {
+        const storedLanguage = window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
+        if (isUiLanguage(storedLanguage)) {
+          setUiLanguage(storedLanguage);
+          return;
+        }
+        const browserLang = (navigator.language || "en").slice(0, 2).toLowerCase();
+        if (isUiLanguage(browserLang)) {
+          setUiLanguage(browserLang);
+        }
+      } catch {
+        // ignore storage errors
       }
-      const browserLang = (navigator.language || "en").slice(0, 2).toLowerCase();
-      if (isUiLanguage(browserLang)) {
-        setUiLanguage(browserLang);
-      }
-    } catch {
-      // ignore storage errors
-    }
+    });
   }, []);
 
   React.useEffect(() => {
