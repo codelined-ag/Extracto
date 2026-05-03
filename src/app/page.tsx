@@ -86,12 +86,11 @@ import { FileListCard } from "@/app/page-components/file-list-card";
 import { Footer } from "@/app/page-components/footer";
 import { HeaderBar } from "@/app/page-components/header-bar";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
+import { useHistory } from "@/app/page-components/use-history";
 import { PreviewHeader } from "@/app/page-components/preview-header";
 import { NoSelectionCard } from "@/app/page-components/no-selection-card";
 import { UploadArea } from "@/app/page-components/upload-area";
 import type {
-  HistoryJobDetail,
-  HistoryJobSummary,
   OcrPageCheckpointView,
   OcrProgressEventView,
   ProcessingFile,
@@ -496,12 +495,6 @@ export default function ExtractoPage() {
  const [isSigningOut, setIsSigningOut] = React.useState(false);
  const [modelError, setModelError] = React.useState("");
  const [historyOpen, setHistoryOpen] = React.useState(false);
- const [historyJobs, setHistoryJobs] = React.useState<HistoryJobSummary[]>([]);
- const [selectedHistoryId, setSelectedHistoryId] = React.useState<string | null>(null);
- const [selectedHistoryJob, setSelectedHistoryJob] = React.useState<HistoryJobDetail | null>(null);
- const [isLoadingHistory, setIsLoadingHistory] = React.useState(false);
- const [isLoadingHistoryDetail, setIsLoadingHistoryDetail] = React.useState(false);
- const [isDeletingHistory, setIsDeletingHistory] = React.useState(false);
 
  // Advanced settings state
  const ocrSettingsLoadedRef = React.useRef(false);
@@ -573,12 +566,6 @@ export default function ExtractoPage() {
  const selectedFileStructuredJson = selectedFile?.result
  ? getStructuredJsonPayload(selectedFile.result.json)
  : {};
- const selectedHistoryMarkdown = selectedHistoryJob
- ? getMarkdownFromJsonPayload(selectedHistoryJob.result, selectedHistoryJob.extractedText ||"")
- :"";
- const selectedHistoryStructuredJson = selectedHistoryJob
- ? getStructuredJsonPayload(selectedHistoryJob.result)
- : {};
  const completedCount = files.filter((f) => f.status ==="completed").length;
  const canExportZip = Boolean(completedCount > 0 || selectedFile?.status ==="completed");
  const errorCount = files.filter((f) => f.status ==="error").length;
@@ -609,6 +596,7 @@ export default function ExtractoPage() {
  },
  [uiLanguage]
  );
+ const history = useHistory(t);
  const openSettingsTab = React.useCallback(
  (tab: SettingsTab) => {
  setApiSettingsDraft(apiSettings);
@@ -859,115 +847,23 @@ export default function ExtractoPage() {
  }
  };
 
- const loadHistoryJobs = React.useCallback(async () => {
- setIsLoadingHistory(true);
- try {
- const response = await fetch("/api/jobs?limit=100", { cache:"no-store"});
- if (!response.ok) {
- const payload = (await response.json().catch(() => ({}))) as { error?: string };
- throw new Error(payload.error || `Failed to load history (${response.status})`);
- }
-
- const payload = (await response.json()) as { jobs?: HistoryJobSummary[] };
- const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
- setHistoryJobs(jobs);
- if (jobs.length > 0) {
- setSelectedHistoryId((current) => current && jobs.some((job) => job.id === current) ? current : jobs[0].id);
- } else {
- setSelectedHistoryId(null);
- setSelectedHistoryJob(null);
- }
- } catch (error) {
- toast({
- title: t("Caricamento cronologia non riuscito","History load failed","Échec du chargement de l'historique","Error al cargar historial","Verlauf laden fehlgeschlagen"),
- description: error instanceof Error ? error.message : t("Impossibile caricare la cronologia OCR","Unable to load OCR history","Impossible de charger l'historique OCR","No se pudo cargar el historial de OCR","OCR-Verlauf konnte nicht geladen werden"),
- variant:"destructive",
- });
- } finally {
- setIsLoadingHistory(false);
- }
- }, [toast]);
-
- const loadHistoryDetail = React.useCallback(async (jobId: string) => {
- setIsLoadingHistoryDetail(true);
- try {
- const response = await fetch(`/api/jobs/${jobId}`, { cache:"no-store"});
- if (!response.ok) {
- const payload = (await response.json().catch(() => ({}))) as { error?: string };
- throw new Error(payload.error || `Failed to load run (${response.status})`);
- }
- const payload = (await response.json()) as { job?: HistoryJobDetail };
- if (!payload.job) {
- throw new Error("Run not found");
- }
- setSelectedHistoryJob(payload.job);
- } catch (error) {
- setSelectedHistoryJob(null);
- toast({
- title: t("Caricamento esecuzione non riuscito","Run load failed","Échec du chargement de l'exécution","Error al cargar la ejecución","Lauf laden fehlgeschlagen"),
- description: error instanceof Error ? error.message : t("Impossibile caricare l'esecuzione OCR","Unable to load OCR run","Impossible de charger l'exécution OCR","No se pudo cargar la ejecución OCR","OCR-Lauf konnte nicht geladen werden"),
- variant:"destructive",
- });
- } finally {
- setIsLoadingHistoryDetail(false);
- }
- }, [toast]);
-
  const openHistoryModal = async () => {
  setHistoryOpen(true);
- await loadHistoryJobs();
- };
-
- const deleteHistoryJob = async () => {
- if (!selectedHistoryId) return;
- setIsDeletingHistory(true);
- try {
- const response = await fetch(`/api/jobs/${selectedHistoryId}`, { method:"DELETE"});
- if (!response.ok) {
- const payload = (await response.json().catch(() => ({}))) as { error?: string };
- throw new Error(payload.error || `Delete failed (${response.status})`);
- }
-
- setSelectedHistoryJob(null);
- await loadHistoryJobs();
-
- toast({
- title: t("Esecuzione eliminata","Run deleted","Exécution supprimée","Ejecución eliminada","Lauf gelöscht"),
- description: t("Esecuzione OCR rimossa dalla cronologia","Past OCR run removed from history","Exécution OCR retirée de l'historique","Ejecución de OCR eliminada del historial","OCR-Lauf aus Verlauf entfernt"),
- });
- } catch (error) {
- toast({
- title: t("Eliminazione non riuscita","Delete failed","Échec de la suppression","Error al eliminar","Löschen fehlgeschlagen"),
- description: error instanceof Error ? error.message : t("Impossibile eliminare l'esecuzione OCR","Unable to delete OCR run","Impossible de supprimer l'exécution OCR","No se pudo eliminar la ejecución OCR","OCR-Lauf konnte nicht gelöscht werden"),
- variant:"destructive",
- });
- } finally {
- setIsDeletingHistory(false);
- }
+ await history.loadJobs();
  };
 
  const downloadHistoryResult = (type:"md"|"json") => {
- if (!selectedHistoryJob) return;
- const fileStem = selectedHistoryJob.fileName.replace(/\.[^/.]+$/,"") ||"ocr-result";
-
- if (type ==="md") {
- const markdown = selectedHistoryMarkdown;
- const blob = new Blob([markdown], { type:"text/markdown"});
+ if (!history.selectedJob) return;
+ const fileStem = history.selectedJob.fileName.replace(/\.[^/.]+$/,"") ||"ocr-result";
+ const isMarkdown = type === "md";
+ const blobBody = isMarkdown
+ ? history.selectedMarkdown
+ : JSON.stringify(history.selectedStructuredJson, null, 2);
+ const blob = new Blob([blobBody], { type: isMarkdown ? "text/markdown" : "application/json" });
  const url = URL.createObjectURL(blob);
  const a = document.createElement("a");
  a.href = url;
- a.download = `${fileStem}.md`;
- a.click();
- URL.revokeObjectURL(url);
- return;
- }
-
- const jsonValue = selectedHistoryStructuredJson;
- const blob = new Blob([JSON.stringify(jsonValue, null, 2)], { type:"application/json"});
- const url = URL.createObjectURL(blob);
- const a = document.createElement("a");
- a.href = url;
- a.download = `${fileStem}.json`;
+ a.download = `${fileStem}.${type}`;
  a.click();
  URL.revokeObjectURL(url);
  };
@@ -1068,17 +964,13 @@ export default function ExtractoPage() {
  }, [apiSettings.provider, models, persistProviderSelection, postProcessing.model]);
 
  React.useEffect(() => {
- if (!historyOpen) {
+ if (!historyOpen) return;
+ if (!history.selectedId) {
+ history.resetSelection();
  return;
  }
-
- if (!selectedHistoryId) {
- setSelectedHistoryJob(null);
- return;
- }
-
- void loadHistoryDetail(selectedHistoryId);
- }, [historyOpen, selectedHistoryId, loadHistoryDetail]);
+ void history.loadDetail(history.selectedId);
+ }, [historyOpen, history]);
 
  React.useEffect(() => {
  if (!ocrSettingsLoadedRef.current) return;
@@ -2339,22 +2231,19 @@ export default function ExtractoPage() {
         open={historyOpen}
         onOpenChange={(open) => {
           setHistoryOpen(open);
-          if (!open) {
-            setSelectedHistoryId(null);
-            setSelectedHistoryJob(null);
-          }
+          if (!open) history.resetSelection();
         }}
         t={t}
-        jobs={historyJobs}
-        isLoadingJobs={isLoadingHistory}
-        selectedJobId={selectedHistoryId}
-        onSelectJobId={setSelectedHistoryId}
-        selectedJobDetail={selectedHistoryJob}
-        isLoadingDetail={isLoadingHistoryDetail}
-        selectedMarkdown={selectedHistoryMarkdown}
-        selectedStructuredJson={selectedHistoryStructuredJson}
-        isDeleting={isDeletingHistory}
-        onDelete={deleteHistoryJob}
+        jobs={history.jobs}
+        isLoadingJobs={history.isLoadingJobs}
+        selectedJobId={history.selectedId}
+        onSelectJobId={history.setSelectedId}
+        selectedJobDetail={history.selectedJob}
+        isLoadingDetail={history.isLoadingDetail}
+        selectedMarkdown={history.selectedMarkdown}
+        selectedStructuredJson={history.selectedStructuredJson}
+        isDeleting={history.isDeleting}
+        onDelete={history.deleteSelected}
         onDownload={downloadHistoryResult}
       />
 
