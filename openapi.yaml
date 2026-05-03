@@ -476,6 +476,8 @@ paths:
                         properties: { plaintext: { type: string } }
                   warning: { type: string }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "403":
+          description: Bearer-token requests rejected by design (use a session)
         "409":
           description: Per-user key cap reached
 
@@ -710,7 +712,7 @@ paths:
                   jobId: { type: string }
                   collectionName: { type: string }
                   chunkCount: { type: integer }
-                  embeddingDimensions: { type: integer }
+                  embeddingDimensions: { type: integer, nullable: true }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "503":

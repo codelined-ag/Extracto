@@ -12,11 +12,10 @@
 //
 // Returns: { jobId, collectionName, chunkCount, embeddingDimensions }
 //
-// Auth: bearer token with `ocr:read` scope (the source text comes from the
-// caller's own OcrJob; we don't grant access to anyone else's data). The
-// dispatch deliberately does NOT have a `kb:write` scope yet — the feature
-// is opt-in via env (KB_EXPORT_ENABLED) so we don't add a scope to the
-// public surface until the operator confirms they want this turned on.
+// Auth: bearer token with `kb:write` scope. The action is a write to an
+// external vector store (egress with user-supplied URL + key), so it lives
+// behind a write scope distinct from the OCR-read surface. The feature is
+// also gated by KB_EXPORT_ENABLED at the env level so operators opt in.
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -61,7 +60,7 @@ interface KbExportRequest extends Record<string, unknown> {
   chunking?: unknown;
 }
 
-export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { auth }) => {
+export const POST = withMutationAuth("kb:write", async (request: NextRequest, { auth }) => {
   if (!isKbExportEnabled()) {
     throw new ApiRouteError(
       "KB export is disabled. Set KB_EXPORT_ENABLED=1 in your env to enable it.",
