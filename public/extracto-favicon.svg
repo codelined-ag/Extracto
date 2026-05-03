@@ -6,9 +6,5 @@
     </linearGradient>
   </defs>
   <rect width="64" height="64" rx="14" fill="url(#bgf)" />
-  <rect x="14" y="12" width="36" height="40" rx="4" fill="#fdf3e8" />
-  <rect x="20" y="21" width="24" height="3" rx="1.5" fill="#3a2418" />
-  <rect x="20" y="28" width="20" height="3" rx="1.5" fill="#5a3a26" opacity="0.85" />
-  <rect x="20" y="35" width="16" height="3" rx="1.5" fill="#7d5740" opacity="0.65" />
-  <circle cx="47" cy="49" r="5" fill="#c75a23" />
+  <text x="32" y="47" font-family="Fraunces, 'Times New Roman', ui-serif, Georgia, serif" font-style="italic" font-weight="700" font-size="46" fill="#fdf3e8" text-anchor="middle" letter-spacing="-2">E.</text>
 </svg>
