@@ -18,6 +18,7 @@ import {
   toPageCheckpoint,
   type ProcessedPageOutput,
 } from "@/lib/ocr/pipeline-result-builder";
+import { assessTextLayerQuality } from "@/lib/ocr/pdf-anchoring";
 import type { AdvancedSettings, PostProcessingSettings } from "@/lib/ocr/settings";
 
 export interface SubmitOcrJobInput {
@@ -159,7 +160,12 @@ export async function submitOcrJob(
     events: buildQueuedEvents(startedAtIso, "Job created", input.provider, input.ocrModel, input.model),
     checkpoints: [],
     pageNumbers: input.pageNumbers,
-    pageAnchors: input.pageAnchors,
+    pageAnchorDigest: input.pageAnchors?.map((p) => ({
+      pageNumber: p.pageNumber,
+      blockCount: p.blocks.length,
+      characterCount: p.characterCount,
+      isHighConfidence: assessTextLayerQuality(p).isHighConfidence,
+    })),
     postProcessing: seedPostProcessingMeta(
       input.postProcessingPayload,
       input.postProcessingPayload.model || input.model,
@@ -233,23 +239,24 @@ export async function resumeOcrJob(input: ResumeOcrJobInput): Promise<ResumeOcrJ
     return cleaned.length === raw.length ? cleaned : undefined;
   })();
 
-  const persistedPageAnchors = (() => {
-    if (!existingJob.metadata || typeof existingJob.metadata !== "object" || Array.isArray(existingJob.metadata)) {
-      return undefined;
-    }
-    const raw = (existingJob.metadata as { pageAnchors?: unknown }).pageAnchors;
-    if (!Array.isArray(raw)) return undefined;
-    return raw as import("@/lib/ocr/pdf-anchoring").AnchorPage[];
-  })();
-
   const effectivePageNumbers =
     persistedPageNumbers && persistedPageNumbers.length === input.inputPreviews.length
       ? persistedPageNumbers
       : input.pageNumbers;
-  const effectivePageAnchors =
-    persistedPageAnchors && persistedPageAnchors.length === input.inputPreviews.length
-      ? persistedPageAnchors
-      : input.pageAnchors;
+  if (
+    persistedPageNumbers &&
+    persistedPageNumbers.length !== input.inputPreviews.length
+  ) {
+    console.warn(
+      `Resume job ${input.jobId}: persisted pageNumbers length (${persistedPageNumbers.length}) does not match resumed inputPreviews length (${input.inputPreviews.length}); falling back to client-supplied pageNumbers.`,
+    );
+  }
+  const effectivePageAnchors = input.pageAnchors;
+  if (input.pageAnchors && input.pageAnchors.length !== input.inputPreviews.length) {
+    console.warn(
+      `Resume job ${input.jobId}: client-supplied pageAnchors length (${input.pageAnchors.length}) does not match inputPreviews length (${input.inputPreviews.length}); anchors will not align.`,
+    );
+  }
 
   if (
     persistedPageNumbers &&
@@ -275,7 +282,12 @@ export async function resumeOcrJob(input: ResumeOcrJobInput): Promise<ResumeOcrJ
     events: buildQueuedEvents(startedAtIso, "Resume requested", input.provider, input.ocrModel, input.model),
     checkpoints: initialPageOutputs.map(toPageCheckpoint),
     pageNumbers: effectivePageNumbers,
-    pageAnchors: effectivePageAnchors,
+    pageAnchorDigest: effectivePageAnchors?.map((p) => ({
+      pageNumber: p.pageNumber,
+      blockCount: p.blocks.length,
+      characterCount: p.characterCount,
+      isHighConfidence: assessTextLayerQuality(p).isHighConfidence,
+    })),
     postProcessing: seedPostProcessingMeta(
       input.postProcessingPayload,
       input.postProcessingPayload.model || input.model,

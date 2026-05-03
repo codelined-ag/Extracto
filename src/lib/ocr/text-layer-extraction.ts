@@ -28,33 +28,39 @@ function detectColumns(blocks: AnchorTextBlock[], pageWidth: number): ColumnAssi
     }
   }
 
-  const significantGaps = gaps
+  const candidateGaps = gaps
     .sort((a, b) => b.size - a.size)
-    .slice(0, 2)
-    .filter((g) => g.size > pageWidth * 0.08)
-    .sort((a, b) => a.position - b.position);
+    .slice(0, 4)
+    .filter((g) => g.size > pageWidth * 0.08);
 
-  if (significantGaps.length === 0) {
+  const acceptedDividers = candidateGaps
+    .filter((g) => {
+      const straddlers = blocks.filter((b) => b.x < g.position && b.x + b.width > g.position);
+      return straddlers.length / blocks.length <= 0.2;
+    })
+    .sort((a, b) => a.position - b.position)
+    .map((g) => g.position);
+
+  if (acceptedDividers.length === 0) {
     return [{ columnIndex: 0, blocks: [...blocks], centerX: pageWidth / 2 }];
   }
 
-  const dividers = significantGaps.map((g) => g.position);
   const columns: ColumnAssignment[] = [];
-  for (let i = 0; i <= dividers.length; i++) {
+  for (let i = 0; i <= acceptedDividers.length; i++) {
     columns.push({ columnIndex: i, blocks: [], centerX: 0 });
   }
 
   for (const block of blocks) {
     const center = block.x + block.width / 2;
     let columnIndex = 0;
-    for (let i = 0; i < dividers.length; i++) {
-      if (center > dividers[i]) columnIndex = i + 1;
+    for (let i = 0; i < acceptedDividers.length; i++) {
+      if (center > acceptedDividers[i]) columnIndex = i + 1;
     }
     columns[columnIndex].blocks.push(block);
   }
 
   return columns
-    .filter((c) => c.blocks.length > 0)
+    .filter((c) => c.blocks.length / blocks.length >= 0.05)
     .map((c) => ({
       ...c,
       centerX:
@@ -64,17 +70,19 @@ function detectColumns(blocks: AnchorTextBlock[], pageWidth: number): ColumnAssi
     .map((c, i) => ({ ...c, columnIndex: i }));
 }
 
-function modeRounded(values: number[]): number {
-  if (values.length === 0) return 0;
+function modeRoundedWeighted(blocks: AnchorTextBlock[]): number {
+  if (blocks.length === 0) return 0;
   const counts = new Map<number, number>();
-  for (const v of values) {
-    const key = Math.round(v);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+  for (const b of blocks) {
+    const fs = b.fontSize ?? 0;
+    if (fs <= 0) continue;
+    const key = Math.round(fs);
+    counts.set(key, (counts.get(key) ?? 0) + b.text.length);
   }
   let best = 0;
   let bestCount = 0;
   for (const [k, c] of counts) {
-    if (c > bestCount) {
+    if (c > bestCount || (c === bestCount && (best === 0 || k < best))) {
       best = k;
       bestCount = c;
     }
@@ -82,14 +90,16 @@ function modeRounded(values: number[]): number {
   return best;
 }
 
+const HEADING_TEXT_MAX_LEN = 200;
+
 function detectHeadingLevels(blocks: AnchorTextBlock[]): number[] {
   const fontSizes = blocks.map((b) => b.fontSize ?? 0).filter((s) => s > 0);
   if (fontSizes.length < 3) return blocks.map(() => 0);
-  const baseSize = modeRounded(fontSizes) || 12;
+  const baseSize = modeRoundedWeighted(blocks) || 12;
   return blocks.map((b) => {
     const fs = b.fontSize ?? baseSize;
     const ratio = fs / baseSize;
-    const looksLikeHeading = b.text.length < 120 && b.text.length > 0;
+    const looksLikeHeading = b.text.length > 0 && b.text.length < HEADING_TEXT_MAX_LEN;
     if (!looksLikeHeading) return 0;
     if (ratio >= 1.6) return 1;
     if (ratio >= 1.35) return 2;

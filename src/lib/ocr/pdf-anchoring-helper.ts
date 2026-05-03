@@ -8,9 +8,10 @@ export async function extractAnchorsForPages(
   if (!sourcePdf) return undefined;
   const isPdfDataUrl = /^data:application\/(?:x-)?pdf/u.test(sourcePdf);
   if (!isPdfDataUrl) return undefined;
+  const requestedPages = pageNumbers && pageNumbers.length === expectedLength ? pageNumbers : undefined;
   let result;
   try {
-    result = await extractPdfAnchoring(sourcePdf);
+    result = await extractPdfAnchoring(sourcePdf, { pageNumbers: requestedPages });
   } catch (error) {
     console.warn(`extractPdfAnchoring failed: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;

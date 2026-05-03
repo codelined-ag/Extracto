@@ -56,7 +56,6 @@ interface PdfJsLib {
     useSystemFonts?: boolean;
     disableFontFace?: boolean;
     isEvalSupported?: boolean;
-    disableWorker?: boolean;
     verbosity?: number;
   }): {
     promise: Promise<PdfJsDocument>;
@@ -244,7 +243,14 @@ function blockText(blocks: AnchorTextBlock[]): string {
     .join("\n");
 }
 
-export async function extractPdfAnchoring(input: Uint8Array | string): Promise<PdfAnchoringResult | null> {
+export interface ExtractPdfAnchoringOptions {
+  pageNumbers?: number[];
+}
+
+export async function extractPdfAnchoring(
+  input: Uint8Array | string,
+  options: ExtractPdfAnchoringOptions = {},
+): Promise<PdfAnchoringResult | null> {
   let bytes: Uint8Array;
   if (typeof input === "string") {
     const parsed = parseDataUrl(input);
@@ -258,38 +264,60 @@ export async function extractPdfAnchoring(input: Uint8Array | string): Promise<P
   const header = new TextDecoder().decode(bytes.slice(0, 5));
   if (!header.startsWith("%PDF-")) return null;
 
-  const lib = await loadPdfJs();
-  const loading = lib.getDocument({
-    data: bytes,
-    useSystemFonts: false,
-    disableFontFace: true,
-    isEvalSupported: false,
-    disableWorker: true,
-    verbosity: 0,
-  });
-  const doc = await loading.promise;
+  let lib: PdfJsLib;
+  try {
+    lib = await loadPdfJs();
+  } catch (error) {
+    console.warn(`pdfjs load failed: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+
+  let doc: PdfJsDocument;
+  try {
+    const loading = lib.getDocument({
+      data: bytes,
+      useSystemFonts: false,
+      disableFontFace: true,
+      isEvalSupported: false,
+      verbosity: 0,
+    });
+    doc = await loading.promise;
+  } catch (error) {
+    console.warn(`pdfjs getDocument failed: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+
+  const pageCount = doc.numPages;
+  const requestedSet = options.pageNumbers && options.pageNumbers.length > 0
+    ? new Set(options.pageNumbers.filter((n) => Number.isInteger(n) && n >= 1 && n <= pageCount))
+    : null;
   const pages: AnchorPage[] = [];
   try {
-    for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
-      const page = await doc.getPage(pageNumber);
-      const viewport = page.getViewport({ scale: 1 });
-      const content = await page.getTextContent();
-      const spans = rawSpansFromTextContent(content, viewport.height);
-      const blocks = mergeSpansIntoBlocks(spans);
-      const rawText = blockText(blocks);
-      pages.push({
-        pageNumber,
-        pageWidth: viewport.width,
-        pageHeight: viewport.height,
-        blocks,
-        rawText,
-        characterCount: rawText.length,
-      });
+    for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
+      if (requestedSet && !requestedSet.has(pageNumber)) continue;
+      try {
+        const page = await doc.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 1 });
+        const content = await page.getTextContent();
+        const spans = rawSpansFromTextContent(content, viewport.height);
+        const blocks = mergeSpansIntoBlocks(spans);
+        const rawText = blockText(blocks);
+        pages.push({
+          pageNumber,
+          pageWidth: viewport.width,
+          pageHeight: viewport.height,
+          blocks,
+          rawText,
+          characterCount: rawText.length,
+        });
+      } catch (error) {
+        console.warn(`pdfjs page ${pageNumber} failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   } finally {
     await doc.destroy().catch(() => undefined);
   }
-  return { pageCount: doc.numPages, pages };
+  return { pageCount, pages };
 }
 
 export interface TextLayerQuality {
