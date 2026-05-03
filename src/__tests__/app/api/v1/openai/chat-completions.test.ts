@@ -14,16 +14,8 @@ vi.mock("@/lib/request-security", () => ({
   getClientIpAddress: vi.fn().mockReturnValue("127.0.0.1"),
 }));
 
-vi.mock("@/lib/db", () => ({
-  db: {
-    ocrJob: {
-      findUnique: vi.fn(),
-    },
-  },
-}));
-
-vi.mock("@/lib/ocr/result-store", () => ({
-  readResultText: vi.fn(),
+vi.mock("@/lib/ocr/job-wait", () => ({
+  waitForOcrJobCompletion: vi.fn(),
 }));
 
 vi.mock("@/lib/ocr/settings-store", () => ({
@@ -51,16 +43,14 @@ vi.mock("@/lib/ocr/providers/mistral", () => ({
 
 import { authenticateMutation, authHasScope } from "@/lib/auth/request";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
-import { db } from "@/lib/db";
-import { readResultText } from "@/lib/ocr/result-store";
+import { waitForOcrJobCompletion } from "@/lib/ocr/job-wait";
 import { submitOcrJob } from "@/lib/ocr/pipeline";
 import { POST } from "@/app/api/v1/openai/chat/completions/route";
 
 const mockedAuth = authenticateMutation as ReturnType<typeof vi.fn>;
 const mockedScope = authHasScope as ReturnType<typeof vi.fn>;
 const mockedRateLimit = enforceOcrSubmitRateLimit as ReturnType<typeof vi.fn>;
-const mockedFindUnique = db.ocrJob.findUnique as ReturnType<typeof vi.fn>;
-const mockedReadText = readResultText as ReturnType<typeof vi.fn>;
+const mockedWait = waitForOcrJobCompletion as ReturnType<typeof vi.fn>;
 const mockedSubmit = submitOcrJob as ReturnType<typeof vi.fn>;
 
 const fakeAuth = {
@@ -82,13 +72,10 @@ beforeEach(() => {
   mockedAuth.mockReset().mockResolvedValue({ ok: true, auth: fakeAuth });
   mockedScope.mockReset().mockReturnValue(true);
   mockedRateLimit.mockReset().mockReturnValue(null);
-  mockedFindUnique.mockReset();
-  mockedReadText.mockReset().mockResolvedValue(null);
+  mockedWait.mockReset();
   mockedSubmit.mockReset().mockResolvedValue({ jobId: "job-stub", pageCount: 1 });
-  vi.useFakeTimers({ shouldAdvanceTime: true });
 });
 afterEach(() => {
-  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -147,13 +134,7 @@ describe("POST /api/v1/openai/chat/completions", () => {
   });
 
   it("submits the job and returns an OpenAI-shaped chat completion when the job completes", async () => {
-    mockedFindUnique.mockResolvedValueOnce({
-      status: "COMPLETED",
-      extractedText: "extracted body",
-      extractedTextLocation: null,
-      errorMessage: null,
-    });
-    mockedReadText.mockResolvedValueOnce("extracted body");
+    mockedWait.mockResolvedValueOnce({ kind: "completed", text: "extracted body" });
 
     const res = await POST(
       makeRequest({
@@ -185,12 +166,7 @@ describe("POST /api/v1/openai/chat/completions", () => {
   });
 
   it("returns 502 when the job ends in FAILED status", async () => {
-    mockedFindUnique.mockResolvedValueOnce({
-      status: "FAILED",
-      extractedText: null,
-      extractedTextLocation: null,
-      errorMessage: "provider 500",
-    });
+    mockedWait.mockResolvedValueOnce({ kind: "failed", errorMessage: "provider 500" });
 
     const res = await POST(
       makeRequest({

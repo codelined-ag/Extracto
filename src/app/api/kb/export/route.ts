@@ -11,6 +11,7 @@ import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { runKbExport } from "@/lib/kb/export";
+import { isKbExportEnabled } from "@/lib/kb/feature-flag";
 import { ChromaAdapter } from "@/lib/kb/stores/chroma";
 import { QdrantAdapter } from "@/lib/kb/stores/qdrant";
 import { WeaviateAdapter } from "@/lib/kb/stores/weaviate";
@@ -28,10 +29,6 @@ function buildVectorStore(kind: VectorStoreKind, baseUrl: string, apiKey: string
   return new ChromaAdapter({ baseUrl, apiKey, dimensions });
 }
 
-const KB_EXPORT_ENABLED = (process.env.KB_EXPORT_ENABLED || "")
-  .trim()
-  .toLowerCase() === "1";
-
 interface KbExportBrowserRequest extends Record<string, unknown> {
   jobId?: unknown;
   collectionName?: unknown;
@@ -40,7 +37,7 @@ interface KbExportBrowserRequest extends Record<string, unknown> {
 }
 
 export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { auth }) => {
-  if (!KB_EXPORT_ENABLED) {
+  if (!isKbExportEnabled()) {
     throw new ApiRouteError(
       "KB export is disabled. Set KB_EXPORT_ENABLED=1 in your env to enable it.",
       503,

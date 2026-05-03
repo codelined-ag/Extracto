@@ -59,30 +59,12 @@ vi.mock("@/lib/ocr/host-normalization", () => ({
   resolveOllamaHostEndpoint: (host: string) => host,
 }));
 
-vi.mock("@/lib/ocr/job-control", () => ({
-  withOcrJobSlot: vi.fn().mockImplementation(async (_p: number, fn: () => Promise<unknown>) => {
-    await fn();
-  }),
-}));
-
-vi.mock("@/lib/db", () => ({
-  db: {
-    ocrJob: {
-      findFirst: vi.fn(),
-      update: vi.fn().mockResolvedValue({}),
-    },
-  },
-}));
-
 vi.mock("@/lib/ocr/pipeline", () => ({
-  buildProgressMetadata: vi.fn().mockReturnValue({}),
   buildPrompt: vi.fn().mockReturnValue("PROMPT"),
-  ocrStageProgressPct: vi.fn().mockReturnValue(0),
   getModelCatalog: vi.fn(),
   normalizePreviewForHistory: vi.fn().mockReturnValue("data:preview"),
   getOllamaDiscoveryFallbackHost: vi.fn().mockReturnValue("http://localhost:11434"),
-  parseCheckpointPages: vi.fn().mockReturnValue([]),
-  processOcrJobInBackground: vi.fn().mockResolvedValue(undefined),
+  resumeOcrJob: vi.fn(),
   sanitizePostProcessing: vi.fn().mockReturnValue({
     enabled: false,
     outputFormat: "markdown",
@@ -90,11 +72,6 @@ vi.mock("@/lib/ocr/pipeline", () => ({
     model: "",
   }),
   submitOcrJob: vi.fn(),
-  toJsonValue: (v: unknown) => v,
-}));
-
-vi.mock("@/lib/ocr/job-seed", () => ({
-  seedPostProcessingMeta: () => ({ enabled: false }),
 }));
 
 vi.mock("@/lib/ocr/providers/mistral", () => ({
@@ -113,21 +90,14 @@ vi.mock("@/lib/ocr/provider-config", () => ({
   getDefaultOpenRouterApiUrl: () => "http://or",
 }));
 
+import { ApiRouteError } from "@/lib/api-error";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
-import { db } from "@/lib/db";
-import {
-  parseCheckpointPages,
-  processOcrJobInBackground,
-  submitOcrJob,
-} from "@/lib/ocr/pipeline";
+import { resumeOcrJob, submitOcrJob } from "@/lib/ocr/pipeline";
 import { POST } from "@/app/api/ocr/route";
 
 const mockedRateLimit = enforceOcrSubmitRateLimit as ReturnType<typeof vi.fn>;
-const mockedFindFirst = db.ocrJob.findFirst as ReturnType<typeof vi.fn>;
-const mockedJobUpdate = db.ocrJob.update as ReturnType<typeof vi.fn>;
 const mockedSubmit = submitOcrJob as ReturnType<typeof vi.fn>;
-const mockedParseCheckpoints = parseCheckpointPages as ReturnType<typeof vi.fn>;
-const mockedBackground = processOcrJobInBackground as ReturnType<typeof vi.fn>;
+const mockedResume = resumeOcrJob as ReturnType<typeof vi.fn>;
 
 function makeRequest(body: unknown): NextRequest {
   return new Request("http://localhost/api/ocr", {
@@ -140,11 +110,8 @@ function makeRequest(body: unknown): NextRequest {
 beforeEach(() => {
   currentAuthOverride = null;
   mockedRateLimit.mockReset().mockReturnValue(null);
-  mockedFindFirst.mockReset();
-  mockedJobUpdate.mockReset().mockResolvedValue({});
   mockedSubmit.mockReset().mockResolvedValue({ jobId: "job-stub", pageCount: 1 });
-  mockedParseCheckpoints.mockReset().mockReturnValue([]);
-  mockedBackground.mockReset().mockResolvedValue(undefined);
+  mockedResume.mockReset();
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -240,8 +207,8 @@ describe("POST /api/ocr", () => {
     ]);
   });
 
-  it("returns 404 when resume=true references a missing job", async () => {
-    mockedFindFirst.mockResolvedValueOnce(null);
+  it("returns 404 when resumeOcrJob throws not-found ApiRouteError", async () => {
+    mockedResume.mockRejectedValueOnce(new ApiRouteError("Resume job not found", 404));
     const res = await POST(
       makeRequest({
         model: "m",
@@ -255,14 +222,8 @@ describe("POST /api/ocr", () => {
     expect(body.error).toMatch(/Resume job not found/);
   });
 
-  it("returns 409 when resuming a job that is already PROCESSING", async () => {
-    mockedFindFirst.mockResolvedValueOnce({
-      id: "job-x",
-      status: "PROCESSING",
-      result: null,
-      metadata: null,
-      priority: 0,
-    });
+  it("returns 409 when resumeOcrJob throws already-processing ApiRouteError", async () => {
+    mockedResume.mockRejectedValueOnce(new ApiRouteError("Job is already processing", 409));
     const res = await POST(
       makeRequest({
         model: "m",
@@ -274,24 +235,8 @@ describe("POST /api/ocr", () => {
     expect(res.status).toBe(409);
   });
 
-  it("resumes a queued job, marks it PROCESSING in the DB and dispatches the background pipeline", async () => {
-    mockedFindFirst.mockResolvedValueOnce({
-      id: "job-resume",
-      status: "QUEUED",
-      result: null,
-      metadata: null,
-      priority: 5,
-    });
-    mockedParseCheckpoints.mockReturnValueOnce([
-      {
-        pageNumber: 1,
-        text: "page1 text",
-        structured: { markdown: "page1 text" },
-        durationMs: 100,
-        metadata: {},
-      },
-    ]);
-
+  it("returns 202 with resumed=true + pageRecords from resumeOcrJob", async () => {
+    mockedResume.mockResolvedValueOnce({ jobId: "job-resume", pageCount: 3, pageRecords: 1 });
     const res = await POST(
       makeRequest({
         model: "llama-vision",
@@ -306,32 +251,19 @@ describe("POST /api/ocr", () => {
     expect(body.resumed).toBe(true);
     expect(body.pageRecords).toBe(1);
     expect(body.pageCount).toBe(3);
+    expect(body.jobId).toBe("job-resume");
 
-    expect(mockedJobUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "job-resume" },
-        data: expect.objectContaining({ status: "PROCESSING" }),
-      }),
-    );
-    expect(mockedBackground).toHaveBeenCalled();
-    const bgArgs = mockedBackground.mock.calls[0][0];
-    expect(bgArgs.jobId).toBe("job-resume");
-    expect(bgArgs.startIndex).toBe(1);
-    expect(bgArgs.resumed).toBe(true);
+    expect(mockedResume).toHaveBeenCalledTimes(1);
+    const args = mockedResume.mock.calls[0][0];
+    expect(args.jobId).toBe("job-resume");
+    expect(args.userId).toBe("user-1");
+    expect(args.inputPreviews).toEqual(["data:p1", "data:p2", "data:p3"]);
   });
 
-  it("rejects resume when every page is already checkpointed", async () => {
-    mockedFindFirst.mockResolvedValueOnce({
-      id: "job-done",
-      status: "QUEUED",
-      result: null,
-      metadata: null,
-      priority: 0,
-    });
-    mockedParseCheckpoints.mockReturnValueOnce([
-      { pageNumber: 1, text: "x", structured: { markdown: "x" }, durationMs: 0, metadata: {} },
-      { pageNumber: 2, text: "y", structured: { markdown: "y" }, durationMs: 0, metadata: {} },
-    ]);
+  it("surfaces the all-checkpointed ApiRouteError from resumeOcrJob as 400", async () => {
+    mockedResume.mockRejectedValueOnce(
+      new ApiRouteError("All pages were already checkpointed for this job", 400),
+    );
     const res = await POST(
       makeRequest({
         model: "m",
@@ -343,6 +275,19 @@ describe("POST /api/ocr", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toMatch(/already checkpointed/);
-    expect(mockedBackground).not.toHaveBeenCalled();
+  });
+
+  it("rejects resume=true with no jobId", async () => {
+    const res = await POST(
+      makeRequest({
+        model: "m",
+        preview: "data:image/png;base64,x",
+        resume: true,
+      }),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/jobId is required/);
+    expect(mockedResume).not.toHaveBeenCalled();
   });
 });

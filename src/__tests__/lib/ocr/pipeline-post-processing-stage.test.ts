@@ -5,7 +5,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 vi.mock("@/lib/ocr/ollama-dispatch", () => ({
-  ollamaWarmupWithHostResolve: vi.fn().mockResolvedValue(undefined),
+  ollamaWarmupWithResolvedHost: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/ocr/provider-dispatch", () => ({
@@ -13,7 +13,7 @@ vi.mock("@/lib/ocr/provider-dispatch", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { ollamaWarmupWithHostResolve } from "@/lib/ocr/ollama-dispatch";
+import { ollamaWarmupWithResolvedHost } from "@/lib/ocr/ollama-dispatch";
 import { runProviderPostProcessing } from "@/lib/ocr/provider-dispatch";
 import { runPostProcessingStage } from "@/lib/ocr/pipeline-post-processing-stage";
 import type { OrchestratorState } from "@/lib/ocr/pipeline-page-loop";
@@ -24,7 +24,7 @@ import {
 } from "@/lib/ocr/pipeline-progress";
 
 const mockedRun = runProviderPostProcessing as ReturnType<typeof vi.fn>;
-const mockedWarmup = ollamaWarmupWithHostResolve as ReturnType<typeof vi.fn>;
+const mockedWarmup = ollamaWarmupWithResolvedHost as ReturnType<typeof vi.fn>;
 const mockedDbUpdate = db.ocrJob.update as ReturnType<typeof vi.fn>;
 
 function freshState(): OrchestratorState {

@@ -1,7 +1,7 @@
 import { errorMessage } from "@/lib/api-error";
 import { db } from "@/lib/db";
 import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
-import { ollamaWarmupWithHostResolve } from "@/lib/ocr/ollama-dispatch";
+import { ollamaWarmupWithResolvedHost } from "@/lib/ocr/ollama-dispatch";
 import {
   appendProgressEvent,
   type OcrProgressMetadata,
@@ -48,7 +48,7 @@ export async function runPostProcessingStage(
   const postProcessingProvider = normalizeProvider(deps.settings.provider);
   if (postProcessingProvider === "ollama") {
     state.usedOllamaModels.add(deps.postProcessingModel);
-    await ollamaWarmupWithHostResolve(deps.settings.apiEndpoint, deps.postProcessingModel);
+    await ollamaWarmupWithResolvedHost(deps.settings.apiEndpoint, deps.postProcessingModel);
   }
 
   state.progressEvents = appendProgressEvent(

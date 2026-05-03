@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/ocr/ollama-dispatch", () => ({
-  ollamaOcrWithHostResolve: vi.fn(),
-  ollamaPostProcessingWithHostResolve: vi.fn(),
+  ollamaOcrWithResolvedHost: vi.fn(),
+  ollamaPostProcessingWithResolvedHost: vi.fn(),
 }));
 
 vi.mock("@/lib/ocr/providers/compat", () => ({
@@ -17,13 +17,13 @@ vi.mock("@/lib/ocr/providers/mistral", () => ({
   runMistralPostProcessing: vi.fn(),
 }));
 
-import { ollamaOcrWithHostResolve, ollamaPostProcessingWithHostResolve } from "@/lib/ocr/ollama-dispatch";
+import { ollamaOcrWithResolvedHost, ollamaPostProcessingWithResolvedHost } from "@/lib/ocr/ollama-dispatch";
 import { runCompatOcr, runCompatPostProcessing } from "@/lib/ocr/providers/compat";
 import { runMistralOcr, runMistralPostProcessing } from "@/lib/ocr/providers/mistral";
 import { runProviderOcr, runProviderPostProcessing } from "@/lib/ocr/provider-dispatch";
 
-const mOllamaOcr = ollamaOcrWithHostResolve as ReturnType<typeof vi.fn>;
-const mOllamaPP = ollamaPostProcessingWithHostResolve as ReturnType<typeof vi.fn>;
+const mOllamaOcr = ollamaOcrWithResolvedHost as ReturnType<typeof vi.fn>;
+const mOllamaPP = ollamaPostProcessingWithResolvedHost as ReturnType<typeof vi.fn>;
 const mCompatOcr = runCompatOcr as ReturnType<typeof vi.fn>;
 const mCompatPP = runCompatPostProcessing as ReturnType<typeof vi.fn>;
 const mMistralOcr = runMistralOcr as ReturnType<typeof vi.fn>;

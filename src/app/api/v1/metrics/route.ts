@@ -5,7 +5,9 @@ import { db } from "@/lib/db";
 import { formatPrometheus, getCounters } from "@/lib/background/metrics";
 import { getOcrQueueDepth } from "@/lib/ocr/job-control";
 
-const METRICS_TOKEN = process.env.METRICS_TOKEN?.trim() || "";
+function getMetricsToken(): string {
+  return process.env.METRICS_TOKEN?.trim() || "";
+}
 
 function timingSafeEqual(presented: string, expected: string): boolean {
   // Hash both sides to a fixed 32-byte digest so the constant-time compare
@@ -17,12 +19,13 @@ function timingSafeEqual(presented: string, expected: string): boolean {
 }
 
 export async function GET(request: NextRequest) {
-  if (!METRICS_TOKEN) {
+  const expected = getMetricsToken();
+  if (!expected) {
     return new Response("METRICS_TOKEN is not configured", { status: 503 });
   }
   const header = request.headers.get("authorization") || "";
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  if (!match || !timingSafeEqual(match[1].trim(), METRICS_TOKEN)) {
+  if (!match || !timingSafeEqual(match[1].trim(), expected)) {
     return new Response("Unauthorized", { status: 401 });
   }
 

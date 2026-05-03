@@ -1,5 +1,6 @@
 import type { Chunk, VectorStoreAdapter } from "@/lib/kb/types";
 import { VectorStoreError } from "@/lib/kb/stores/error";
+import { fetchWithTimeout } from "@/lib/kb/stores/fetch-with-timeout";
 
 export interface QdrantAdapterConfig {
   baseUrl: string;
@@ -7,8 +8,6 @@ export interface QdrantAdapterConfig {
   dimensions?: number;
   distance?: "Cosine" | "Euclid" | "Dot";
 }
-
-const REQUEST_TIMEOUT_MS = 60_000;
 
 function uuidFromString(input: string): string {
   let h1 = 0x811c9dc5, h2 = 0x1b873593, h3 = 0x9e3779b9, h4 = 0x85ebca6b;
@@ -79,18 +78,11 @@ export class QdrantAdapter implements VectorStoreAdapter {
     const headers: Record<string, string> = { Accept: "application/json" };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     if (this.config.apiKey) headers["api-key"] = this.config.apiKey;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    try {
-      return await this.fetchImpl(`${this.base}${path}`, {
-        method,
-        headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
+    return fetchWithTimeout(this.fetchImpl, `${this.base}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
   }
 
   private async parseError(resp: Response, op: string): Promise<VectorStoreError> {

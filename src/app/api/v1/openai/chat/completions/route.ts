@@ -1,13 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { OcrJobStatus } from "@prisma/client";
 
 import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { authenticateMutation, authHasScope } from "@/lib/auth/request";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
-import { db } from "@/lib/db";
 import { normalizeProvider } from "@/lib/ocr/endpoint-policy";
+import { waitForOcrJobCompletion } from "@/lib/ocr/job-wait";
 import {
   buildPrompt,
   sanitizePostProcessing,
@@ -15,7 +14,6 @@ import {
 } from "@/lib/ocr/pipeline";
 import { resolveMistralOcrModel } from "@/lib/ocr/providers/mistral";
 import { normalizeAdvancedSettings } from "@/lib/ocr/settings";
-import { readResultText } from "@/lib/ocr/result-store";
 import { getApiSettings } from "@/lib/ocr/settings-store";
 
 interface OpenAIChatRequest {
@@ -30,9 +28,6 @@ interface ContentPart {
   text?: unknown;
   image_url?: unknown;
 }
-
-const POLL_INTERVAL_MS = 1000;
-const MAX_WAIT_MS = 5 * 60 * 1000;
 
 function extractImagePartUrl(part: ContentPart): string | null {
   if (!part || typeof part !== "object") return null;
@@ -152,45 +147,31 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return openAiError(errorMessage(error, "OCR submission failed"), "api_error", 502);
   }
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < MAX_WAIT_MS) {
-    const job = await db.ocrJob.findUnique({
-      where: { id: jobId },
-      select: {
-        status: true,
-        extractedText: true,
-        extractedTextLocation: true,
-        errorMessage: true,
-      },
+  const outcome = await waitForOcrJobCompletion({ jobId });
+  if (outcome.kind === "completed") {
+    return NextResponse.json({
+      id: `chatcmpl-${randomBytes(8).toString("hex")}`,
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model,
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: outcome.text },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      extracto: { jobId },
     });
-    if (!job) break;
-    if (job.status === OcrJobStatus.COMPLETED) {
-      const text = await readResultText(job.extractedTextLocation, job.extractedText);
-      return NextResponse.json({
-        id: `chatcmpl-${randomBytes(8).toString("hex")}`,
-        object: "chat.completion",
-        created: Math.floor(Date.now() / 1000),
-        model,
-        choices: [
-          {
-            index: 0,
-            message: { role: "assistant", content: text || "" },
-            finish_reason: "stop",
-          },
-        ],
-        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-        extracto: { jobId },
-      });
-    }
-    if (job.status === OcrJobStatus.FAILED) {
-      return NextResponse.json(
-        { error: { message: job.errorMessage || "OCR job failed", type: "api_error" }, extracto: { jobId } },
-        { status: 502 },
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
-
+  if (outcome.kind === "failed" || outcome.kind === "missing") {
+    const message = outcome.kind === "failed" ? outcome.errorMessage : "OCR job not found";
+    return NextResponse.json(
+      { error: { message, type: "api_error" }, extracto: { jobId } },
+      { status: 502 },
+    );
+  }
   return NextResponse.json(
     { error: { message: "Timed out waiting for OCR completion", type: "api_error" }, extracto: { jobId } },
     { status: 504 },

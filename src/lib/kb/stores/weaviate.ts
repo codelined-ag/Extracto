@@ -1,13 +1,12 @@
 import type { Chunk, VectorStoreAdapter } from "@/lib/kb/types";
 import { VectorStoreError } from "@/lib/kb/stores/error";
+import { fetchWithTimeout } from "@/lib/kb/stores/fetch-with-timeout";
 
 export interface WeaviateAdapterConfig {
   baseUrl: string;
   apiKey?: string;
   dimensions?: number;
 }
-
-const REQUEST_TIMEOUT_MS = 60_000;
 
 function classNameFor(name: string): string {
   const cleaned = name.replace(/[^a-zA-Z0-9]/g, "_");
@@ -74,18 +73,11 @@ export class WeaviateAdapter implements VectorStoreAdapter {
     const headers: Record<string, string> = { Accept: "application/json" };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     if (this.config.apiKey) headers.Authorization = `Bearer ${this.config.apiKey}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    try {
-      return await this.fetchImpl(`${this.base}${path}`, {
-        method,
-        headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
+    return fetchWithTimeout(this.fetchImpl, `${this.base}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
   }
 
   private async parseError(resp: Response, op: string): Promise<VectorStoreError> {

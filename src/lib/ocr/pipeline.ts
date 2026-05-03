@@ -151,20 +151,20 @@ import {
   getOllamaCandidatesForOcr,
   getOllamaDiscoveryFallbackHost,
   getOllamaModels,
-  ollamaOcrWithHostResolve,
-  ollamaPostProcessingWithHostResolve,
-  ollamaUnloadWithHostResolve,
-  ollamaWarmupWithHostResolve,
+  ollamaOcrWithResolvedHost,
+  ollamaPostProcessingWithResolvedHost,
+  ollamaUnloadWithResolvedHost,
+  ollamaWarmupWithResolvedHost,
 } from "@/lib/ocr/ollama-dispatch";
 
 export {
   getOllamaCandidatesForOcr,
   getOllamaDiscoveryFallbackHost,
   getOllamaModels,
-  ollamaOcrWithHostResolve,
-  ollamaPostProcessingWithHostResolve,
-  ollamaUnloadWithHostResolve,
-  ollamaWarmupWithHostResolve,
+  ollamaOcrWithResolvedHost,
+  ollamaPostProcessingWithResolvedHost,
+  ollamaUnloadWithResolvedHost,
+  ollamaWarmupWithResolvedHost,
 };
 
 import { runProviderOcr, runProviderPostProcessing } from "@/lib/ocr/provider-dispatch";
@@ -178,7 +178,7 @@ import { runPostProcessingStage } from "@/lib/ocr/pipeline-post-processing-stage
 
 async function unloadAllOllamaModels(apiEndpoint: string, models: Set<string>): Promise<void> {
   for (const model of models) {
-    await ollamaUnloadWithHostResolve(apiEndpoint, model);
+    await ollamaUnloadWithResolvedHost(apiEndpoint, model);
   }
 }
 
@@ -333,7 +333,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
     await clearOcrJobStop(input.jobId);
     markOcrJobRunning(input.jobId);
     if (input.provider === "ollama") {
-      await ollamaWarmupWithHostResolve(input.settings.apiEndpoint, input.ocrModel);
+      await ollamaWarmupWithResolvedHost(input.settings.apiEndpoint, input.ocrModel);
     }
 
     const loop = await runOcrPages(state, {
@@ -643,6 +643,26 @@ export interface SubmitOcrJobInput {
   startedAtMs?: number;
 }
 
+function buildQueuedEvents(
+  startedAtIso: string,
+  initialMessage: string,
+  provider: ProviderKind,
+  ocrModel: string,
+  inferenceModel: string,
+): OcrProgressEvent[] {
+  const events: OcrProgressEvent[] = [
+    { at: startedAtIso, stage: "queued", message: initialMessage },
+  ];
+  if (provider === "mistral" && ocrModel !== inferenceModel) {
+    events.push({
+      at: startedAtIso,
+      stage: "queued",
+      message: `OCR will use ${ocrModel}; selected inference model is ${inferenceModel}`,
+    });
+  }
+  return events;
+}
+
 export async function submitOcrJob(
   input: SubmitOcrJobInput,
 ): Promise<{ jobId: string; pageCount: number }> {
@@ -659,18 +679,7 @@ export async function submitOcrJob(
     currentPage: null,
     etaSeconds: null,
     startedAt: startedAtIso,
-    events: [
-      { at: startedAtIso, stage: "queued", message: "Job created" },
-      ...(input.provider === "mistral" && input.ocrModel !== input.model
-        ? [
-            {
-              at: startedAtIso,
-              stage: "queued" as const,
-              message: `OCR will use ${input.ocrModel}; selected inference model is ${input.model}`,
-            },
-          ]
-        : []),
-    ],
+    events: buildQueuedEvents(startedAtIso, "Job created", input.provider, input.ocrModel, input.model),
     checkpoints: [],
     postProcessing: seedPostProcessingMeta(
       input.postProcessingPayload,
@@ -721,4 +730,101 @@ export async function submitOcrJob(
   );
 
   return { jobId: createdJob.id, pageCount: input.inputPreviews.length };
+}
+
+export interface ResumeOcrJobInput extends SubmitOcrJobInput {
+  jobId: string;
+}
+
+export interface ResumeOcrJobResult {
+  jobId: string;
+  pageCount: number;
+  pageRecords: number;
+}
+
+/**
+ * Resume an existing PAUSED/QUEUED job from its last checkpoint. Throws
+ * ApiRouteError on the not-found / already-completed / already-running
+ * / no-pages-left preconditions so callers can surface a single error
+ * shape via handleApiError.
+ */
+export async function resumeOcrJob(input: ResumeOcrJobInput): Promise<ResumeOcrJobResult> {
+  const startedAtMs = input.startedAtMs ?? Date.now();
+  const startedAtIso = new Date(startedAtMs).toISOString();
+
+  const existingJob = await db.ocrJob.findFirst({
+    where: { id: input.jobId, userId: input.userId },
+    select: { id: true, status: true, result: true, metadata: true, priority: true },
+  });
+  if (!existingJob) {
+    throw new ApiRouteError("Resume job not found", 404);
+  }
+  if (existingJob.status === OcrJobStatus.COMPLETED) {
+    throw new ApiRouteError("Job is already completed", 400);
+  }
+  if (existingJob.status === OcrJobStatus.PROCESSING) {
+    throw new ApiRouteError("Job is already processing", 409);
+  }
+
+  const initialPageOutputs = parseCheckpointPages(existingJob.result, existingJob.metadata);
+  const startIndex = initialPageOutputs.length;
+  if (startIndex >= input.inputPreviews.length) {
+    throw new ApiRouteError("All pages were already checkpointed for this job", 400);
+  }
+
+  const resumeMetadata = buildProgressMetadata({
+    stage: "queued",
+    message: `Resume requested from page ${startIndex + 1}/${input.inputPreviews.length}`,
+    progressPct: ocrStageProgressPct(startIndex, input.inputPreviews.length, input.postProcessingPayload.enabled),
+    pageCount: input.inputPreviews.length,
+    processedPages: startIndex,
+    currentPage: null,
+    etaSeconds: null,
+    startedAt: startedAtIso,
+    events: buildQueuedEvents(startedAtIso, "Resume requested", input.provider, input.ocrModel, input.model),
+    checkpoints: initialPageOutputs.map(toPageCheckpoint),
+    postProcessing: seedPostProcessingMeta(
+      input.postProcessingPayload,
+      input.postProcessingPayload.model || input.model,
+    ),
+  });
+
+  await db.ocrJob.update({
+    where: { id: existingJob.id },
+    data: {
+      status: OcrJobStatus.PROCESSING,
+      sourcePreview: input.sourcePreview,
+      errorMessage: null,
+      completedAt: null,
+      processingMs: null,
+      settingsSnapshot: toJsonValue({
+        settings: input.settingsPayload,
+        postProcessing: input.postProcessingPayload,
+      }),
+      prompt: input.prompt,
+      metadata: toJsonValue(resumeMetadata),
+    },
+  });
+
+  const priority = (existingJob as { priority?: number }).priority ?? input.priority ?? 0;
+  void withOcrJobSlot(priority, () =>
+    processOcrJobInBackground({
+      jobId: existingJob.id,
+      startedAtMs,
+      fileName: input.fileName,
+      model: input.model,
+      ocrModel: input.ocrModel,
+      provider: input.provider,
+      settings: input.settings,
+      settingsPayload: input.settingsPayload,
+      postProcessingPayload: input.postProcessingPayload,
+      inputPreviews: input.inputPreviews,
+      prompt: input.prompt,
+      initialPageOutputs,
+      startIndex,
+      resumed: true,
+    }),
+  );
+
+  return { jobId: existingJob.id, pageCount: input.inputPreviews.length, pageRecords: startIndex };
 }

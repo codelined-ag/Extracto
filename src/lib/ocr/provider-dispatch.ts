@@ -1,7 +1,7 @@
 import type { ProviderKind } from "@/lib/ocr/endpoint-policy";
 import {
-  ollamaOcrWithHostResolve,
-  ollamaPostProcessingWithHostResolve,
+  ollamaOcrWithResolvedHost,
+  ollamaPostProcessingWithResolvedHost,
 } from "@/lib/ocr/ollama-dispatch";
 import {
   OPENAI_COMPAT_CONFIG,
@@ -40,9 +40,9 @@ interface ProviderHandler {
 const PROVIDER_HANDLERS: Record<ProviderKind, ProviderHandler> = {
   ollama: {
     envKey: null,
-    runOcr: (s, m, p, pv, _k, sig) => ollamaOcrWithHostResolve(s.apiEndpoint, m, p, pv, sig),
+    runOcr: (s, m, p, pv, _k, sig) => ollamaOcrWithResolvedHost(s.apiEndpoint, m, p, pv, sig),
     runPostProcess: (s, m, sp, up, _k, of) =>
-      ollamaPostProcessingWithHostResolve(s.apiEndpoint, m, sp, up, of),
+      ollamaPostProcessingWithResolvedHost(s.apiEndpoint, m, sp, up, of),
   },
   openrouter: {
     envKey: "OPENROUTER_API_KEY",

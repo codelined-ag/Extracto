@@ -156,7 +156,7 @@ export async function getOllamaModels(endpoint: string): Promise<OllamaModelCata
   throw new ApiRouteError(`No reachable Ollama host found (${errors.join(" | ")})`, 502);
 }
 
-export async function ollamaOcrWithHostResolve(
+export async function ollamaOcrWithResolvedHost(
   endpoint: string,
   model: string,
   prompt: string,
@@ -184,7 +184,7 @@ export async function ollamaOcrWithHostResolve(
   }
 }
 
-export function ollamaPostProcessingWithHostResolve(
+export function ollamaPostProcessingWithResolvedHost(
   endpoint: string,
   model: string,
   systemPrompt: string,
@@ -195,10 +195,10 @@ export function ollamaPostProcessingWithHostResolve(
   return runOllamaPostProcessing(getOllamaCandidatesForOcr(endpoint), model, systemPrompt, userPrompt, outputFormat, signal);
 }
 
-export function ollamaUnloadWithHostResolve(endpoint: string, model: string): Promise<void> {
+export function ollamaUnloadWithResolvedHost(endpoint: string, model: string): Promise<void> {
   return unloadOllamaModel(getOllamaCandidatesForOcr(endpoint), model);
 }
 
-export function ollamaWarmupWithHostResolve(endpoint: string, model: string): Promise<void> {
+export function ollamaWarmupWithResolvedHost(endpoint: string, model: string): Promise<void> {
   return warmupOllamaModel(getOllamaCandidatesForOcr(endpoint), model);
 }

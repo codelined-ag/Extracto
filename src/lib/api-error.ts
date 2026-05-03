@@ -72,7 +72,7 @@ export function handleApiError(error: unknown, options: HandleApiErrorOptions = 
   const status =
     error instanceof ApiRouteError
       ? error.status
-      : options.statusFor?.(error) ?? 500;
+      : extractStatusField(error) ?? options.statusFor?.(error) ?? 500;
   const message = error instanceof Error ? error.message : "Internal server error";
   // Spread `extra` first so the canonical `error` field cannot be overwritten
   // by a caller-supplied entry — the message must always reflect the real
@@ -81,6 +81,21 @@ export function handleApiError(error: unknown, options: HandleApiErrorOptions = 
     { ...options.extra, error: message },
     { status, ...(options.headers ? { headers: options.headers } : {}) }
   );
+}
+
+/**
+ * Honor a numeric `.status` field on caught errors that aren't
+ * ApiRouteError — used by EmbeddingError, VectorStoreError and other
+ * domain errors that carry the upstream HTTP status forward instead
+ * of inheriting from ApiRouteError.
+ */
+function extractStatusField(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const candidate = (error as { status?: unknown }).status;
+  if (typeof candidate === "number" && Number.isInteger(candidate) && candidate >= 400 && candidate < 600) {
+    return candidate;
+  }
+  return undefined;
 }
 
 /**

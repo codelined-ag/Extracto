@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
+import { isKbExportEnabled } from "@/lib/kb/feature-flag";
 import { runKbExport } from "@/lib/kb/export";
 import { ChromaAdapter } from "@/lib/kb/stores/chroma";
 import { QdrantAdapter } from "@/lib/kb/stores/qdrant";
@@ -34,10 +35,6 @@ import type {
   EmbeddingProviderKind,
   VectorStoreAdapter,
 } from "@/lib/kb/types";
-
-const KB_EXPORT_ENABLED = (process.env.KB_EXPORT_ENABLED || "")
-  .trim()
-  .toLowerCase() === "1";
 
 const VALID_STRATEGIES: readonly ChunkingStrategy[] = ["fixed", "sentence", "paragraph"];
 const VALID_PROVIDERS: readonly EmbeddingProviderKind[] = ["ollama", "openrouter", "openai_compat"];
@@ -53,7 +50,7 @@ interface KbExportRequest extends Record<string, unknown> {
 }
 
 export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { auth }) => {
-  if (!KB_EXPORT_ENABLED) {
+  if (!isKbExportEnabled()) {
     throw new ApiRouteError(
       "KB export is disabled. Set KB_EXPORT_ENABLED=1 in your env to enable it.",
       503,

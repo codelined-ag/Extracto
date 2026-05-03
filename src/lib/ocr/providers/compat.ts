@@ -181,7 +181,12 @@ function pruneCompatModelCache(cfg: CompatProviderConfig): void {
   }
 }
 
-function getCachedCompatModels(
+/**
+ * Read the cached model list AND bump it to most-recently-used inside
+ * the LRU map. Named `acquire` rather than `get` because hits mutate
+ * cache ordering; pure reads would be misleading.
+ */
+function acquireCachedCompatModels(
   cfg: CompatProviderConfig,
   endpoint: string,
   apiKey: string,
@@ -193,7 +198,6 @@ function getCachedCompatModels(
     cfg.modelCache.delete(key);
     return null;
   }
-  // Re-insert to mark as recently used so prune evicts genuinely cold entries.
   cfg.modelCache.delete(key);
   cfg.modelCache.set(key, entry);
   return entry.values.length > 0 ? entry.values : null;
@@ -218,7 +222,7 @@ export async function discoverCompatModels(
   apiKey: string,
 ): Promise<string[]> {
   const endpoint = buildCompatEndpoint(cfg, apiEndpoint, "/models");
-  const cached = getCachedCompatModels(cfg, endpoint, apiKey);
+  const cached = acquireCachedCompatModels(cfg, endpoint, apiKey);
   if (cached) return cached;
 
   const response = await fetchWithTimeout(endpoint, { headers: cfg.buildDiscoveryHeaders(apiKey) });
