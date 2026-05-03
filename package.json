@@ -14,10 +14,12 @@
     "db:reset": "prisma migrate reset",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "mcp": "bun run scripts/mcp-server.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1041.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@prisma/client": "^6.11.1",
     "@radix-ui/react-collapsible": "^1.1.11",
     "@radix-ui/react-dialog": "^1.1.14",

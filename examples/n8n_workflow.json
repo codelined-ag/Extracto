@@ -1,0 +1,67 @@
+{
+  "name": "Extracto OCR — folder watcher",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "value": 1 }] }
+      },
+      "id": "trigger",
+      "name": "Every minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "command": "ls -1 /data/incoming/*.{pdf,png,jpg,jpeg} 2>/dev/null"
+      },
+      "id": "list-files",
+      "name": "List new files",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{$json.stdout}}",
+        "options": { "encoding": "base64" }
+      },
+      "id": "read-file",
+      "name": "Read file as base64",
+      "type": "n8n-nodes-base.readBinaryFiles",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.EXTRACTO_URL}}/api/v1/ocr/batch",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer {{$env.EXTRACTO_TOKEN}}" },
+            { "name": "Origin", "value": "={{$env.EXTRACTO_URL}}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={ \"files\": [ { \"fileName\": $json.fileName, \"model\": \"anthropic/claude-haiku-4.5\", \"preview\": \"data:application/pdf;base64,\" + $binary.data.data } ] }"
+      },
+      "id": "submit",
+      "name": "Submit to Extracto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Every minute": { "main": [[{ "node": "List new files", "type": "main", "index": 0 }]] },
+    "List new files": { "main": [[{ "node": "Read file as base64", "type": "main", "index": 0 }]] },
+    "Read file as base64": { "main": [[{ "node": "Submit to Extracto", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true
+  }
+}
