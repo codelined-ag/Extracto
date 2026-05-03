@@ -84,11 +84,11 @@ You're building a document-intake pipeline, a back-office tool, or a regulated w
 
 **Start here:** [Run it as an API](#run-it-as-an-api), then [`openapi.yaml`](./openapi.yaml). Production checklist: set `AUTH_SECRET` explicitly, enable `COOKIE_SECURE=true` behind HTTPS, set `ALLOW_SIGNUP=0`, mint scoped keys, configure `*_ALLOWED_HOSTS` for any user-submitted endpoints, set `METRICS_TOKEN`.
 
-### LLM agents (Claude Desktop, Cursor, Codex, custom agents)
+### LLM agents (Claude Desktop, Cursor, Codex, OpenClaw, Hermes, custom agents)
 
 You're writing an agent that needs to read documents — for research, for invoice processing, for "what does this PDF say" inside a chat — and you want a tool, not an API client.
 
-- **First-class MCP server** at `scripts/mcp-server.ts` (stdio transport). Tools exposed: `ocr_submit`, `ocr_get`, `jobs_list`, `job_stop`, `kb_search`, `kb_export`, `presets_list`. Drop the JSON snippet into Claude Desktop's config and you're done.
+- **First-class MCP server** at `scripts/mcp-server.ts` (stdio transport). Tools exposed: `ocr_submit`, `ocr_get`, `jobs_list`, `job_stop`, `kb_search`, `kb_export`, `presets_list`. Works with any MCP-compatible client: Claude Desktop, Cursor, the OpenAI Codex CLI, [OpenClaw](https://github.com/openclaw/openclaw), [Nous Research's Hermes Agent](https://github.com/nousresearch/hermes-agent), or anything else that speaks the spec.
 - **Typed CLI** at `scripts/extracto.sh` (Bash) and `scripts/extracto.ps1` (PowerShell). Same auth, same surface, scriptable from any shell tool an agent can call.
 - **Pre-written [`SKILL.md`](./SKILL.md)** describing when to invoke OCR vs. KB search vs. job inspection — drop it into your agent's skills directory or load it into context so the agent picks the right tool without trial-and-error.
 - **Five chunking strategies** for KB export, including a `semantic` mode that embeds every sentence and splits on topic shifts, and a `hierarchical` mode that preserves markdown heading breadcrumbs in chunk metadata for filtered retrieval.
@@ -314,7 +314,7 @@ The full v1 contract is also published as an OpenAPI spec at [`openapi.yaml`](./
 
 ## Use it from an agent
 
-Extracto ships three affordances designed for LLM agents and scripted clients: a typed CLI, an MCP server (stdio), and a Claude-skill file describing when to use which tool. All three speak the same v1 API and respect the same scoped API keys, so the same Bearer token lets a Claude Desktop session, a Cursor agent, and a cron-driven Bash script all hit the same backend.
+Extracto ships three affordances designed for LLM agents and scripted clients: a typed CLI, an MCP server (stdio), and a Claude-skill file describing when to use which tool. All three speak the same v1 API and respect the same scoped API keys, so the same Bearer token lets a Claude Desktop session, a Cursor agent, an OpenClaw or Hermes agent running on your laptop, and a cron-driven Bash script all hit the same backend.
 
 ### The `extracto` CLI
 
@@ -366,12 +366,13 @@ extracto settings get
 
 The CLI lives at `scripts/extracto.sh` (Bash, Linux + macOS) and `scripts/extracto.ps1` (PowerShell, Windows).
 
-### MCP server (Claude Desktop / Cursor / Codex)
+### MCP server (Claude Desktop / Cursor / Codex / OpenClaw / Hermes)
 
-Extracto ships a Model Context Protocol server at `scripts/mcp-server.ts`. It exposes the v1 API as agent tools (`ocr_submit`, `ocr_get`, `jobs_list`, `job_stop`, `kb_search`, `kb_export`, `presets_list`) over stdio.
+Extracto ships a Model Context Protocol server at `scripts/mcp-server.ts`. It exposes the v1 API as agent tools (`ocr_submit`, `ocr_get`, `jobs_list`, `job_stop`, `kb_search`, `kb_export`, `presets_list`) over stdio. The same launch command works in any client; the surrounding config shape differs per client.
+
+**Claude Desktop / Cursor / Codex** (`claude_desktop_config.json` and equivalents):
 
 ```jsonc
-// Claude Desktop config
 {
   "mcpServers": {
     "extracto": {
@@ -385,6 +386,39 @@ Extracto ships a Model Context Protocol server at `scripts/mcp-server.ts`. It ex
   }
 }
 ```
+
+**[OpenClaw](https://github.com/openclaw/openclaw)** (`~/.openclaw/config.json` under `mcp.servers`, or set via `openclaw mcp set extracto '<json>'`):
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "extracto": {
+        "command": "bun",
+        "args": ["run", "/abs/path/to/extracto/scripts/mcp-server.ts"],
+        "env": {
+          "EXTRACTO_URL": "http://localhost:3000",
+          "EXTRACTO_TOKEN": "extr_..."
+        }
+      }
+    }
+  }
+}
+```
+
+**[Hermes Agent](https://github.com/nousresearch/hermes-agent)** (`~/.hermes/config.yaml`, then `/reload-mcp` inside `hermes chat`):
+
+```yaml
+mcp_servers:
+  extracto:
+    command: "bun"
+    args: ["run", "/abs/path/to/extracto/scripts/mcp-server.ts"]
+    env:
+      EXTRACTO_URL: "http://localhost:3000"
+      EXTRACTO_TOKEN: "extr_..."
+```
+
+In every case the agent gets the same seven tools and the same scoped Bearer auth — switch agents, keep the same backend and history.
 
 Full setup walkthrough: [`examples/mcp.md`](./examples/mcp.md).
 
