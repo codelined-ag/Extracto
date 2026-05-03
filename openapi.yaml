@@ -739,6 +739,51 @@ paths:
         "503":
           description: KB export disabled (set `KB_EXPORT_ENABLED=1`)
 
+  /api/v1/kb/test-connection:
+    post:
+      summary: Probe a vector store for reachability and auth
+      operationId: kbTestConnection
+      tags: [KB]
+      description: |
+        Lightweight GET against a per-store info endpoint (Chroma `/api/v1/heartbeat`,
+        Qdrant `/`, Weaviate `/v1/meta`) so the caller can verify the store is reachable
+        and the supplied credentials are accepted before running an actual export.
+        When `apiKey` is omitted, the server falls back to the saved per-user kb-default
+        for the same store kind.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, baseUrl]
+              properties:
+                kind:
+                  type: string
+                  enum: [chroma, qdrant, weaviate]
+                baseUrl:
+                  type: string
+                  format: uri
+                apiKey:
+                  type: string
+      responses:
+        "200":
+          description: Probe result (ok=false also returns 200; check the body)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, latencyMs, endpoint]
+                properties:
+                  ok: { type: boolean }
+                  latencyMs: { type: integer }
+                  endpoint: { type: string }
+                  version: { type: string, nullable: true }
+                  status: { type: integer, nullable: true }
+                  error: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
   /api/v1/metrics:
     get:
       summary: Prometheus-format metrics

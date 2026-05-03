@@ -135,3 +135,71 @@ export function enforceProviderEndpointPolicy(
   return parsed.toString().replace(/\/+$/u, "");
 }
 
+const DEFAULT_VECTOR_STORE_HOST_PATTERNS = [
+  "localhost",
+  "127.0.0.1",
+  "0.0.0.0",
+  "::1",
+  "host.docker.internal",
+  "host-gateway",
+  "host.containers.internal",
+  "172.17.0.1",
+];
+
+const BLOCKED_VECTOR_STORE_HOST_LITERALS: ReadonlySet<string> = new Set([
+  "169.254.169.254",
+  "metadata.google.internal",
+  "metadata.azure.com",
+]);
+
+function getVectorStorePatterns(): string[] {
+  const configured = parsePatternList(process.env.VECTOR_STORE_ALLOWED_HOSTS || "");
+  return configured.length > 0
+    ? Array.from(new Set([...DEFAULT_VECTOR_STORE_HOST_PATTERNS, ...configured]))
+    : DEFAULT_VECTOR_STORE_HOST_PATTERNS;
+}
+
+function rejectBlockedHost(hostname: string): void {
+  if (BLOCKED_VECTOR_STORE_HOST_LITERALS.has(hostname)) {
+    throw new ApiRouteError(
+      `Endpoint host "${hostname}" is blocked (cloud-metadata address)`,
+      400,
+    );
+  }
+}
+
+export function enforceVectorStoreEndpointPolicy(rawBaseUrl: string): string {
+  const trimmed = rawBaseUrl.trim();
+  if (!trimmed) {
+    throw new ApiRouteError("baseUrl is required", 400);
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new ApiRouteError("baseUrl must be a valid absolute URL", 400);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new ApiRouteError("Only http and https baseUrls are allowed", 400);
+  }
+  if (parsed.username || parsed.password) {
+    throw new ApiRouteError("baseUrl credentials are not allowed", 400);
+  }
+  parsed.search = "";
+  parsed.hash = "";
+
+  const hostname = parsed.hostname.toLowerCase();
+  rejectBlockedHost(hostname);
+
+  const patterns = getVectorStorePatterns().map(normalizeHostPattern).filter(Boolean);
+  const allowed = patterns.some((pattern) => hostMatchesPattern(hostname, pattern));
+  if (!allowed) {
+    throw new ApiRouteError(
+      `Vector store host "${hostname}" is not allowed. Set VECTOR_STORE_ALLOWED_HOSTS to extend the allowlist (current: ${patterns.join(", ")}).`,
+      400,
+    );
+  }
+
+  return parsed.toString().replace(/\/+$/u, "");
+}
+

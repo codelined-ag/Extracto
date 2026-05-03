@@ -643,9 +643,11 @@ Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
   presets delete <id>
   settings get                  Show current API provider settings
   kb export <job-id> --collection N --store-url URL --embed-model M
-  kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]
                                 Export an OCR job's text to a vector store
                                 (requires KB_EXPORT_ENABLED=1 on the server)
+  kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]
+                                Probe a vector store for reachability + auth
+                                before running an export
 
 Environment:
   EXTRACTO_URL                  Base URL (default http://127.0.0.1:3000)

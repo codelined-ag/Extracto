@@ -1107,6 +1107,7 @@ export default function ExtractoPage() {
  });
  } finally {
  setIsSavingKbDefaults(false);
+ setStoreTestResult(null);
  }
  };
 
@@ -1115,24 +1116,27 @@ export default function ExtractoPage() {
  setStoreTestResult(null);
  try {
  const baseUrl = kbDefaultsDraft.storeBaseUrl.trim() || STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind];
- const apiKey = kbStoreKeyDirty && kbDefaultsDraft.storeApiKey
- ? kbDefaultsDraft.storeApiKey
- : (kbDefaults.storeApiKey || undefined);
+ const requestBody: { kind: string; baseUrl: string; apiKey?: string } = {
+ kind: kbDefaultsDraft.storeKind,
+ baseUrl,
+ };
+ if (kbStoreKeyDirty) {
+ requestBody.apiKey = kbDefaultsDraft.storeApiKey;
+ }
  const resp = await fetch("/api/kb/test-connection", {
  method: "POST",
  headers: { "Content-Type": "application/json" },
- body: JSON.stringify({
- kind: kbDefaultsDraft.storeKind,
- baseUrl,
- ...(apiKey ? { apiKey } : {}),
- }),
+ body: JSON.stringify(requestBody),
  });
  const payload = await resp.json().catch(() => ({})) as { ok?: boolean; latencyMs?: number; version?: string; endpoint?: string; error?: string };
+ const failedTitle = t("Connessione fallita","Connection failed","Échec de la connexion","Conexión fallida","Verbindung fehlgeschlagen");
+ const failContext = `${kbDefaultsDraft.storeKind} @ ${baseUrl}${payload.endpoint ? ` ${payload.endpoint}` : ""}`;
  if (!resp.ok && !payload?.ok) {
- setStoreTestResult({ ok: false, latencyMs: payload.latencyMs ?? 0, error: payload.error || `HTTP ${resp.status}` });
+ const failMsg = payload.error || `HTTP ${resp.status}`;
+ setStoreTestResult({ ok: false, latencyMs: payload.latencyMs ?? 0, error: failMsg });
  toast({
- title: t("Connessione fallita","Connection failed","Échec de la connexion","Conexión fallida","Verbindung fehlgeschlagen"),
- description: payload.error || `HTTP ${resp.status}`,
+ title: failedTitle,
+ description: `${failMsg} · ${failContext}`,
  variant: "destructive",
  });
  return;
@@ -1145,16 +1149,17 @@ export default function ExtractoPage() {
  error: payload.error,
  });
  if (payload.ok) {
+ const description = payload.version
+ ? `v${payload.version} · ${payload.latencyMs ?? 0}ms`
+ : `${payload.latencyMs ?? 0}ms`;
  toast({
- title: t("Connessione riuscita","Connection ok","Connexion ok","Conexión ok","Verbindung ok"),
- description: payload.version
- ? t(`v${payload.version} (${payload.latencyMs}ms)`, `v${payload.version} (${payload.latencyMs}ms)`)
- : t(`${payload.latencyMs}ms`, `${payload.latencyMs}ms`),
+ title: t("Connessione riuscita","Connection successful","Connexion réussie","Conexión exitosa","Verbindung erfolgreich"),
+ description,
  });
  } else {
  toast({
- title: t("Connessione fallita","Connection failed","Échec de la connexion","Conexión fallida","Verbindung fehlgeschlagen"),
- description: payload.error || "",
+ title: failedTitle,
+ description: `${payload.error || ""} · ${failContext}`,
  variant: "destructive",
  });
  }
@@ -2244,10 +2249,21 @@ export default function ExtractoPage() {
  {t("Prova connessione","Test connection","Tester la connexion","Probar conexión","Verbindung testen")}
  </Button>
  {storeTestResult && (
- <span className={`text-[11px] ${storeTestResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+ <span
+ role="status"
+ aria-live="polite"
+ aria-atomic="true"
+ className={`text-[11px] ${storeTestResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
+ >
+ <span aria-hidden="true">{storeTestResult.ok ? "✓ " : "✗ "}</span>
+ <span className="sr-only">
  {storeTestResult.ok
- ? `✓ ${storeTestResult.version ? `v${storeTestResult.version} · ` : ""}${storeTestResult.latencyMs}ms`
- : `✗ ${storeTestResult.error || "failed"}`}
+ ? t("Successo:","Success:","Succès:","Éxito:","Erfolg:")
+ : t("Errore:","Error:","Erreur:","Error:","Fehler:")}{" "}
+ </span>
+ {storeTestResult.ok
+ ? `${storeTestResult.version ? `v${storeTestResult.version} · ` : ""}${storeTestResult.latencyMs}ms`
+ : storeTestResult.error || "failed"}
  </span>
  )}
  </div>

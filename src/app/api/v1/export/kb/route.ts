@@ -34,7 +34,7 @@ import type {
   EmbeddingProviderKind,
   VectorStoreAdapter,
 } from "@/lib/kb/types";
-import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
+import { enforceProviderEndpointPolicy, enforceVectorStoreEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 import {
   getDefaultOpenAICompatApiUrl,
   getDefaultOpenRouterApiUrl,
@@ -213,7 +213,8 @@ function parseVectorStore(raw: unknown): VectorStoreAdapter {
       400,
     );
   }
-  const baseUrl = stringField(r.baseUrl, "vectorStore.baseUrl");
+  const rawBaseUrl = stringField(r.baseUrl, "vectorStore.baseUrl");
+  const baseUrl = enforceVectorStoreEndpointPolicy(rawBaseUrl);
   const apiKey = typeof r.apiKey === "string" ? r.apiKey : undefined;
   const dimensions = typeof r.dimensions === "number" && Number.isInteger(r.dimensions) && r.dimensions > 0
     ? r.dimensions

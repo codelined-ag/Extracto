@@ -7,6 +7,7 @@ import {
   testVectorStoreConnection,
   type VectorStoreKind,
 } from "@/lib/kb/stores/test-connection";
+import { enforceVectorStoreEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 
 const VALID_STORES = ["chroma", "qdrant", "weaviate"] as const;
 
@@ -14,6 +15,10 @@ interface TestConnectionRequest extends Record<string, unknown> {
   kind?: unknown;
   baseUrl?: unknown;
   apiKey?: unknown;
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/u, "");
 }
 
 export const POST = withMutationAuth("kb:write", async (request: NextRequest, { auth }) => {
@@ -25,14 +30,24 @@ export const POST = withMutationAuth("kb:write", async (request: NextRequest, { 
       400,
     );
   }
-  const baseUrl = body.baseUrl;
-  if (typeof baseUrl !== "string" || !baseUrl.trim()) {
+  const baseUrlRaw = body.baseUrl;
+  if (typeof baseUrlRaw !== "string" || !baseUrlRaw.trim()) {
     throw new ApiRouteError("baseUrl (string) is required", 400);
   }
-  let apiKey = typeof body.apiKey === "string" && body.apiKey.length > 0 ? body.apiKey : undefined;
-  if (!apiKey) {
+  const baseUrl = enforceVectorStoreEndpointPolicy(baseUrlRaw);
+
+  const apiKeyProvided = Object.prototype.hasOwnProperty.call(body, "apiKey")
+    && typeof body.apiKey === "string";
+  let apiKey: string | undefined;
+  if (apiKeyProvided) {
+    apiKey = (body.apiKey as string) || undefined;
+  } else {
     const stored = await getKbDefaults(auth.userId);
-    if (stored.vectorStore.kind === kind && stored.vectorStore.apiKey) {
+    if (
+      stored.vectorStore.kind === kind &&
+      trimTrailingSlash(stored.vectorStore.baseUrl) === trimTrailingSlash(baseUrl) &&
+      stored.vectorStore.apiKey
+    ) {
       apiKey = stored.vectorStore.apiKey;
     }
   }

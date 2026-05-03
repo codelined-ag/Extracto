@@ -106,6 +106,29 @@ extracto logs      # docker compose logs -f app
 extracto uninstall # remove containers, volumes, the CLI symlink, and <repo>/.extracto.env
 ```
 
+## Knowledge-base export (Chroma / Qdrant / Weaviate)
+
+When the user wants to push extracted text into a vector store for retrieval, use `extracto kb`. Two sub-commands:
+
+```bash
+extracto kb test-connection \
+  --store chroma|qdrant|weaviate \
+  --store-url URL \
+  [--store-key KEY]
+
+extracto kb export <job-id> \
+  --collection NAME \
+  --store-url URL \
+  --embed-model MODEL \
+  [--store chroma|qdrant|weaviate] \
+  [--store-key KEY] \
+  [--strategy paragraph|sentence|hierarchical|semantic|fixed]
+```
+
+**Always run `kb test-connection` before `kb export`.** The export pipeline chunks, embeds, then upserts: if the store is unreachable or the api-key is wrong, you only find out after the embedding cost. The test-connection probe targets an auth-required endpoint per store (Chroma `/api/v1/collections`, Qdrant `/collections`, Weaviate `/v1/schema`) so a 401 here means the upsert later will also 401. No data is written; safe to call repeatedly.
+
+KB export needs `KB_EXPORT_ENABLED=1` on the server. If `kb export` returns 503, the server has the feature off.
+
 ## Error handling
 
 - `✖ no API token found` — set `EXTRACTO_TOKEN` or create `~/.extracto/config`.

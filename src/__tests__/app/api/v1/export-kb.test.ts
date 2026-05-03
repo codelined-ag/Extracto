@@ -31,6 +31,7 @@ vi.mock("@/lib/kb/stores/weaviate", () => ({ WeaviateAdapter: vi.fn() }));
 
 vi.mock("@/lib/ocr/endpoint-policy", () => ({
   enforceProviderEndpointPolicy: vi.fn().mockImplementation((_p: unknown, host: string) => host),
+  enforceVectorStoreEndpointPolicy: vi.fn().mockImplementation((host: string) => host.replace(/\/+$/u, "")),
 }));
 
 import { db } from "@/lib/db";
