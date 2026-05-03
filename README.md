@@ -510,3 +510,10 @@ Working as intended. Add public hosts to `WEBHOOK_ALLOWED_HOSTS` and use a real 
 ## License
 
 [MIT](./LICENSE) © codelined
+
+---
+
+## Code-quality scorecard
+
+<img src="scorecard.png" width="100%" alt="Latest desloppify holistic-review scorecard">
+
