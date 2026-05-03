@@ -32,7 +32,9 @@
 
 ## Quickstart
 
-You need Docker. That's it.
+You need Docker. That's it. Pick one path.
+
+### Path A — single `docker run` (no clone, just pull and go)
 
 ```bash
 docker run -d --name extracto -p 3000:3000 -v extracto-data:/app/data -e AUTH_SECRET="$(openssl rand -hex 32)" ghcr.io/codelined-ag/extracto:latest
@@ -40,7 +42,45 @@ docker run -d --name extracto -p 3000:3000 -v extracto-data:/app/data -e AUTH_SE
 
 Open <http://localhost:3000>, sign up, you're in. Multi-arch (`linux/amd64` + `linux/arm64`); pin a release with `:v0.3.0` instead of `:latest`.
 
-Other install paths (one-shot installer with Ollama auto-install, plain `docker compose`, source build, Windows / macOS specifics, watched-folder ingestion, S3 offload, Prometheus, etc.) live at **[extracto.help](https://extracto.help)**.
+### Path B — recommended: the `extracto` installer (Linux / macOS)
+
+The installer adds Docker and Ollama if missing, drops an `extracto` launcher in `~/.local/bin`, and runs Extracto from the published image (no source build needed):
+
+```bash
+git clone https://github.com/codelined-ag/Extracto.git
+cd Extracto
+./install-extracto.sh
+extracto on            # pulls ghcr.io/codelined-ag/extracto:latest and starts
+```
+
+After install:
+
+```bash
+extracto on            # start (pulls the image if needed)
+extracto off           # stop
+extracto upgrade       # pull the latest image, recreate the container
+extracto status        # docker compose ps
+extracto logs          # tail container logs
+extracto on --build    # opt-in: build locally from source instead of pulling
+extracto uninstall     # full teardown
+```
+
+The launcher also wraps the API: `extracto ocr ./invoice.pdf --model mistral-ocr-latest`, `extracto jobs list`, `extracto kb export`, `extracto api-key create ...`. See [extracto.help](https://extracto.help) for the full CLI reference.
+
+### Path C — Windows
+
+```powershell
+git clone https://github.com/codelined-ag/Extracto.git
+cd Extracto
+.\scripts\extracto.ps1 install      # adds 'extracto' to your user PATH
+extracto on                          # pulls ghcr.io/codelined-ag/extracto:latest and starts
+```
+
+Requires Docker Desktop (WSL2 backend). If PowerShell blocks the script: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
+---
+
+Other install paths (plain `docker compose`, source build, watched-folder ingestion, S3 offload, Prometheus, production checklist) live at **[extracto.help](https://extracto.help)**.
 
 ---
 

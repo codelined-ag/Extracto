@@ -202,7 +202,20 @@ run_step() {
 cmd_on() {
   ensure_project
   ensure_auth_secret
-  run_step "Turning up Extracto..." compose up -d --build
+  local build_locally=0
+  for arg in "$@"; do
+    case "$arg" in
+      --build) build_locally=1 ;;
+      *) die "unknown flag: $arg (did you mean --build?)" ;;
+    esac
+  done
+  if [ "$build_locally" = "1" ]; then
+    run_step "Building Extracto from source..." compose build
+    run_step "Turning up Extracto..." compose up -d
+  else
+    run_step "Pulling Extracto image from ghcr.io..." compose pull
+    run_step "Turning up Extracto..." compose up -d
+  fi
   run_step "Checking Extracto health..." compose ps
   ok "Extracto is running at http://localhost:3000"
 }
@@ -211,6 +224,14 @@ cmd_off() {
   ensure_project
   run_step "Shutting down Extracto..." compose down
   ok "Extracto is shut down"
+}
+
+cmd_upgrade() {
+  ensure_project
+  run_step "Pulling latest Extracto image from ghcr.io..." compose pull
+  run_step "Recreating Extracto container..." compose up -d --force-recreate
+  run_step "Checking Extracto health..." compose ps
+  ok "Extracto upgraded and running at http://localhost:3000"
 }
 
 cmd_api_key() {
@@ -572,8 +593,11 @@ print_help() {
 Usage: extracto <command> [args...]
 
 Lifecycle:
-  on                            Start Extracto (animated status)
+  on [--build]                  Start Extracto. Default pulls the published
+                                image from ghcr.io/codelined-ag/extracto.
+                                Pass --build to build locally from source.
   off                           Stop Extracto (animated status)
+  upgrade                       Pull the latest image and recreate the container
   status                        Show running container state
   logs                          Tail app logs (docker compose logs -f app)
   uninstall                     Remove Extracto command and app resources (keeps Ollama)
@@ -611,8 +635,9 @@ EOF
 main() {
   local command="${1:-}"
   case "$command" in
-    on)        cmd_on ;;
+    on)        shift; cmd_on "$@" ;;
     off)       cmd_off ;;
+    upgrade)   cmd_upgrade ;;
     status)    cmd_status ;;
     logs)      cmd_logs ;;
     api-key)   shift; cmd_api_key "$@" ;;

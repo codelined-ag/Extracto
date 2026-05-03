@@ -94,7 +94,14 @@ function Invoke-Step {
 function Cmd-On {
     Assert-Project
     Ensure-AuthSecret
-    Invoke-Step "Turning up Extracto" { Invoke-Compose @("up", "-d", "--build") }
+    $buildLocally = $RemainingArguments -contains "--build"
+    if ($buildLocally) {
+        Invoke-Step "Building Extracto from source" { Invoke-Compose @("build") }
+        Invoke-Step "Turning up Extracto" { Invoke-Compose @("up", "-d") }
+    } else {
+        Invoke-Step "Pulling Extracto image from ghcr.io" { Invoke-Compose @("pull") }
+        Invoke-Step "Turning up Extracto" { Invoke-Compose @("up", "-d") }
+    }
     Invoke-Step "Checking Extracto health" { Invoke-Compose @("ps") }
     Write-Ok "Extracto is running at http://localhost:3000"
 }
@@ -115,11 +122,11 @@ function Cmd-Status {
     Invoke-Compose @("ps")
 }
 
-function Cmd-Update {
+function Cmd-Upgrade {
     Assert-Project
-    Invoke-Step "Pulling latest images" { Invoke-Compose @("pull") }
-    Invoke-Step "Rebuilding services"   { Invoke-Compose @("up", "-d", "--build") }
-    Write-Ok "Extracto updated"
+    Invoke-Step "Pulling latest Extracto image from ghcr.io" { Invoke-Compose @("pull") }
+    Invoke-Step "Recreating Extracto container" { Invoke-Compose @("up", "-d", "--force-recreate") }
+    Write-Ok "Extracto upgraded and running at http://localhost:3000"
 }
 
 function Cmd-Install {
@@ -176,11 +183,12 @@ function Cmd-Help {
     Write-Host ""
     Write-Host "Usage:"
     Write-Host "  scripts\extracto.ps1 install      # add 'extracto' to your PATH (one time)"
-    Write-Host "  extracto on                        # build + start container"
+    Write-Host "  extracto on                        # pull image from ghcr.io and start"
+    Write-Host "  extracto on --build                # build locally from source and start"
     Write-Host "  extracto off                       # stop container"
+    Write-Host "  extracto upgrade                   # pull latest image, recreate container"
     Write-Host "  extracto logs                      # tail container logs"
     Write-Host "  extracto status                    # show docker compose ps"
-    Write-Host "  extracto update                    # pull + rebuild"
     Write-Host "  extracto uninstall                 # full teardown (removes volumes)"
     Write-Host ""
     Write-Host "Requirements: Docker Desktop for Windows" -ForegroundColor DarkGray
@@ -197,7 +205,8 @@ switch ($Command.ToLowerInvariant()) {
     "logs"      { Cmd-Logs }
     "status"    { Cmd-Status }
     "ps"        { Cmd-Status }
-    "update"    { Cmd-Update }
+    "upgrade"   { Cmd-Upgrade }
+    "update"    { Cmd-Upgrade }
     "install"   { Cmd-Install }
     "uninstall" { Cmd-Uninstall }
     "help"      { Cmd-Help }

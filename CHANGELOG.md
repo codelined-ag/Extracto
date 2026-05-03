@@ -6,6 +6,32 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-03
+
+### Changed
+- `extracto on` now **pulls** the published image from
+  `ghcr.io/codelined-ag/extracto` by default instead of building
+  locally. Source builds still available via `extracto on --build`.
+  Mirrors `docker-compose.yml` which gained an `image:` entry pointing
+  at the GHCR tag (controllable via `EXTRACTO_TAG`).
+- Renamed the Windows launcher's `extracto update` → `extracto upgrade`
+  for parity with the Bash launcher; old `update` command kept as an
+  alias.
+
+### Added
+- `extracto upgrade` command on both launchers — pulls the latest
+  image from ghcr.io and recreates the container in one step.
+- README Quickstart now documents three paths (single `docker run`,
+  installer for Linux/macOS, installer for Windows) instead of just
+  one.
+
+### Fixed
+- `Dockerfile` no longer tries to `COPY --from=builder /app/db ./db`.
+  The `db/` dir is gitignored / dockerignored, so the COPY blew up
+  multi-arch GHCR builds with `failed to compute cache key:
+  "/app/db": not found`. The runtime DB lives at `/app/data/`
+  (a mounted volume), not `/app/db/`, so this had no behavioral effect.
+
 ## [0.3.0] - 2026-05-03
 
 First public release. Bundles the prior pre-release work plus a major

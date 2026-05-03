@@ -273,7 +273,7 @@ main() {
   "${EXTRACTO_BIN}" on
 
   ok "Installation complete."
-  info "Use: extracto on | extracto off | extracto uninstall"
+  info "Use: extracto on | extracto upgrade | extracto off | extracto uninstall"
   info "If this shell does not recognize 'extracto', run: source ~/.bashrc (or ~/.zshrc)"
   info "Internal logs are stored in: ${LOG_DIR}"
 }
