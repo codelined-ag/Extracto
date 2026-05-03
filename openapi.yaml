@@ -81,10 +81,16 @@ components:
           type: array
           items:
             type: object
-            required: [fileName, jobId]
+            required: [fileName]
             properties:
               fileName: { type: string }
-              jobId: { type: string }
+              jobId:
+                type: string
+                nullable: true
+                description: Present when the per-file submit succeeded.
+              error:
+                type: string
+                description: Present when the per-file submit failed.
 
     AdvancedSettings:
       type: object
@@ -192,6 +198,23 @@ components:
       properties:
         error: { type: string }
 
+    OpenAIError:
+      type: object
+      required: [error]
+      description: |
+        Error envelope used exclusively by `/api/v1/openai/chat/completions`.
+        Mirrors OpenAI's own error shape so OpenAI-SDK clients can parse it
+        without special-casing.
+      properties:
+        error:
+          type: object
+          required: [message, type]
+          properties:
+            message: { type: string }
+            type:
+              type: string
+              enum: [authentication_error, api_error, invalid_request_error, permission_error, rate_limit_error]
+
   parameters:
     JobId:
       name: id
@@ -255,6 +278,10 @@ paths:
         `image_url` content part (data URL); Extracto submits an OCR
         job, blocks until it completes (up to 5 minutes), and returns
         the standard OpenAI Chat Completions shape.
+
+        Error responses use the OpenAI envelope (`OpenAIError`) instead
+        of the generic Extracto Error shape so OpenAI-SDK clients can
+        parse them without special-casing.
       requestBody:
         required: true
         content:
@@ -264,9 +291,21 @@ paths:
           description: OpenAI-shaped completion
           content:
             application/json: {}
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "429": { $ref: "#/components/responses/RateLimited" }
+        "400":
+          description: Validation error (OpenAI envelope)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OpenAIError" }
+        "401":
+          description: Missing or invalid bearer token (OpenAI envelope)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OpenAIError" }
+        "429":
+          description: Rate-limited (OpenAI envelope)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OpenAIError" }
 
   /api/jobs:
     get:
@@ -502,6 +541,30 @@ paths:
           description: Per-user preset cap reached
 
   /api/v1/presets/{id}:
+    patch:
+      summary: Update a preset (partial)
+      operationId: updatePreset
+      tags: [Presets]
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 80 }
+                instruction: { type: string, maxLength: 6000 }
+                outputFormat: { type: string, enum: [markdown, json] }
+      responses:
+        "200":
+          description: Updated count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { updated: { type: integer } }
+        "400": { $ref: "#/components/responses/BadRequest" }
     delete:
       summary: Delete a preset
       operationId: deletePreset
@@ -568,6 +631,27 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
 
   /api/v1/webhooks/{id}:
+    patch:
+      summary: Toggle a webhook active flag
+      operationId: updateWebhook
+      tags: [Webhooks]
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                active: { type: boolean }
+      responses:
+        "200":
+          description: Updated count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { updated: { type: integer } }
     delete:
       summary: Delete a webhook
       operationId: deleteWebhook

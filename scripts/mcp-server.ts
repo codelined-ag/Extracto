@@ -66,6 +66,13 @@ server.tool(
           fileName: z.string(),
           model: z.string(),
           preview: z.string().describe("Data URL (data:image/* or data:application/pdf;base64,...)"),
+          priority: z
+            .number()
+            .int()
+            .min(-10)
+            .max(10)
+            .optional()
+            .describe("Per-file scheduler priority. Higher runs first; default 0."),
           settings: z
             .object({
               language: z.string().optional(),
