@@ -8,87 +8,19 @@ follows [SemVer](https://semver.org/).
 
 ## [0.3.2] - 2026-05-03
 
-Per-page PDF selection across every surface, vector-store connection
-testing before export, Chroma 0.5+ support, and full PowerShell-launcher
-parity with the bash CLI.
-
 ### Added
-
-#### Per-page PDF selection
-
-Pick which pages of a PDF to OCR instead of always processing the whole
-file. Same feature, four surfaces:
-
-- **Workspace UI** — every PDF page renders as a checkable thumbnail.
-  Range input (`1-5,7,10`), Select all / Select none, and a
-  double-click for a single-page enlarged view.
-- **REST API** — new `pageNumbers` field on `POST /api/v1/ocr/batch`
-  and `POST /api/ocr` preserves original page numbering when the
-  caller pre-splits a PDF.
-- **CLI** — `extracto ocr file.pdf --pages 1-5,7` splits the PDF
-  locally via `pdftoppm` (poppler-utils) and submits only the
-  requested pages.
-- **MCP** — `ocr_submit` tool gained `pages` and `pageNumbers`
-  parameters for agent-driven subsets.
-
-#### Vector-store test connection
-
-Verify your Chroma / Qdrant / Weaviate is reachable and your API key
-works **before** running an export (no data is written; safe to call
-repeatedly):
-
-- **Workspace UI** — *Test connection* button in
-  `Settings → Knowledge base → Vector store`.
-- **REST API** — `POST /api/kb/test-connection` (browser) and
-  `POST /api/v1/kb/test-connection` (bearer).
-- **CLI** — `extracto kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]`.
-- **MCP** — `kb_test_connection` tool.
-
-The probe targets an auth-required endpoint per store (Chroma
-`/collections`, Qdrant `/collections`, Weaviate `/v1/schema`), so a
-401 surfaces here instead of after the embedding step.
-
-#### Chroma 0.5+ (`/api/v2`) support
-
-The adapter now auto-detects whether your Chroma server speaks v1 or
-v2 by probing `/api/v2/heartbeat` first and falling back to
-`/api/v1/heartbeat`. The resolved version is cached for the session.
-
-- Configurable `apiVersion` (`auto` | `v1` | `v2`), `tenant`, and
-  `database` on the adapter (defaults: `default_tenant` /
-  `default_database`).
-- Older Chroma installs continue to work via the v1 fallback path.
-
-#### PowerShell launcher parity
-
-`scripts/extracto.ps1` no longer covers only lifecycle commands. It
-now mirrors the bash CLI:
-
-- New commands: `api-key`, `ocr`, `jobs`, `presets`, `kb`
-  (export + test-connection), `settings`.
-- `install` broadcasts `WM_SETTINGCHANGE` so `extracto` is available
-  in new terminals immediately, with no logout / reboot required.
-- `install` verifies the launcher post-write by running
-  `extracto help`.
-
-#### `VECTOR_STORE_ALLOWED_HOSTS`
-
-Allowlist for outbound vector-store URLs. Defaults to `localhost`,
-`127.0.0.1`, and the Docker host gateways. Extend the list via the env
-var. Cloud-metadata addresses (`169.254.169.254`,
-`metadata.google.internal`, `metadata.azure.com`) are blocked
-unconditionally regardless of the allowlist.
+- Per-page PDF selection: pick which pages to OCR from the UI, REST API, CLI (`--pages 1-5,7`), or MCP (`pages` / `pageNumbers`).
+- Vector-store test connection: probe Chroma / Qdrant / Weaviate before exporting, available in the UI, REST API, CLI, and MCP.
+- Chroma `/api/v2` auto-detection in the adapter (v1 fallback preserved; configurable tenant + database).
+- PowerShell launcher parity with the bash CLI: `api-key`, `ocr`, `jobs`, `presets`, `kb`, `settings`.
+- `VECTOR_STORE_ALLOWED_HOSTS` env var, with cloud-metadata addresses blocked unconditionally.
 
 ### Changed
-
-- File-list filenames now wrap to multiple lines instead of being
-  truncated mid-word.
+- File-list filenames now wrap instead of being truncated mid-word.
+- PowerShell `install` broadcasts `WM_SETTINGCHANGE` so `extracto` resolves in new terminals immediately.
 
 ### Fixed
-
-- Account dropdown in the workspace header shows only **Sign out**.
-  Provider and Knowledge base were duplicate entry points: both still
-  live in `Settings`.
+- Account dropdown shows only `Sign out` (Provider and Knowledge base already live in Settings).
 
 ## [0.3.1] - 2026-05-03
 
