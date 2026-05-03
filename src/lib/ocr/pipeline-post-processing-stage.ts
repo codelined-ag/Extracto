@@ -19,6 +19,7 @@ import {
 } from "@/lib/ocr/pipeline-post-processing";
 import { toJsonValue } from "@/lib/ocr/pipeline-result-builder";
 import { runProviderPostProcessing } from "@/lib/ocr/provider-dispatch";
+import { OcrStopRequestedError } from "@/lib/ocr/providers/shared";
 import type { PostProcessingSettings } from "@/lib/ocr/settings";
 import type { ApiProviderSettings } from "@/lib/api-types";
 import type { OrchestratorState } from "@/lib/ocr/pipeline-page-loop";
@@ -128,6 +129,7 @@ export async function runPostProcessingStage(
       },
     };
   } catch (error) {
+    if (error instanceof OcrStopRequestedError) throw error;
     state.postProcessingMeta = {
       enabled: true,
       applied: false,

@@ -132,6 +132,9 @@ function shouldUseDockerFallbacks(rawEndpoint: string, fallbackHost: string): bo
 }
 
 export function getFallbackOllamaHost(): string {
+  if ((process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase() === "host") {
+    return OLLAMA_DEFAULT_HOST;
+  }
   return resolveOllamaHostEndpoint(
     normalizeHostEndpoint(process.env.OLLAMA_HOST || "", OLLAMA_DEFAULT_HOST),
     OLLAMA_DEFAULT_HOST,

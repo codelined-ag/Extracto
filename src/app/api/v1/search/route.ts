@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 
-const MAX_LIMIT = 50;
+const MAX_LIMIT = 100;
 const SNIPPET_RADIUS = 80;
 
 function buildSnippet(text: string, query: string): string {

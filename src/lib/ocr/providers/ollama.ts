@@ -239,59 +239,47 @@ export async function runOllamaPostProcessing(
  * generate endpoint). Failures are silent — used during job teardown so a
  * bad host shouldn't fail the whole job.
  */
-export async function unloadOllamaModel(hostBases: string[], model: string): Promise<void> {
+async function tryOllamaGenerate(
+  hostBases: string[],
+  body: Record<string, unknown>,
+  timeoutMs: number,
+): Promise<void> {
   for (const host of hostBases) {
     try {
       await fetchWithTimeout(
         `${host}/api/generate`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            prompt: "",
-            stream: false,
-            keep_alive: 0,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
         },
-        10_000,
+        timeoutMs,
       );
       return;
     } catch {
-      // try next host candidate
+      // try next host candidate; failures here are best-effort
     }
   }
 }
 
-/**
- * Best-effort: pre-load a model into VRAM with a 1-token generation so the
- * first user request doesn't pay cold-start cost. Errors swallowed.
- */
+export async function unloadOllamaModel(hostBases: string[], model: string): Promise<void> {
+  await tryOllamaGenerate(
+    hostBases,
+    { model, prompt: "", stream: false, keep_alive: 0 },
+    10_000,
+  );
+}
+
 export async function warmupOllamaModel(hostBases: string[], model: string): Promise<void> {
-  for (const host of hostBases) {
-    try {
-      await fetchWithTimeout(
-        `${host}/api/generate`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            prompt: "Warmup",
-            stream: false,
-            options: { num_predict: 1 },
-            keep_alive: "10m",
-          }),
-        },
-        15_000,
-      );
-      return;
-    } catch {
-      // try next host candidate
-    }
-  }
+  await tryOllamaGenerate(
+    hostBases,
+    {
+      model,
+      prompt: "Warmup",
+      stream: false,
+      options: { num_predict: 1 },
+      keep_alive: "10m",
+    },
+    15_000,
+  );
 }

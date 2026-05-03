@@ -8,7 +8,6 @@ import {
   resolveOllamaHostEndpoint,
 } from "@/lib/ocr/host-normalization";
 import {
-  OLLAMA_DEFAULT_HOST,
   OLLAMA_DISCOVERY_PATHS,
   OLLAMA_NETWORK_HINT,
 } from "@/lib/ocr/provider-config";
@@ -20,11 +19,10 @@ import {
 
 const OLLAMA_MODEL_CACHE_TTL_MS = 60_000;
 
-export function getOllamaDiscoveryFallbackHost(): string {
-  return (process.env.APP_NETWORK_MODE || "bridge").trim().toLowerCase() === "host"
-    ? OLLAMA_DEFAULT_HOST
-    : getFallbackOllamaHost();
-}
+// Re-exported under the historical name used by the api/ocr route. The
+// underlying helper now honors APP_NETWORK_MODE itself, so both call
+// sites resolve identically.
+export const getOllamaDiscoveryFallbackHost = getFallbackOllamaHost;
 
 export interface OllamaModelCatalogResult {
   models: string[];

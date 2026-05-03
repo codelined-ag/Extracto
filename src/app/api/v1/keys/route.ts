@@ -85,12 +85,23 @@ export const POST = withSessionAuth("mutation", "API keys", async (request: Next
       scopes: serializeScopeList(scopes),
       rateLimitPerMinute,
     },
-    select: { id: true, name: true, prefix: true, createdAt: true },
+    select: {
+      id: true,
+      name: true,
+      prefix: true,
+      rateLimitPerMinute: true,
+      totalRequests: true,
+      requestsThisMonth: true,
+      monthlyResetAt: true,
+      lastUsedAt: true,
+      revokedAt: true,
+      createdAt: true,
+    },
   });
 
   return NextResponse.json(
     {
-      key: { ...created, scopes, rateLimitPerMinute, plaintext },
+      key: { ...created, scopes, plaintext },
       warning:
         "Store this key now — it will not be shown again. Use it as Authorization: Bearer <key>.",
     },
