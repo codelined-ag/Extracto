@@ -2663,6 +2663,28 @@ export default function ExtractoPage() {
  </div>
 
  <div className="space-y-1.5">
+ <Label className="text-[11px] uppercase tracking-wider text-muted-foreground/80">{t("Tipo documento","Document type","Type de document","Tipo de documento","Dokumenttyp")}</Label>
+ <Select value={settings.documentPreset} onValueChange={(v) => setSettings((s) => ({ ...s, documentPreset: v as typeof s.documentPreset }))}>
+ <SelectTrigger className="w-full h-9 text-xs"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ <SelectItem value="generic">{t("Generico","Generic","Générique","Genérico","Allgemein")}</SelectItem>
+ <SelectItem value="academic">{t("Articolo accademico","Academic paper","Article scientifique","Artículo académico","Wissenschaftlicher Artikel")}</SelectItem>
+ <SelectItem value="invoice">{t("Fattura / ricevuta","Invoice / receipt","Facture / reçu","Factura / recibo","Rechnung / Beleg")}</SelectItem>
+ <SelectItem value="contract">{t("Contratto","Contract","Contrat","Contrato","Vertrag")}</SelectItem>
+ <SelectItem value="form">{t("Modulo","Form","Formulaire","Formulario","Formular")}</SelectItem>
+ </SelectContent>
+ </Select>
+ </div>
+
+ <div className="flex items-center justify-between rounded-xl surface-soft px-3.5 py-2.5">
+ <div className="space-y-0.5">
+ <Label className="text-sm font-medium">{t("Usa text-layer del PDF","Prefer PDF text layer","Utiliser le calque texte du PDF","Usar capa de texto del PDF","PDF-Textebene bevorzugen")}</Label>
+ <p className="text-[11px] text-muted-foreground">{t("Per i PDF nativi salta il modello di visione e usa direttamente il testo embedded (più veloce, gratis, senza errori OCR).","For born-digital PDFs, skip the vision model and use the embedded text directly (faster, free, no OCR errors).","Pour les PDF nativement digitaux, contourne le modèle de vision (plus rapide, gratuit, sans erreurs OCR).","Para PDF nativos, omite el modelo de visión y usa el texto embebido directamente (más rápido, gratis, sin errores OCR).","Bei born-digital PDFs überspringt das Vision-Modell und nutzt direkt die eingebettete Textebene (schneller, kostenfrei, ohne OCR-Fehler).")}</p>
+ </div>
+ <Switch checked={settings.preferTextLayer} onCheckedChange={(v) => setSettings((s) => ({ ...s, preferTextLayer: v }))} />
+ </div>
+
+ <div className="space-y-1.5">
  <Label className="text-[11px] uppercase tracking-wider text-muted-foreground/80">{t("Istruzioni","Instructions","Instructions","Instrucciones","Anweisungen")}</Label>
  <Textarea
  placeholder={t("Esempio: ignora intestazioni e piè di pagina.","Example: ignore headers and footers.","Exemple : ignore en-têtes et pieds de page.","Ejemplo: ignora encabezados y pies.","Beispiel: Kopf- und Fußzeilen ignorieren.")}
