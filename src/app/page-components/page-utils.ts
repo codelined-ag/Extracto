@@ -8,6 +8,37 @@ import {
   extractMarkdownFromJsonLikeText,
 } from "@/lib/ocr/text-extract";
 
+export async function collectDroppedFiles(items: DataTransferItemList): Promise<File[]> {
+  if (typeof items[0]?.webkitGetAsEntry !== "function") return [];
+  const collected: File[] = [];
+  const entries: FileSystemEntry[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const entry = items[i].webkitGetAsEntry();
+    if (entry) entries.push(entry);
+  }
+  const walk = async (entry: FileSystemEntry): Promise<void> => {
+    if (entry.isFile) {
+      const file = await new Promise<File | null>((resolve) =>
+        (entry as FileSystemFileEntry).file(resolve, () => resolve(null)),
+      );
+      if (file) collected.push(file);
+      return;
+    }
+    if (entry.isDirectory) {
+      const reader = (entry as FileSystemDirectoryEntry).createReader();
+      const readBatch = (): Promise<FileSystemEntry[]> =>
+        new Promise((resolve) => reader.readEntries(resolve, () => resolve([])));
+      let batch = await readBatch();
+      while (batch.length > 0) {
+        await Promise.all(batch.map(walk));
+        batch = await readBatch();
+      }
+    }
+  };
+  await Promise.all(entries.map(walk));
+  return collected;
+}
+
 export const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return "0 Bytes";
   const k = 1024;

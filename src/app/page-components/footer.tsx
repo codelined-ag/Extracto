@@ -6,7 +6,11 @@ import { GithubIcon } from "@/components/ui/github";
 
 import type { Translator } from "@/app/page-components/types";
 
-export function Footer({ t }: { t: Translator }) {
+export interface FooterProps {
+  t: Translator;
+}
+
+export function Footer({ t }: FooterProps) {
   return (
     <motion.footer
       initial={{ y: 20, opacity: 0 }}

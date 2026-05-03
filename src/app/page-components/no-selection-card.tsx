@@ -7,7 +7,11 @@ import { SparklesIcon } from "@/components/ui/sparkles";
 
 import type { Translator } from "@/app/page-components/types";
 
-export function NoSelectionCard({ t }: { t: Translator }) {
+export interface NoSelectionCardProps {
+  t: Translator;
+}
+
+export function NoSelectionCard({ t }: NoSelectionCardProps) {
   return (
     <Card className="flex-1 flex items-center justify-center">
       <CardContent className="text-center py-10">
