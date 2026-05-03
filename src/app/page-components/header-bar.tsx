@@ -1,7 +1,6 @@
 "use client";
 
 import { motion } from "motion/react";
-import { ScanLine } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +15,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { DatabaseBackupIcon } from "@/components/ui/database-backup";
 import { LogoutIcon } from "@/components/ui/logout";
 import { SettingsIcon } from "@/components/ui/settings";
-import { SparklesIcon } from "@/components/ui/sparkles";
 import { UserIcon } from "@/components/ui/user";
 
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -44,12 +42,6 @@ export function HeaderBar({ t, onOpenSettings, onSignOut, isSigningOut }: Header
           whileHover={{ scale: 1.015 }}
           transition={{ type: "spring", stiffness: 400, damping: 24 }}
         >
-          <div className="relative grid place-items-center size-9 text-primary transition-transform duration-200 group-hover:rotate-[-4deg]">
-            <ScanLine className="h-5 w-5" />
-            <div className="absolute -top-1 -right-1 text-accent-foreground">
-              <SparklesIcon size={12} className="inline-flex items-center justify-center" />
-            </div>
-          </div>
           <div className="flex items-baseline gap-0.5 overflow-visible">
             <span className="wordmark font-display text-2xl leading-tight inline-block pr-1.5 overflow-visible">
               Extracto

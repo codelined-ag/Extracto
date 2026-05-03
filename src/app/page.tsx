@@ -81,7 +81,6 @@ import {
 import {
   HintInfo,
   SettingsSection,
-  ToggleRow,
 } from "@/app/page-components/settings-primitives";
 import { FileListCard } from "@/app/page-components/file-list-card";
 import { Footer } from "@/app/page-components/footer";
@@ -2410,27 +2409,6 @@ export default function ExtractoPage() {
  ))}
  </SelectContent>
  </Select>
- </div>
-
- <div className="space-y-2">
- <ToggleRow
- label={t("Tabelle","Tables","Tableaux","Tablas","Tabellen")}
- hint={t("Rileva tabelle e le rende come Markdown.","Detect tables and render them as Markdown.")}
- checked={settings.tableDetection}
- onCheckedChange={(v) => setSettings((s) => ({ ...s, tableDetection: v }))}
- />
- <ToggleRow
- label={t("Scrittura a mano","Handwriting","Écriture","Manuscrita","Handschrift")}
- hint={t("Tenta di leggere testo manoscritto.","Attempt to read handwritten text.")}
- checked={settings.handwritingRecognition}
- onCheckedChange={(v) => setSettings((s) => ({ ...s, handwritingRecognition: v }))}
- />
- <ToggleRow
- label={t("Mantieni formattazione","Preserve formatting","Mise en forme","Formato","Formatierung")}
- hint={t("Conserva titoli, elenchi, spaziatura.","Preserve headings, lists, spacing.")}
- checked={settings.preserveFormatting}
- onCheckedChange={(v) => setSettings((s) => ({ ...s, preserveFormatting: v }))}
- />
  </div>
 
  <div className="space-y-1.5">
