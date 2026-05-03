@@ -25,7 +25,9 @@ import { OcrStopRequestedError } from "@/lib/ocr/providers/shared";
 import type { ProviderKind } from "@/lib/api-types";
 import type { ApiProviderSettings } from "@/lib/api-types";
 import type { AnchorPage } from "@/lib/ocr/pdf-anchoring";
+import { assessTextLayerQuality } from "@/lib/ocr/pdf-anchoring";
 import { maybeApplyAnchoring } from "@/lib/ocr/anchoring-prompt";
+import { extractMarkdownFromTextLayer } from "@/lib/ocr/text-layer-extraction";
 
 export interface OrchestratorState {
   pageOutputs: ProcessedPageOutput[];
@@ -51,6 +53,7 @@ export interface PageLoopDeps {
   inputPreviews: string[];
   pageNumbers?: number[];
   pageAnchors?: AnchorPage[];
+  preferTextLayer?: boolean;
   startIndex: number;
   snapshot: (snap: ProgressSnapshotInput) => OcrProgressMetadata;
   ocrPct: () => number;
@@ -79,13 +82,22 @@ export async function runOcrPages(
     const pagePreview = inputPreviews[index];
     const pageNumber = deps.pageNumbers?.[index] ?? index + 1;
     const pageStartMs = Date.now();
-    const anchored = maybeApplyAnchoring(deps.prompt, deps.pageAnchors?.[index]);
+    const anchor = deps.pageAnchors?.[index];
+    const quality = anchor ? assessTextLayerQuality(anchor) : null;
+    const useFastPath = Boolean(
+      deps.preferTextLayer && anchor && quality?.isHighConfidence,
+    );
+    const anchored = useFastPath
+      ? { prompt: deps.prompt, usedAnchoring: false }
+      : maybeApplyAnchoring(deps.prompt, anchor);
     const effectivePrompt = anchored.prompt;
 
     state.progressEvents = appendProgressEvent(
       state.progressEvents,
       "ocr",
-      `Running OCR on page ${pageNumber}/${inputPreviews.length}${anchored.usedAnchoring ? " (with text-layer anchoring)" : ""}`,
+      useFastPath
+        ? `Running text-layer fast-path on page ${pageNumber}/${inputPreviews.length} (no VLM call)`
+        : `Running OCR on page ${pageNumber}/${inputPreviews.length}${anchored.usedAnchoring ? " (with text-layer anchoring)" : ""}`,
     );
 
     let pageText = "";
@@ -94,16 +106,33 @@ export async function runOcrPages(
     const pageAbortController = new AbortController();
     registerOcrJobAbortController(deps.jobId, pageAbortController);
     try {
-      ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runProviderOcr(
-        deps.provider,
-        deps.settings,
-        deps.ocrModel,
-        effectivePrompt,
-        pagePreview,
-        pageAbortController.signal,
-      ));
-      if (anchored.usedAnchoring) {
-        pageMetadata = { ...pageMetadata, anchored: true };
+      if (useFastPath && anchor) {
+        const extracted = extractMarkdownFromTextLayer(anchor);
+        pageText = extracted.markdown;
+        pageStructured = {
+          markdown: extracted.markdown,
+          source: "text-layer",
+          columnCount: extracted.columnCount,
+          blockCount: extracted.blockCount,
+        };
+        pageMetadata = {
+          source: "text-layer",
+          columnCount: extracted.columnCount,
+          blockCount: extracted.blockCount,
+          characterCount: anchor.characterCount,
+        };
+      } else {
+        ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runProviderOcr(
+          deps.provider,
+          deps.settings,
+          deps.ocrModel,
+          effectivePrompt,
+          pagePreview,
+          pageAbortController.signal,
+        ));
+        if (anchored.usedAnchoring) {
+          pageMetadata = { ...pageMetadata, anchored: true };
+        }
       }
     } catch (error) {
       if (error instanceof OcrStopRequestedError || (await isOcrJobStopRequested(deps.jobId))) {

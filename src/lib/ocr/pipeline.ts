@@ -238,6 +238,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       inputPreviews: input.inputPreviews,
       pageNumbers: input.pageNumbers,
       pageAnchors: input.pageAnchors,
+      preferTextLayer: input.settingsPayload.preferTextLayer,
       startIndex,
       snapshot: snapshotMetadata,
       ocrPct,

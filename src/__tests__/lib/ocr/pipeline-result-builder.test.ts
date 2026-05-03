@@ -16,6 +16,8 @@ const settings = {
   preserveFormatting: true,
   customPrompt: "",
   quality: 80,
+  preferTextLayer: true,
+  documentPreset: "generic",
 } as const;
 
 const page: ProcessedPageOutput = {

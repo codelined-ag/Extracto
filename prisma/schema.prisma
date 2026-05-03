@@ -97,6 +97,8 @@ model OcrSetting {
   preserveFormatting     Boolean      @default(true)
   customPrompt           String       @default("")
   quality                Int          @default(80)
+  preferTextLayer        Boolean      @default(true)
+  documentPreset         String       @default("generic")
   jobs                   OcrJob[]
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt

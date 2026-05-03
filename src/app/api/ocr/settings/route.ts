@@ -10,13 +10,21 @@ import {
   normalizeAdvancedSettings,
 } from "@/lib/ocr/settings";
 
-const mapSettingsResponse = (setting: AdvancedSettings) => ({
+const mapSettingsResponse = (setting: AdvancedSettings | { language: string; tableDetection: boolean; handwritingRecognition: boolean; preserveFormatting: boolean; customPrompt: string; quality: number; preferTextLayer?: boolean; documentPreset?: string | null }) => ({
   language: setting.language,
   tableDetection: setting.tableDetection,
   handwritingRecognition: setting.handwritingRecognition,
   preserveFormatting: setting.preserveFormatting,
   customPrompt: setting.customPrompt,
   quality: setting.quality,
+  preferTextLayer:
+    typeof (setting as AdvancedSettings).preferTextLayer === "boolean"
+      ? (setting as AdvancedSettings).preferTextLayer
+      : DEFAULT_SETTINGS.preferTextLayer,
+  documentPreset:
+    typeof (setting as AdvancedSettings).documentPreset === "string"
+      ? (setting as AdvancedSettings).documentPreset
+      : DEFAULT_SETTINGS.documentPreset,
 });
 
 export const GET = withAuth("settings:read", async (_request: NextRequest, { auth }) => {

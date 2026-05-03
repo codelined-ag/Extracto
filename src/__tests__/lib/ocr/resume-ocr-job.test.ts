@@ -43,6 +43,8 @@ const baseInput = {
     preserveFormatting: true,
     customPrompt: "",
     quality: 80,
+    preferTextLayer: true,
+    documentPreset: "generic" as const,
   },
   postProcessingPayload: {
     enabled: false,

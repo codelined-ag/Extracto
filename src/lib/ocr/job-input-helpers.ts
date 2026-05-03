@@ -2,6 +2,7 @@ import type {
   AdvancedSettings,
   PostProcessingSettings,
 } from "@/lib/ocr/settings";
+import { applyDocumentPresetToPrompt } from "@/lib/ocr/document-presets";
 
 const MAX_POST_PROCESS_INSTRUCTION_LENGTH = 6000;
 const MAX_STORED_PREVIEW_LENGTH = 1_500_000;
@@ -46,7 +47,7 @@ export function buildPrompt(settings: AdvancedSettings): string {
     ? `\n\nAdditional instructions from user:\n${settings.customPrompt}`
     : "";
 
-  return `You are an OCR (Optical Character Recognition) system. Extract all text from this document image.
+  const base = `You are an OCR (Optical Character Recognition) system. Extract all text from this document image.
 
 Instructions:
 1. Extract ALL text visible in the image
@@ -69,4 +70,5 @@ Rules:
 - "markdown" is required and must contain the extracted OCR content.
 - "fields" is optional but if present must be a JSON object.
 - Do not wrap JSON in markdown code fences.`;
+  return applyDocumentPresetToPrompt(base, settings.documentPreset);
 }

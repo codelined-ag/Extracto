@@ -15,6 +15,8 @@ function validSettings(overrides: Partial<AdvancedSettings> = {}): AdvancedSetti
     preserveFormatting: false,
     customPrompt: "Extract all text",
     quality: 90,
+    preferTextLayer: true,
+    documentPreset: "generic",
     ...overrides,
   };
 }
@@ -292,6 +294,8 @@ describe("DEFAULT_SETTINGS", () => {
       preserveFormatting: true,
       customPrompt: "",
       quality: 80,
+      preferTextLayer: true,
+      documentPreset: "generic",
     });
   });
 });

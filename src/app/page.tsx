@@ -510,6 +510,8 @@ export default function ExtractoPage() {
  preserveFormatting: true,
  customPrompt:"",
  quality: 80,
+ preferTextLayer: true,
+ documentPreset: "generic",
  });
  const [postProcessing, setPostProcessing] = React.useState<PostProcessingSettings>({
  enabled: false,
