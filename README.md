@@ -4,11 +4,13 @@
 
 <p align="center">
   <strong>Self-hosted OCR for documents.</strong><br/>
-  Pick your model, drop in a PDF or photo, get clean text out.
+  Pick your model, drop in a PDF or photo, get clean text out.<br/>
+  Use it from a browser, a script, or an LLM agent — same backend, same data, your hardware.
 </p>
 
 <p align="center">
   <a href="#install-in-2-minutes">Install</a> ·
+  <a href="#who-its-for">Who it's for</a> ·
   <a href="#what-it-does">What it does</a> ·
   <a href="#run-it-as-an-api">API mode</a> ·
   <a href="#use-it-from-an-agent">Agents &amp; CLI</a> ·
@@ -48,6 +50,52 @@ What's actually in the box:
 - **Five UI languages:** English (default), Italian, French, Spanish, German.
 
 The whole stack runs in a single Docker container. SQLite for the database, Bun for the runtime, Next.js 16 for the app.
+
+---
+
+## Who it's for
+
+Three audiences, one backend. Everything below shares the same jobs, history, and provider settings — pick the surface that fits.
+
+### Regular people who want their own OCR
+
+You have a stack of PDFs, scans, photos of receipts, or a binder of handwritten notes you'd like as searchable text. You don't want to upload private documents to a third-party SaaS, and you don't want to write code.
+
+- **Drag-and-drop UI.** PDFs, photos, multi-page scans. Watch progress page-by-page, copy or download the result, browse history, search past runs.
+- **Runs entirely on your machine** when paired with [Ollama](https://ollama.com) — no cloud, no key, no quota. Your documents never leave your network.
+- **Or BYO key** for Mistral OCR, OpenRouter, or any OpenAI-compatible vision model when you want better accuracy than a 7B local model can give.
+- **Works on a laptop, a NAS, a Raspberry Pi 5, or a home server.** One Docker container, ~400 MB image, multi-arch.
+- **Common uses:** digitize receipts and invoices for personal accounting, archive paper books and family records, transcribe handwritten notes, batch-OCR a folder of bank statements, make old PDFs full-text-searchable.
+
+**Start here:** [Install in 2 minutes](#install-in-2-minutes), then [How to use it (the UI)](#how-to-use-it-the-ui).
+
+### Businesses that need an OCR API on their own infrastructure
+
+You're building a document-intake pipeline, a back-office tool, or a regulated workflow where customer documents can't leave your network. You want a real API, not a UI.
+
+- **Stable bearer-auth REST API** under `/api/v1/*` with semver guarantees. OpenAPI 3.1 spec, importable into Bruno / Postman / any client generator.
+- **Drop-in OpenAI replacement** at `/api/v1/openai/chat/completions` — point an existing OpenAI SDK at Extracto's URL and your vision-OCR code keeps working.
+- **Per-user API keys** with scopes (`ocr:submit`, `ocr:read`, `kb:write`, etc.), per-key rate limits, and a session-only path for key minting so a leaked key has bounded blast radius.
+- **Webhooks** with HMAC-SHA256 signatures + DNS-rebinding protection (private/loopback/CGNAT addresses rejected, re-resolved at delivery).
+- **Watched-folder ingestion** for fire-and-forget batch processing — drop files into a host-mounted directory and they get OCR'd at low priority while interactive jobs cut ahead.
+- **Knowledge-base export** to Chroma, Qdrant, or Weaviate, with five chunking strategies (`fixed`, `sentence`, `paragraph`, `hierarchical`, `semantic`) wired to your own embedding provider.
+- **Operations baked in:** Prometheus `/api/v1/metrics`, configurable retention, optional S3/MinIO blob offload, structured logs, healthcheck endpoint.
+- **Common uses:** invoice and receipt intake at scale, KYC/identity-document workflows, contract and PDF library ingestion for RAG, regulated industries (healthcare, legal, finance) that need on-prem OCR with audit trails.
+
+**Start here:** [Run it as an API](#run-it-as-an-api), then [`openapi.yaml`](./openapi.yaml). Production checklist: set `AUTH_SECRET` explicitly, enable `COOKIE_SECURE=true` behind HTTPS, set `ALLOW_SIGNUP=0`, mint scoped keys, configure `*_ALLOWED_HOSTS` for any user-submitted endpoints, set `METRICS_TOKEN`.
+
+### LLM agents (Claude Desktop, Cursor, Codex, custom agents)
+
+You're writing an agent that needs to read documents — for research, for invoice processing, for "what does this PDF say" inside a chat — and you want a tool, not an API client.
+
+- **First-class MCP server** at `scripts/mcp-server.ts` (stdio transport). Tools exposed: `ocr_submit`, `ocr_get`, `jobs_list`, `job_stop`, `kb_search`, `kb_export`, `presets_list`. Drop the JSON snippet into Claude Desktop's config and you're done.
+- **Typed CLI** at `scripts/extracto.sh` (Bash) and `scripts/extracto.ps1` (PowerShell). Same auth, same surface, scriptable from any shell tool an agent can call.
+- **Pre-written [`SKILL.md`](./SKILL.md)** describing when to invoke OCR vs. KB search vs. job inspection — drop it into your agent's skills directory or load it into context so the agent picks the right tool without trial-and-error.
+- **Five chunking strategies** for KB export, including a `semantic` mode that embeds every sentence and splits on topic shifts, and a `hierarchical` mode that preserves markdown heading breadcrumbs in chunk metadata for filtered retrieval.
+- **OpenAI-Chat-Completions adapter** for agents that already speak that wire format and just want vision-OCR in the same idiom.
+- **Common uses:** "read this PDF I just dropped in chat", multi-document research agents over a private corpus, autonomous invoice-processing pipelines, RAG ingestion for chat assistants, browser-agent flows that need to OCR a screenshot mid-task.
+
+**Start here:** [Use it from an agent](#use-it-from-an-agent), the [MCP setup walkthrough](./examples/mcp.md), and the [agent skill file](./SKILL.md).
 
 ---
 
@@ -130,7 +178,7 @@ Multi-arch (`linux/amd64` + `linux/arm64`). Pin a release with `:v0.3.0` instead
 
 ## How to use it (the UI)
 
-Once you're signed in:
+If you just want to OCR things from a browser without writing any code, this is the path. Once you're signed in:
 
 1. **Configure a provider** (top-right gear → Provider). Pick Ollama / Mistral / OpenRouter / OpenAI-compatible, paste an endpoint and key. Hit Save.
 2. **Pick a model** (gear → Model). The picker is searchable and refreshes from the live provider catalog. For Ollama, it lists every model you've pulled. For OpenRouter, it lists every model in the catalog (including vision-capable ones).
@@ -145,7 +193,7 @@ Once you're signed in:
 
 ## Run it as an API
 
-Extracto is a real OCR service, not just a UI. The same backend powers the browser and a stable bearer-auth HTTP API under `/api/v1/*`.
+Extracto is a real OCR service, not just a UI. The same backend powers the browser and a stable bearer-auth HTTP API under `/api/v1/*`. Use it as a self-hosted replacement for cloud OCR services, as the OCR step in a document-processing pipeline, or as the backend for an internal tool that needs to keep documents inside your network.
 
 ### 1. Mint an API key
 
@@ -266,7 +314,7 @@ The full v1 contract is also published as an OpenAPI spec at [`openapi.yaml`](./
 
 ## Use it from an agent
 
-Extracto ships with two affordances designed for LLM agents and scripted clients.
+Extracto ships three affordances designed for LLM agents and scripted clients: a typed CLI, an MCP server (stdio), and a Claude-skill file describing when to use which tool. All three speak the same v1 API and respect the same scoped API keys, so the same Bearer token lets a Claude Desktop session, a Cursor agent, and a cron-driven Bash script all hit the same backend.
 
 ### The `extracto` CLI
 
@@ -523,7 +571,7 @@ bun install            # or npm install
 bun run dev            # next dev on :3000
 
 bun run build          # production build (output: standalone)
-npm test               # 917 tests, vitest
+npm test               # vitest
 npm run lint           # ESLint with no-redeclare / no-unreachable / rules-of-hooks
 ```
 
