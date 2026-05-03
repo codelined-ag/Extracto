@@ -7,12 +7,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-import { DatabaseBackupIcon } from "@/components/ui/database-backup";
 import { LogoutIcon } from "@/components/ui/logout";
 import { SettingsIcon } from "@/components/ui/settings";
 import { UserIcon } from "@/components/ui/user";
@@ -108,23 +106,6 @@ export function HeaderBar({ t, onOpenSettings, onSignOut, isSigningOut }: Header
               <TooltipContent>{t("Account", "Account", "Compte", "Cuenta", "Konto")}</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" className="min-w-[12rem]">
-              <DropdownMenuItem onSelect={() => onOpenSettings("provider")}>
-                <SettingsIcon size={16} className="inline-flex" />
-                <span>{t("Provider", "Provider", "Fournisseur", "Proveedor", "Anbieter")}</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onOpenSettings("kb")}>
-                <DatabaseBackupIcon size={16} className="inline-flex" />
-                <span>
-                  {t(
-                    "Knowledge base",
-                    "Knowledge base",
-                    "Base de connaissances",
-                    "Base de conocimiento",
-                    "Wissensdatenbank",
-                  )}
-                </span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={onSignOut} disabled={isSigningOut}>
                 <LogoutIcon size={16} className="inline-flex" />
                 <span>{t("Esci", "Sign out", "Se déconnecter", "Cerrar sesión", "Abmelden")}</span>
