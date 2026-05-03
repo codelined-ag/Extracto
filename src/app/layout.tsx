@@ -41,16 +41,12 @@ export const metadata: Metadata = {
     telephone: false,
   },
   icons: {
-    icon: "/extracto-favicon.svg",
-    shortcut: "/extracto-favicon.svg",
-    apple: "/extracto-icon.svg",
-    other: [
-      {
-        rel: "mask-icon",
-        url: "/extracto-maskable.svg",
-        color: "#1d1813",
-      },
+    icon: [
+      { url: "/favicon.ico", sizes: "any", rel: "icon" },
+      { url: "/extracto-favicon.svg", type: "image/svg+xml", rel: "icon" },
     ],
+    shortcut: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
   },
 };
 

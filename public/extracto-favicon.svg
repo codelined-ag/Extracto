@@ -1,14 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Extracto favicon">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Extracto">
   <defs>
     <linearGradient id="bgf" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#022c22" />
-      <stop offset="100%" stop-color="#115e59" />
+      <stop offset="0%" stop-color="#e87c43" />
+      <stop offset="100%" stop-color="#c75a23" />
     </linearGradient>
   </defs>
-  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#bgf)" />
-  <circle cx="22" cy="22" r="8" fill="none" stroke="#99f6e4" stroke-width="3.2" />
-  <path d="M28.5 28.5L38 38" stroke="#99f6e4" stroke-width="3.2" stroke-linecap="round" />
-  <rect x="18" y="38" width="28" height="10" rx="3" fill="#ecfeff" />
-  <path d="M22 43h20" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round" />
+  <rect width="64" height="64" rx="14" fill="url(#bgf)" />
+  <rect x="14" y="12" width="36" height="40" rx="4" fill="#fdf3e8" />
+  <rect x="20" y="21" width="24" height="3" rx="1.5" fill="#3a2418" />
+  <rect x="20" y="28" width="20" height="3" rx="1.5" fill="#5a3a26" opacity="0.85" />
+  <rect x="20" y="35" width="16" height="3" rx="1.5" fill="#7d5740" opacity="0.65" />
+  <circle cx="47" cy="49" r="5" fill="#c75a23" />
 </svg>
-

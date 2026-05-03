@@ -43,7 +43,10 @@ describe("middleware PUBLIC_PATHS allowlist", () => {
     "/extracto-favicon.svg",
     "/extracto-icon.svg",
     "/extracto-maskable.svg",
-    "/logo.svg",
+    "/favicon.ico",
+    "/icon-192.png",
+    "/icon-512.png",
+    "/apple-touch-icon.png",
     "/robots.txt",
     "/_next/anything",
   ])("lets %s through with no auth", async (path) => {
