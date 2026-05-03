@@ -1,0 +1,72 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":semanticCommitTypeAll(deps)",
+    ":dependencyDashboard",
+    ":timezone(Europe/Rome)",
+    ":prHourlyLimit2",
+    ":prConcurrentLimit10"
+  ],
+  "schedule": ["before 6am on monday"],
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"]
+  },
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["patch", "pin", "digest"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    {
+      "matchUpdateTypes": ["minor"],
+      "matchDepTypes": ["devDependencies"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "groupName": "next ecosystem",
+      "matchPackageNames": ["next", "eslint-config-next", "@next/**"]
+    },
+    {
+      "groupName": "prisma",
+      "matchPackageNames": ["prisma", "@prisma/**"]
+    },
+    {
+      "groupName": "react",
+      "matchPackageNames": ["react", "react-dom", "@types/react", "@types/react-dom"]
+    },
+    {
+      "groupName": "vitest",
+      "matchPackageNames": ["vitest", "@vitest/**"]
+    },
+    {
+      "groupName": "eslint",
+      "matchPackageNames": ["eslint", "@typescript-eslint/**", "eslint-plugin-**", "eslint-config-**"]
+    },
+    {
+      "groupName": "github actions",
+      "matchManagers": ["github-actions"]
+    },
+    {
+      "groupName": "docker base image",
+      "matchManagers": ["dockerfile", "docker-compose"]
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  },
+  "ignorePaths": [
+    "examples/**",
+    "**/node_modules/**"
+  ]
+}
