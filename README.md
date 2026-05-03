@@ -28,18 +28,6 @@
   </picture>
 </p>
 
-<details>
-<summary>More screenshots</summary>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/auth-dark.png">
-    <img src="docs/screenshots/auth-light.png" alt="Sign-in" width="100%">
-  </picture>
-</p>
-
-</details>
-
 ---
 
 ## What it does
