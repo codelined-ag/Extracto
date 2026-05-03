@@ -20,7 +20,21 @@ hardening + restructuring pass.
   that publishes the multi-arch image and a GitHub release on tag.
 - MCP (Model Context Protocol) server at `scripts/mcp-server.ts` that
   exposes the v1 OCR API as agent tools (`ocr_submit`, `ocr_get`,
-  `jobs_list`, `kb_search`).
+  `jobs_list`, `job_stop`, `kb_search`, `kb_export`, `presets_list`).
+  Documented config snippets for Claude Desktop, Cursor, Codex,
+  OpenClaw, and Hermes Agent.
+- Hierarchical chunking strategy for KB export (markdown-heading
+  aware; each chunk inherits its `headingPath` breadcrumb and
+  `headingLevel` in metadata). Configurable `maxHeadingDepth`.
+- Semantic chunking strategy for KB export (embedding-similarity
+  boundary detection; embeds every sentence and splits where
+  consecutive cosine distance exceeds the configured
+  `breakpointPercentile`, default 95). Surfaces in UI, CLI, MCP,
+  OpenAPI, and the persisted KB defaults.
+- On-brand favicon set: italic Fraunces "E." (the wordmark cropped
+  to its first letter and signature italic period) on the warm-orange
+  chip. SVG sources, multi-size `favicon.ico`, 192/512 PNGs,
+  180×180 apple-touch-icon, PWA maskable.
 - Hand-written `openapi.yaml` covering the full `/api/v1/*` surface,
   importable into Bruno, Postman, Insomnia, etc.
 - `examples/` directory with runnable integration recipes: Python
@@ -62,6 +76,11 @@ hardening + restructuring pass.
 - `runOllamaPostProcessing.outputFormat` is required (matches siblings).
 
 ### Fixed
+- **Correctness**: history dialog `useEffect` depended on the entire
+  `history` object literal (re-created on every parent render) so
+  `loadDetail` was firing on a tight loop, starving the job-list pane
+  of paint cycles. Tightened the deps to the specific stable refs
+  the effect actually reads.
 - **Security**: `/api/kb/pull-model`, `/api/kb/embedding-models`, and
   `/api/v1/export/kb` now wrap user-supplied endpoints in
   `enforceProviderEndpointPolicy` — closes an SSRF-style bypass on
@@ -98,15 +117,14 @@ hardening + restructuring pass.
   mixing with `return NextResponse.json({error}, {status})`.
 
 ### Tests
-- Test suite grew from 1043 to 1117 (+74). New coverage: `middleware`
-  (PUBLIC_PATHS allowlist + bearer gate), `ollama-dispatch` (host
-  fallback + model cache), `/api/jobs` (list + detail + control),
-  `/api/auth` (login + signup + session + signout), `/api/v1/keys`,
-  `/api/v1/metrics`, `/api/v1/presets`.
-
-### Quality
-- `desloppify` strict score: **82.3 / 100**. See `scorecard.png` for
-  the full per-dimension breakdown.
+- Test suite grew to 1189 (+146 over the prior pre-release baseline).
+  New coverage: `middleware` (PUBLIC_PATHS allowlist + bearer gate),
+  `ollama-dispatch` (host fallback + model cache), `/api/jobs`,
+  `/api/auth`, `/api/v1/keys`, `/api/v1/metrics`, `/api/v1/presets`,
+  `/api/v1/webhooks`, `/api/v1/export/kb`, `resumeOcrJob` branches,
+  `chunkHierarchical` (heading semantics + skipped levels + depth
+  folding), `chunkSemantic` (percentile boundaries + dimension
+  validation + degenerate inputs).
 
 [Unreleased]: https://github.com/codelined-ag/extracto/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/codelined-ag/extracto/releases/tag/v0.3.0
