@@ -54,6 +54,7 @@ export interface PageLoopDeps {
   pageNumbers?: number[];
   pageAnchors?: AnchorPage[];
   preferTextLayer?: boolean;
+  documentPresetExpectsJson?: boolean;
   startIndex: number;
   snapshot: (snap: ProgressSnapshotInput) => OcrProgressMetadata;
   ocrPct: () => number;
@@ -85,11 +86,17 @@ export async function runOcrPages(
     const anchor = deps.pageAnchors?.[index];
     const quality = anchor ? assessTextLayerQuality(anchor) : null;
     const useFastPath = Boolean(
-      deps.preferTextLayer && anchor && quality?.isHighConfidence,
+      deps.preferTextLayer &&
+        anchor &&
+        quality?.isHighConfidence &&
+        !deps.documentPresetExpectsJson,
     );
+    const anchorIsTrustworthy = Boolean(quality && !quality.isLikelyJunkOcr && !quality.isLikelyImageOnly);
     const anchored = useFastPath
       ? { prompt: deps.prompt, usedAnchoring: false }
-      : maybeApplyAnchoring(deps.prompt, anchor);
+      : maybeApplyAnchoring(deps.prompt, anchorIsTrustworthy ? anchor : undefined, {
+          skipForJsonPreset: deps.documentPresetExpectsJson,
+        });
     const effectivePrompt = anchored.prompt;
 
     state.progressEvents = appendProgressEvent(

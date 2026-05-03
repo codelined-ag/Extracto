@@ -64,20 +64,33 @@ function detectColumns(blocks: AnchorTextBlock[], pageWidth: number): ColumnAssi
     .map((c, i) => ({ ...c, columnIndex: i }));
 }
 
-function median(values: number[]): number {
+function modeRounded(values: number[]): number {
   if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  const counts = new Map<number, number>();
+  for (const v of values) {
+    const key = Math.round(v);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  let best = 0;
+  let bestCount = 0;
+  for (const [k, c] of counts) {
+    if (c > bestCount) {
+      best = k;
+      bestCount = c;
+    }
+  }
+  return best;
 }
 
 function detectHeadingLevels(blocks: AnchorTextBlock[]): number[] {
   const fontSizes = blocks.map((b) => b.fontSize ?? 0).filter((s) => s > 0);
   if (fontSizes.length < 3) return blocks.map(() => 0);
-  const baseSize = median(fontSizes);
+  const baseSize = modeRounded(fontSizes) || 12;
   return blocks.map((b) => {
     const fs = b.fontSize ?? baseSize;
     const ratio = fs / baseSize;
+    const looksLikeHeading = b.text.length < 120 && b.text.length > 0;
+    if (!looksLikeHeading) return 0;
     if (ratio >= 1.6) return 1;
     if (ratio >= 1.35) return 2;
     if (ratio >= 1.18) return 3;

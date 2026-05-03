@@ -4,13 +4,14 @@ import { parseJsonBody } from "@/lib/api-error";
 import { withAuth, withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import {
-  AdvancedSettings,
   DEFAULT_SETTINGS,
   OCR_SETTINGS_KEY,
   normalizeAdvancedSettings,
 } from "@/lib/ocr/settings";
 
-const mapSettingsResponse = (setting: AdvancedSettings | { language: string; tableDetection: boolean; handwritingRecognition: boolean; preserveFormatting: boolean; customPrompt: string; quality: number; preferTextLayer?: boolean; documentPreset?: string | null }) => ({
+const mapSettingsResponse = (
+  setting: { language: string; tableDetection: boolean; handwritingRecognition: boolean; preserveFormatting: boolean; customPrompt: string; quality: number; preferTextLayer?: boolean | null; documentPreset?: string | null },
+) => ({
   language: setting.language,
   tableDetection: setting.tableDetection,
   handwritingRecognition: setting.handwritingRecognition,
@@ -18,13 +19,9 @@ const mapSettingsResponse = (setting: AdvancedSettings | { language: string; tab
   customPrompt: setting.customPrompt,
   quality: setting.quality,
   preferTextLayer:
-    typeof (setting as AdvancedSettings).preferTextLayer === "boolean"
-      ? (setting as AdvancedSettings).preferTextLayer
-      : DEFAULT_SETTINGS.preferTextLayer,
+    typeof setting.preferTextLayer === "boolean" ? setting.preferTextLayer : DEFAULT_SETTINGS.preferTextLayer,
   documentPreset:
-    typeof (setting as AdvancedSettings).documentPreset === "string"
-      ? (setting as AdvancedSettings).documentPreset
-      : DEFAULT_SETTINGS.documentPreset,
+    typeof setting.documentPreset === "string" ? setting.documentPreset : DEFAULT_SETTINGS.documentPreset,
 });
 
 export const GET = withAuth("settings:read", async (_request: NextRequest, { auth }) => {

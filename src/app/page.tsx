@@ -1720,8 +1720,9 @@ export default function ExtractoPage() {
  resume = false,
  pageNumbers?: number[],
  ): Promise<{ jobId: string }> => {
+ const SOURCE_PDF_MAX_BYTES = 32 * 1024 * 1024;
  let sourcePdf: string | undefined;
- if (file.file && isPdfFile(file.file)) {
+ if (file.file && isPdfFile(file.file) && file.file.size <= SOURCE_PDF_MAX_BYTES) {
  try {
  const buffer = await getPdfArrayBuffer(file.file);
  const bytes = new Uint8Array(buffer);

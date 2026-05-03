@@ -239,6 +239,9 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       pageNumbers: input.pageNumbers,
       pageAnchors: input.pageAnchors,
       preferTextLayer: input.settingsPayload.preferTextLayer,
+      documentPresetExpectsJson:
+        input.settingsPayload.documentPreset === "invoice" ||
+        input.settingsPayload.documentPreset === "form",
       startIndex,
       snapshot: snapshotMetadata,
       ocrPct,

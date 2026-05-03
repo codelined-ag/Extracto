@@ -2,7 +2,7 @@ import type {
   AdvancedSettings,
   PostProcessingSettings,
 } from "@/lib/ocr/settings";
-import { applyDocumentPresetToPrompt } from "@/lib/ocr/document-presets";
+import { applyDocumentPresetToPrompt, getDocumentPreset } from "@/lib/ocr/document-presets";
 
 const MAX_POST_PROCESS_INSTRUCTION_LENGTH = 6000;
 const MAX_STORED_PREVIEW_LENGTH = 1_500_000;
@@ -30,22 +30,22 @@ export function normalizePreviewForHistory(preview: string): string | null {
 }
 
 export function buildPrompt(settings: AdvancedSettings): string {
+  const preset = getDocumentPreset(settings.documentPreset);
+  const effectiveTableDetection = preset.forceTableDetection ?? settings.tableDetection;
+  const effectivePreserveFormatting = preset.forcePreserveFormatting ?? settings.preserveFormatting;
   const languageInstruction =
     settings.language !== "auto"
       ? `The document is in ${settings.language}. Please transcribe in that language.`
       : "Detect the document language automatically.";
-  const tableInstruction = settings.tableDetection
+  const tableInstruction = effectiveTableDetection
     ? "If there are tables, format them using markdown tables with proper column alignment."
     : "Extract table content as plain text.";
   const handwritingInstruction = settings.handwritingRecognition
     ? "Pay special attention to handwritten text and do your best to transcribe it accurately."
     : "Focus on printed text only.";
-  const formattingInstruction = settings.preserveFormatting
+  const formattingInstruction = effectivePreserveFormatting
     ? "Preserve the original formatting, layout, and structure as much as possible including spacing, indentation, and alignment."
     : "Extract text in a simplified format, focusing on content over formatting.";
-  const customInstruction = settings.customPrompt
-    ? `\n\nAdditional instructions from user:\n${settings.customPrompt}`
-    : "";
 
   const base = `You are an OCR (Optical Character Recognition) system. Extract all text from this document image.
 
@@ -56,7 +56,7 @@ Instructions:
 4. ${handwritingInstruction}
 5. ${formattingInstruction}
 6. Include any numbers, dates, and special characters exactly as shown
-7. If text is unclear or illegible, indicate with [illegible]${customInstruction}
+7. If text is unclear or illegible, indicate with [illegible]
 
 Quality focus: ${settings.quality}%
 
@@ -70,5 +70,7 @@ Rules:
 - "markdown" is required and must contain the extracted OCR content.
 - "fields" is optional but if present must be a JSON object.
 - Do not wrap JSON in markdown code fences.`;
-  return applyDocumentPresetToPrompt(base, settings.documentPreset);
+  const presetPrompt = applyDocumentPresetToPrompt(base, settings.documentPreset);
+  if (!settings.customPrompt.trim()) return presetPrompt;
+  return `${presetPrompt}\n\nUSER OVERRIDE (highest priority, applies last):\n${settings.customPrompt}`;
 }

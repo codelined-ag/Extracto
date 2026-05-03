@@ -159,6 +159,7 @@ export async function submitOcrJob(
     events: buildQueuedEvents(startedAtIso, "Job created", input.provider, input.ocrModel, input.model),
     checkpoints: [],
     pageNumbers: input.pageNumbers,
+    pageAnchors: input.pageAnchors,
     postProcessing: seedPostProcessingMeta(
       input.postProcessingPayload,
       input.postProcessingPayload.model || input.model,
@@ -232,10 +233,23 @@ export async function resumeOcrJob(input: ResumeOcrJobInput): Promise<ResumeOcrJ
     return cleaned.length === raw.length ? cleaned : undefined;
   })();
 
+  const persistedPageAnchors = (() => {
+    if (!existingJob.metadata || typeof existingJob.metadata !== "object" || Array.isArray(existingJob.metadata)) {
+      return undefined;
+    }
+    const raw = (existingJob.metadata as { pageAnchors?: unknown }).pageAnchors;
+    if (!Array.isArray(raw)) return undefined;
+    return raw as import("@/lib/ocr/pdf-anchoring").AnchorPage[];
+  })();
+
   const effectivePageNumbers =
     persistedPageNumbers && persistedPageNumbers.length === input.inputPreviews.length
       ? persistedPageNumbers
       : input.pageNumbers;
+  const effectivePageAnchors =
+    persistedPageAnchors && persistedPageAnchors.length === input.inputPreviews.length
+      ? persistedPageAnchors
+      : input.pageAnchors;
 
   if (
     persistedPageNumbers &&
@@ -261,6 +275,7 @@ export async function resumeOcrJob(input: ResumeOcrJobInput): Promise<ResumeOcrJ
     events: buildQueuedEvents(startedAtIso, "Resume requested", input.provider, input.ocrModel, input.model),
     checkpoints: initialPageOutputs.map(toPageCheckpoint),
     pageNumbers: effectivePageNumbers,
+    pageAnchors: effectivePageAnchors,
     postProcessing: seedPostProcessingMeta(
       input.postProcessingPayload,
       input.postProcessingPayload.model || input.model,
@@ -288,7 +303,7 @@ export async function resumeOcrJob(input: ResumeOcrJobInput): Promise<ResumeOcrJ
   kickoffProcessing(
     existingJob.id,
     priority,
-    { ...input, pageNumbers: effectivePageNumbers },
+    { ...input, pageNumbers: effectivePageNumbers, pageAnchors: effectivePageAnchors },
     startedAtMs,
     {
       initialPageOutputs,

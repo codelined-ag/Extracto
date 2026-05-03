@@ -4,6 +4,7 @@ export interface AnchorPromptOptions {
   maxAnchorChars?: number;
   blockLimit?: number;
   includeFontHints?: boolean;
+  skipForJsonPreset?: boolean;
 }
 
 const DEFAULT_MAX_ANCHOR_CHARS = 8_000;
@@ -79,6 +80,9 @@ export function maybeApplyAnchoring(
   options: AnchorPromptOptions = {},
 ): AnchoringPromptDecision {
   if (!anchor || anchor.characterCount < 20 || anchor.blocks.length === 0) {
+    return { prompt: basePrompt, usedAnchoring: false };
+  }
+  if (options.skipForJsonPreset) {
     return { prompt: basePrompt, usedAnchoring: false };
   }
   return {

@@ -6,11 +6,13 @@ export async function extractAnchorsForPages(
   expectedLength: number,
 ): Promise<AnchorPage[] | undefined> {
   if (!sourcePdf) return undefined;
-  if (!sourcePdf.startsWith("data:application/pdf")) return undefined;
+  const isPdfDataUrl = /^data:application\/(?:x-)?pdf/u.test(sourcePdf);
+  if (!isPdfDataUrl) return undefined;
   let result;
   try {
     result = await extractPdfAnchoring(sourcePdf);
-  } catch {
+  } catch (error) {
+    console.warn(`extractPdfAnchoring failed: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
   }
   if (!result) return undefined;

@@ -156,6 +156,105 @@ describe("runOcrPages", () => {
     expect(state.checkpoints.map((c) => c.pageNumber)).toEqual([3, 7]);
   });
 
+  describe("text-layer fast-path + anchoring", () => {
+    const richBodyLine = "This is a real sentence with normal English words used for testing.";
+    const richAnchor = {
+      pageNumber: 1,
+      pageWidth: 612,
+      pageHeight: 792,
+      blocks: [
+        { text: "Section One", x: 50, y: 50, width: 200, height: 14, fontSize: 24 },
+        { text: richBodyLine, x: 50, y: 80, width: 400, height: 12, fontSize: 12 },
+        { text: richBodyLine, x: 50, y: 100, width: 400, height: 12, fontSize: 12 },
+        { text: richBodyLine, x: 50, y: 120, width: 400, height: 12, fontSize: 12 },
+        { text: richBodyLine, x: 50, y: 140, width: 400, height: 12, fontSize: 12 },
+      ],
+      rawText: ["Section One", richBodyLine, richBodyLine, richBodyLine, richBodyLine].join("\n"),
+      characterCount: 11 + richBodyLine.length * 4 + 4,
+    };
+
+    const junkLine = "@#$%^&*()_+{}:<>?|/.,-=";
+    const junkAnchor = {
+      pageNumber: 1,
+      pageWidth: 612,
+      pageHeight: 792,
+      blocks: [
+        { text: junkLine, x: 0, y: 0, width: 50, height: 12, fontSize: 12 },
+        { text: junkLine, x: 0, y: 14, width: 50, height: 12, fontSize: 12 },
+        { text: junkLine, x: 0, y: 28, width: 50, height: 12, fontSize: 12 },
+        { text: junkLine, x: 0, y: 42, width: 50, height: 12, fontSize: 12 },
+        { text: junkLine, x: 0, y: 56, width: 50, height: 12, fontSize: 12 },
+        { text: junkLine, x: 0, y: 70, width: 50, height: 12, fontSize: 12 },
+        { text: junkLine, x: 0, y: 84, width: 50, height: 12, fontSize: 12 },
+        { text: junkLine, x: 0, y: 98, width: 50, height: 12, fontSize: 12 },
+        { text: junkLine, x: 0, y: 112, width: 50, height: 12, fontSize: 12 },
+        { text: junkLine, x: 0, y: 126, width: 50, height: 12, fontSize: 12 },
+      ],
+      rawText: Array(10).fill(junkLine).join("\n"),
+      characterCount: junkLine.length * 10 + 9,
+    };
+
+    it("uses text-layer fast-path when preferTextLayer + rich anchor and SKIPS the VLM", async () => {
+      const state = freshState();
+      const result = await runOcrPages(state, makeDeps({
+        inputPreviews: ["data:image/png;base64,p1"],
+        pageAnchors: [richAnchor],
+        preferTextLayer: true,
+      }));
+      expect(result.paused).toBe(false);
+      expect(mockedRunProvider).not.toHaveBeenCalled();
+      const meta = state.pageOutputs[0].metadata as { source?: string };
+      expect(meta.source).toBe("text-layer");
+      expect(state.extractedTextSoFar).toContain("Section One");
+    });
+
+    it("falls back to VLM when anchor is junk OCR (low alpha/word-shape ratios)", async () => {
+      mockedRunProvider.mockResolvedValueOnce({
+        text: "vlm result", structured: { markdown: "vlm result" }, metadata: {},
+      });
+      const state = freshState();
+      await runOcrPages(state, makeDeps({
+        inputPreviews: ["data:image/png;base64,p1"],
+        pageAnchors: [junkAnchor],
+        preferTextLayer: true,
+      }));
+      expect(mockedRunProvider).toHaveBeenCalledTimes(1);
+      const promptArg = mockedRunProvider.mock.calls[0][3] as string;
+      expect(promptArg).toBe("extract");
+    });
+
+    it("anchors the VLM prompt when preferTextLayer is OFF but anchor is rich", async () => {
+      mockedRunProvider.mockResolvedValueOnce({
+        text: "vlm result", structured: { markdown: "vlm result" }, metadata: {},
+      });
+      const state = freshState();
+      await runOcrPages(state, makeDeps({
+        inputPreviews: ["data:image/png;base64,p1"],
+        pageAnchors: [richAnchor],
+        preferTextLayer: false,
+      }));
+      const promptArg = mockedRunProvider.mock.calls[0][3] as string;
+      expect(promptArg).toContain("DOCUMENT-ANCHORING CONTEXT");
+      expect(promptArg).toContain("Section One");
+    });
+
+    it("skips anchoring when documentPresetExpectsJson is true (invoice/form)", async () => {
+      mockedRunProvider.mockResolvedValueOnce({
+        text: "vlm result", structured: { markdown: "vlm result" }, metadata: {},
+      });
+      const state = freshState();
+      await runOcrPages(state, makeDeps({
+        inputPreviews: ["data:image/png;base64,p1"],
+        pageAnchors: [richAnchor],
+        preferTextLayer: true,
+        documentPresetExpectsJson: true,
+      }));
+      expect(mockedRunProvider).toHaveBeenCalledTimes(1);
+      const promptArg = mockedRunProvider.mock.calls[0][3] as string;
+      expect(promptArg).not.toContain("DOCUMENT-ANCHORING CONTEXT");
+    });
+  });
+
   it("falls back to index+1 when pageNumbers is omitted", async () => {
     mockedRunProvider
       .mockResolvedValueOnce({ text: "page 1", structured: { markdown: "page 1" }, metadata: {} })

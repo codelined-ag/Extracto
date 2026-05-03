@@ -5,6 +5,8 @@ export interface DocumentPreset {
   label: string;
   promptAddendum: string;
   jsonSchemaHint?: string;
+  forceTableDetection?: boolean;
+  forcePreserveFormatting?: boolean;
 }
 
 export const DOCUMENT_PRESETS: Record<DocumentPresetKind, DocumentPreset> = {
@@ -17,40 +19,51 @@ export const DOCUMENT_PRESETS: Record<DocumentPresetKind, DocumentPreset> = {
     id: "academic",
     label: "Academic paper",
     promptAddendum: [
-      "This document is a scholarly paper. Honor the standard structure: Title, Authors, Abstract, Introduction, sections (#, ##), Figures with captions, Tables (rendered as Markdown tables), References.",
+      "This document is a scholarly paper.",
+      "Emit each section as `## Section name` followed by its body in markdown.",
+      "Render each table as a markdown table; do NOT collapse multi-row tables into prose.",
       "Detect multi-column layouts and merge them into one continuous reading flow per section.",
-      "Inline mathematical expressions in $...$ and display equations in $$...$$.",
-      "Cite-references like [12] or (Smith et al., 2024) MUST be preserved verbatim.",
-      "Move footnotes and page-numbers OUT of the main flow (drop them or move to the end as a notes block).",
+      "Inline mathematical expressions with `$..$` and display equations with `$$..$$`.",
+      "Preserve cite-references like [12] or (Smith et al., 2024) byte-for-byte; do NOT renumber, summarize, or hyperlink them.",
+      "Move footnotes and page numbers OUT of the main flow into a final `## Notes` block (or drop if duplicated).",
     ].join("\n"),
+    forceTableDetection: true,
+    forcePreserveFormatting: true,
   },
   invoice: {
     id: "invoice",
     label: "Invoice / receipt",
     promptAddendum: [
-      "This is an invoice or receipt. Output a single JSON object with keys: vendor, invoiceNumber, issueDate, dueDate, currency, lineItems (array of {description, quantity, unitPrice, total}), subtotal, tax, total, paymentTerms, notes.",
-      "Use ISO 8601 dates (YYYY-MM-DD). Use string ISO 4217 codes for currency. Use numeric (not string) values for quantities and amounts.",
-      "If a field is not present in the document, omit the key (do not write null or empty string).",
+      "This document is an invoice or receipt.",
+      "Place the structured invoice data inside the `fields.invoice` object of the response (NOT at the top level).",
+      "Required keys when present: vendor, invoiceNumber, issueDate (YYYY-MM-DD), dueDate (YYYY-MM-DD), currency (ISO 4217), lineItems (array of {description, quantity, unitPrice, total}), subtotal, tax, total, paymentTerms, notes.",
+      "Use numeric (not string) values for quantities and amounts. Omit any key that is not present in the document.",
+      "The `markdown` field of the response should be a short human-readable summary (vendor, total, date) so users can scan results without parsing JSON.",
     ].join("\n"),
     jsonSchemaHint: "invoice",
+    forceTableDetection: true,
   },
   contract: {
     id: "contract",
     label: "Contract",
     promptAddendum: [
-      "This is a legal contract. Preserve the exact wording. Render numbered clauses (1., 1.1, 1.1.1) as nested markdown lists, capitals as written.",
-      "Highlight defined terms (Capitalized Terms in Quotes) verbatim. Do not paraphrase, do not summarize, do not omit.",
-      "Output Schedules / Exhibits / Annexes as separate ## headings.",
-      "Signature blocks and dates at the end as a structured Signatures section.",
+      "This document is a legal contract. Preserve the exact wording byte-for-byte.",
+      "Render numbered clauses literally: `1.`, `1.1`, `1.1.1`, `1.1.1.1`. Keep the original numbering as text; do NOT replace it with markdown bullets or auto-numbers.",
+      "Highlight defined terms (Capitalized Words inside Quotes) verbatim. Do not paraphrase, do not summarize, do not skip clauses.",
+      "Render Schedules / Exhibits / Annexes as separate `## Schedule X` headings.",
+      "End with a `## Signatures` section listing each signatory line and date.",
     ].join("\n"),
+    forcePreserveFormatting: true,
   },
   form: {
     id: "form",
     label: "Form",
     promptAddendum: [
-      "This is a form (questionnaire, intake, application). Output a single JSON object whose keys are the field labels (snake_case) and values are the user-entered values.",
-      "If a field is empty, omit the key. For checkbox groups, the value is an array of the checked options.",
-      "If the form has multiple sections, nest them under per-section keys.",
+      "This document is a form (questionnaire, intake, application).",
+      "Place the extracted form data inside the `fields.form` object of the response (NOT at the top level).",
+      "Each top-level key is a snake_case version of the field label; the value is the user-entered value or, for checkbox groups, an array of checked options.",
+      "If a field is empty, omit the key entirely. If the form has multiple sections, nest them under per-section keys.",
+      "The `markdown` field of the response should be the form rendered as a `Label: value` list for human review.",
     ].join("\n"),
     jsonSchemaHint: "form",
   },
