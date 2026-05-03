@@ -35,10 +35,7 @@
 You need Docker. That's it.
 
 ```bash
-docker run -d --name extracto -p 3000:3000 \
-  -v extracto-data:/app/data \
-  -e AUTH_SECRET="$(openssl rand -hex 32)" \
-  ghcr.io/codelined-ag/extracto:latest
+docker run -d --name extracto -p 3000:3000 -v extracto-data:/app/data -e AUTH_SECRET="$(openssl rand -hex 32)" ghcr.io/codelined-ag/extracto:latest
 ```
 
 Open <http://localhost:3000>, sign up, you're in. Multi-arch (`linux/amd64` + `linux/arm64`); pin a release with `:v0.3.0` instead of `:latest`.
