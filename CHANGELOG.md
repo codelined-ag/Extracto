@@ -6,6 +6,23 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-04
+
+### Added
+- Document anchoring: extracts the PDF text layer + bounding boxes server-side and feeds them into the vision model prompt, dramatically reducing hallucinations on born-digital PDFs.
+- Hybrid text-layer fast-path: skips the vision model entirely on PDFs with a high-confidence text layer (free, lossless, instant).
+- Column-aware reading order in the text-layer extractor (handles two-column papers correctly).
+- Heading inference from font size (renders larger fonts as `#`, `##`, `###`).
+- Document-type presets (`generic`, `academic`, `invoice`, `contract`, `form`) that sharpen the per-document prompt and request structured JSON for invoices and forms.
+- New `sourcePdf` field on `POST /api/v1/ocr/batch` and `POST /api/ocr` so callers can hand the server the original PDF for anchoring.
+- CLI flags `--preset KIND` and `--no-text-layer` on `extracto ocr` (bash and PowerShell).
+- MCP `ocr_submit` schema gained `pages`, `pageNumbers`, `documentPreset`, and `preferTextLayer`.
+- `OcrSetting` Prisma table gained `preferTextLayer` and `documentPreset` columns (auto-applied via `db push` on container startup).
+- `scripts/benchmark-extraction.ts` for measuring baseline vs anchored vs text-layer performance against any PDF.
+
+### Changed
+- The default per-page prompt now adapts to the configured document preset.
+
 ## [0.3.2] - 2026-05-03
 
 ### Added
