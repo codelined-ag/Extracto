@@ -352,7 +352,7 @@ function Resolve-PageSpec {
 
 function Cmd-Ocr {
     if ($RemainingArguments.Count -lt 1) {
-        Fail "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7]"
+        Fail "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7] [--preset generic|academic|invoice|contract|form] [--no-text-layer]"
     }
     $file = $RemainingArguments[0]
     if (-not (Test-Path -LiteralPath $file)) { Fail "file not found: $file" }
@@ -361,15 +361,20 @@ function Cmd-Ocr {
     $outPath = ""
     $waitFlag = $true
     $pagesSpec = ""
+    $preset = ""
+    $preferTextLayer = $null
     $i = 1
     while ($i -lt $RemainingArguments.Count) {
         $arg = $RemainingArguments[$i]
         switch ($arg) {
-            "--model"   { $model = $RemainingArguments[$i + 1]; $i += 2 }
-            "--out"     { $outPath = $RemainingArguments[$i + 1]; $i += 2 }
-            "--no-wait" { $waitFlag = $false; $i += 1 }
-            "--pages"   { $pagesSpec = $RemainingArguments[$i + 1]; $i += 2 }
-            default     { Fail "unknown ocr flag: $arg" }
+            "--model"          { $model = $RemainingArguments[$i + 1]; $i += 2 }
+            "--out"            { $outPath = $RemainingArguments[$i + 1]; $i += 2 }
+            "--no-wait"        { $waitFlag = $false; $i += 1 }
+            "--pages"          { $pagesSpec = $RemainingArguments[$i + 1]; $i += 2 }
+            "--preset"         { $preset = $RemainingArguments[$i + 1]; $i += 2 }
+            "--no-text-layer"  { $preferTextLayer = $false; $i += 1 }
+            "--text-layer"     { $preferTextLayer = $true; $i += 1 }
+            default            { Fail "unknown ocr flag: $arg" }
         }
     }
     if (-not $model) { Fail "--model is required (e.g. --model llava:13b or --model mistral-ocr-latest)" }
@@ -383,6 +388,16 @@ function Cmd-Ocr {
     $mime = Get-FileMimeType $file
     $fileBaseName = Split-Path -Leaf $file
     $resolvedPath = (Resolve-Path -LiteralPath $file).Path
+
+    $sourcePdf = ""
+    if ($mime -eq "application/pdf") {
+        $rawBytes = [System.IO.File]::ReadAllBytes($resolvedPath)
+        $sourcePdf = "data:application/pdf;base64," + [Convert]::ToBase64String($rawBytes)
+    }
+
+    $settingsHash = [ordered]@{}
+    if ($preset) { $settingsHash.documentPreset = $preset }
+    if ($null -ne $preferTextLayer) { $settingsHash.preferTextLayer = $preferTextLayer }
 
     $bodyEntry = $null
     if ($pagesSpec) {
@@ -425,6 +440,9 @@ function Cmd-Ocr {
         $dataUrl = "data:${mime};base64,${b64}"
         $bodyEntry = [ordered]@{ fileName = $fileBaseName; model = $model; preview = $dataUrl }
     }
+
+    if ($sourcePdf) { $bodyEntry.sourcePdf = $sourcePdf }
+    if ($settingsHash.Count -gt 0) { $bodyEntry.settings = $settingsHash }
 
     $body = @{ files = @($bodyEntry) }
 
@@ -640,6 +658,7 @@ function Cmd-Help {
     Write-Host "API:"
     Write-Host "  extracto api-key <create|list|revoke> [args...]"
     Write-Host "  extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7]"
+    Write-Host "                                     [--preset generic|academic|invoice|contract|form] [--no-text-layer]"
     Write-Host "  extracto jobs <list|get|delete|cancel|wait> [args...]"
     Write-Host "  extracto presets <list|create|delete> [args...]"
     Write-Host "  extracto settings get"

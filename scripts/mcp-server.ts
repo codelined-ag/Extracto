@@ -93,6 +93,18 @@ server.tool(
               preserveFormatting: z.boolean().optional(),
               customPrompt: z.string().optional(),
               quality: z.number().int().min(0).max(100).optional(),
+              preferTextLayer: z
+                .boolean()
+                .optional()
+                .describe(
+                  "When true (default) and the PDF has a rich text layer, skip the VLM call for that page and emit text-layer markdown directly. Free + lossless for born-digital PDFs.",
+                ),
+              documentPreset: z
+                .enum(["generic", "academic", "invoice", "contract", "form"])
+                .optional()
+                .describe(
+                  "Per-document-type prompt preset that sharpens extraction for the specified shape (e.g. invoice => structured JSON of line items).",
+                ),
             })
             .partial()
             .optional(),

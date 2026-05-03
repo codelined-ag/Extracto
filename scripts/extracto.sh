@@ -405,9 +405,9 @@ cmd_settings() {
 
 cmd_ocr() {
   local file="${1:-}"
-  [ -n "$file" ] || die "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7]"
+  [ -n "$file" ] || die "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7] [--preset generic|academic|invoice|contract|form] [--no-text-layer]"
   [ -f "$file" ] || die "file not found: $file"
-  local out="" model="" wait_flag=1 pages_spec=""
+  local out="" model="" wait_flag=1 pages_spec="" preset="" prefer_text_layer=""
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -422,6 +422,15 @@ cmd_ocr() {
         ;;
       --pages)
         pages_spec="${2:-}"; shift 2
+        ;;
+      --preset)
+        preset="${2:-}"; shift 2
+        ;;
+      --no-text-layer)
+        prefer_text_layer="false"; shift
+        ;;
+      --text-layer)
+        prefer_text_layer="true"; shift
         ;;
       *)
         die "unknown ocr flag: $1"
@@ -541,32 +550,55 @@ PY
     preview_payload="data:${mime};base64,${b64}"
   fi
 
+  local source_pdf=""
+  if [ "$mime" = "application/pdf" ]; then
+    local src_b64
+    if base64 --help 2>&1 | grep -q -- "-w"; then
+      src_b64="$(base64 -w 0 < "$file")"
+    else
+      src_b64="$(base64 < "$file" | tr -d '\n')"
+    fi
+    source_pdf="data:application/pdf;base64,${src_b64}"
+  fi
+
   local body
   if [ -n "$pages_payload" ]; then
     body="$(python3 -c '
 import json, sys
 data = sys.stdin.read().split("\x1f")
-file_name, model, page_numbers_csv, pages_concat = data[0], data[1], data[2], data[3]
+file_name, model, page_numbers_csv, pages_concat, preset, prefer_text_layer, source_pdf = data[0], data[1], data[2], data[3], data[4], data[5], data[6]
 pages = pages_concat.split("\x1e") if pages_concat else []
 page_numbers = [int(n) for n in page_numbers_csv.split(",") if n]
 preview = pages[0] if pages else ""
-payload = {
-  "files": [
-    {"fileName": file_name, "model": model, "preview": preview, "pages": pages, "pageNumbers": page_numbers}
-  ]
-}
-print(json.dumps(payload, separators=(",", ":")))
-' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${page_numbers_list}"$'\x1f'"${pages_payload}")"
+file_entry = {"fileName": file_name, "model": model, "preview": preview, "pages": pages, "pageNumbers": page_numbers}
+if source_pdf:
+    file_entry["sourcePdf"] = source_pdf
+settings = {}
+if preset:
+    settings["documentPreset"] = preset
+if prefer_text_layer:
+    settings["preferTextLayer"] = prefer_text_layer == "true"
+if settings:
+    file_entry["settings"] = settings
+print(json.dumps({"files": [file_entry]}, separators=(",", ":")))
+' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${page_numbers_list}"$'\x1f'"${pages_payload}"$'\x1f'"${preset}"$'\x1f'"${prefer_text_layer}"$'\x1f'"${source_pdf}")"
   else
     body="$(python3 -c '
 import json, sys
-file_name, model, preview = sys.stdin.read().split("\x1f", 2)
-print(json.dumps({
-  "files": [
-    {"fileName": file_name, "model": model, "preview": preview}
-  ]
-}, separators=(",", ":")))
-' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${preview_payload}")"
+data = sys.stdin.read().split("\x1f")
+file_name, model, preview, preset, prefer_text_layer, source_pdf = data[0], data[1], data[2], data[3], data[4], data[5]
+file_entry = {"fileName": file_name, "model": model, "preview": preview}
+if source_pdf:
+    file_entry["sourcePdf"] = source_pdf
+settings = {}
+if preset:
+    settings["documentPreset"] = preset
+if prefer_text_layer:
+    settings["preferTextLayer"] = prefer_text_layer == "true"
+if settings:
+    file_entry["settings"] = settings
+print(json.dumps({"files": [file_entry]}, separators=(",", ":")))
+' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${preview_payload}"$'\x1f'"${preset}"$'\x1f'"${prefer_text_layer}"$'\x1f'"${source_pdf}")"
   fi
 
   info "submitting OCR for ${file_basename}..."
@@ -733,6 +765,8 @@ API keys (require running container):
 
 Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
   ocr <file> --model N [--out P] [--no-wait] [--pages 1-5,7]
+                                  [--preset generic|academic|invoice|contract|form]
+                                  [--no-text-layer]
                                 Submit a file for OCR (pdf/png/jpg/webp)
   jobs list [limit]             List recent OCR jobs (default 20)
   jobs get <id>                 Show one job
