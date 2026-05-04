@@ -6,6 +6,20 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-05-04
+
+### Added
+- One-liner installer hosted at `scripts/install.sh` (and `install.ps1` for Windows), promoted as the README primary Quickstart.
+- S3 export: per-user bucket configuration in Settings tab, "Send to S3" item in the result preview menu, real-time SSE upload progress, `POST /api/s3/export` (browser) and `POST /api/v1/export/s3` (bearer, scope `s3:write`).
+- S3 listing + download API: `GET /api/v1/s3/list` (paginated, OCR-extension-filtered) and `GET /api/v1/s3/download` (scope `s3:read`).
+- CLI gained `extracto s3 export | ls | download` subcommands and MCP server gained `s3_export` and `s3_list` tools.
+- Typesense added as a vector store for KB exports (auto-creates the collection schema on first upsert).
+- History dialog gained a "Stopped" filter chip and distinguishes paused/stopped jobs from running and queued.
+
+### Changed
+- History markdown rendering now uses `remark-gfm` so tables, task lists, and strikethrough render properly in both the workspace preview and the History dialog.
+- Stopped and queued OCR jobs no longer mis-display as "running" in History — the derived status maps `metadata.stage = "paused"` to a dedicated "stopped" tone.
+
 ## [0.5.2] - 2026-05-04
 
 ### Added
