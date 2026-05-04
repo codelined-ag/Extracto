@@ -6,6 +6,25 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-05-04
+
+### Added
+- S3 export accepts any S3-compatible endpoint by default (MinIO, Garage, Ceph RGW, SeaweedFS, on-prem appliances, etc.) instead of the prior named-allowlist.
+- `S3_ALLOW_LOOPBACK=1` opts in all loopback/RFC1918 hosts (e.g. local MinIO sidecar); `S3_ALLOWED_HOSTS=foo.internal` allows specific private hosts without flipping the global flag.
+- All six S3 routes now rate-limit per user (60/min for read, 12/min for write).
+- Stop-requested jobs that have not yet reached a checkpoint now show as "Stopped" immediately in History instead of staying "Running" until the orchestrator catches up.
+- Endpoint-policy regression tests covering AWS S3, R2, Backblaze, MinIO, Garage, IMDS, RFC1918, ULA-IPv6, link-local, and credential-in-URL inputs.
+
+### Security
+- `enforceS3EndpointPolicy` now blocks RFC1918, loopback, link-local IPv6, ULA-IPv6, CGNAT, AWS/GCP/Azure/Equinix metadata services, and IPv4-mapped IMDS — closing the SSRF gadget where an authenticated user could weaponize the AWS SDK against the Extracto host's localhost services.
+- `enforceS3EndpointPolicy` is now invoked at use-time (in `buildUserS3Client`), not just at save-time, so tightening the env policy applies to previously-saved configs.
+- `/api/s3/download` and `/api/v1/s3/download` now stream the response body (HEAD-checked size first) instead of buffering up to 200 MB into Node memory per request.
+- Download routes reject keys outside the user's configured prefix and reject keys containing `..` segments or control characters.
+- Bucket / region / prefix / keyPrefix inputs are validated against AWS naming rules before any SDK call.
+- Browser-internal S3 routes use the `s3:read` / `s3:write` scopes for consistency with `/api/v1/*` (was `ocr:read`).
+- Installer one-liner pins to a release tag by default (`v0.5.4`), uses `--proto '=https' --tlsv1.2` in the README curl, validates `EXTRACTO_REPO_URL` is HTTPS, prints a Ctrl-C window before any network call, and clones into a `.partial.$$` staging dir to avoid leaving half-populated checkouts on failure.
+- README documents that the installer chains vendor scripts (`get.docker.com`, `ollama.com/install.sh`) as root and exposes `EXTRACTO_INSTALL_DOCKER=0` / `EXTRACTO_INSTALL_OLLAMA=0` opt-outs.
+
 ## [0.5.3] - 2026-05-04
 
 ### Added
