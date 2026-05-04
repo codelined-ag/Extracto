@@ -69,7 +69,7 @@ describe("runKbExport", () => {
     expect(result.chunkCount).toBe(2);
     expect(result.embeddingDimensions).toBe(3);
     expect(embedTexts).toHaveBeenCalledTimes(1);
-    expect(embedTexts).toHaveBeenCalledWith(["abcde", "fghij"], baseInput.embedding);
+    expect(embedTexts).toHaveBeenCalledWith(["abcde", "fghij"], baseInput.embedding, fetch, { concurrency: undefined });
     expect(store.upserted).toHaveLength(1);
     expect(store.upserted[0].collection).toBe("kb-1");
     expect(store.upserted[0].chunks).toHaveLength(2);

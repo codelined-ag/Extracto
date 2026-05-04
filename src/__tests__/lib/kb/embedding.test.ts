@@ -183,6 +183,53 @@ describe("embedTexts — OpenAI-compatible path", () => {
   });
 });
 
+describe("embedTexts — concurrency option", () => {
+  const config: EmbeddingProviderConfig = {
+    provider: "ollama",
+    apiEndpoint: "http://127.0.0.1:11434",
+    model: "nomic-embed-text",
+  };
+
+  it("splits texts into N consecutive batches when concurrency > 1, preserving order", async () => {
+    const calls: string[][] = [];
+    const fetchImpl = mockFetch((_url, init) => {
+      const body = JSON.parse(init.body as string);
+      calls.push(body.input);
+      const embeds = body.input.map((s: string) => [s.length, 0]);
+      return jsonResponse({ embeddings: embeds });
+    });
+    const texts = ["aa", "bbb", "cccc", "ddddd", "ee", "fff"];
+    const out = await embedTexts(texts, config, fetchImpl, { concurrency: 3 });
+    expect(calls).toHaveLength(3);
+    expect(calls[0]).toEqual(["aa", "bbb"]);
+    expect(calls[1]).toEqual(["cccc", "ddddd"]);
+    expect(calls[2]).toEqual(["ee", "fff"]);
+    expect(out).toEqual([[2, 0], [3, 0], [4, 0], [5, 0], [2, 0], [3, 0]]);
+  });
+
+  it("falls back to single batch when concurrency=1", async () => {
+    let count = 0;
+    const fetchImpl = mockFetch((_url, init) => {
+      count++;
+      const body = JSON.parse(init.body as string);
+      return jsonResponse({ embeddings: body.input.map(() => [0]) });
+    });
+    await embedTexts(["a", "b", "c", "d"], config, fetchImpl, { concurrency: 1 });
+    expect(count).toBe(1);
+  });
+
+  it("with concurrency > texts.length produces texts.length batches", async () => {
+    let count = 0;
+    const fetchImpl = mockFetch((_url, init) => {
+      count++;
+      const body = JSON.parse(init.body as string);
+      return jsonResponse({ embeddings: body.input.map(() => [0]) });
+    });
+    await embedTexts(["a", "b"], config, fetchImpl, { concurrency: 8 });
+    expect(count).toBe(2);
+  });
+});
+
 describe("EmbeddingError", () => {
   it("carries provider and status", () => {
     const err = new EmbeddingError("boom", "ollama", 502);

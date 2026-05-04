@@ -32,6 +32,7 @@ function buildVectorStore(kind: VectorStoreKind, baseUrl: string, apiKey: string
 interface KbExportBrowserRequest extends Record<string, unknown> {
   jobId?: unknown;
   collectionName?: unknown;
+  embeddingConcurrency?: unknown;
   /** Optional one-shot overrides — merged on top of saved defaults. */
   overrides?: Partial<KbDefaults>;
 }
@@ -91,6 +92,12 @@ export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { 
     ? requestedName
     : renderCollectionName(defaults.collectionNameTemplate, job.id, job.fileName);
 
+  const rawConcurrency = body?.embeddingConcurrency;
+  const embeddingConcurrency =
+    typeof rawConcurrency === "number" && Number.isFinite(rawConcurrency) && rawConcurrency >= 1
+      ? Math.min(16, Math.trunc(rawConcurrency))
+      : undefined;
+
   const language = pickLanguage(job.metadata);
   const result = await runKbExport({
     jobId: job.id,
@@ -101,6 +108,7 @@ export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { 
     language,
     chunking,
     embedding,
+    embeddingConcurrency,
     store: buildVectorStore(vectorStore.kind, vectorStore.baseUrl, vectorStore.apiKey || undefined, vectorStore.dimensions),
     collectionName,
   });

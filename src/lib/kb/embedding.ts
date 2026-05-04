@@ -8,12 +8,56 @@ export class EmbeddingError extends Error {
   }
 }
 
+export const EMBEDDING_CONCURRENCY_MIN = 1;
+export const EMBEDDING_CONCURRENCY_MAX = 16;
+
+export interface EmbedTextsOptions {
+  concurrency?: number;
+}
+
 export async function embedTexts(
   texts: string[],
   config: EmbeddingProviderConfig,
   fetchImpl: typeof fetch = fetch,
+  options: EmbedTextsOptions = {},
 ): Promise<number[][]> {
   if (texts.length === 0) return [];
+
+  const concurrency = clampEmbeddingConcurrency(options.concurrency ?? 1);
+  if (concurrency <= 1 || texts.length <= 1) {
+    return runOneBatch(texts, config, fetchImpl);
+  }
+
+  const slices = sliceTexts(texts, concurrency);
+  const results = await Promise.all(slices.map((slice) => runOneBatch(slice, config, fetchImpl)));
+  return results.flat();
+}
+
+function clampEmbeddingConcurrency(value: number): number {
+  const t = Math.trunc(value);
+  if (!Number.isFinite(t) || t < EMBEDDING_CONCURRENCY_MIN) return EMBEDDING_CONCURRENCY_MIN;
+  return Math.min(EMBEDDING_CONCURRENCY_MAX, t);
+}
+
+function sliceTexts(texts: string[], slices: number): string[][] {
+  const n = Math.min(slices, texts.length);
+  const baseSize = Math.floor(texts.length / n);
+  const remainder = texts.length % n;
+  const out: string[][] = [];
+  let cursor = 0;
+  for (let i = 0; i < n; i++) {
+    const size = baseSize + (i < remainder ? 1 : 0);
+    out.push(texts.slice(cursor, cursor + size));
+    cursor += size;
+  }
+  return out;
+}
+
+async function runOneBatch(
+  texts: string[],
+  config: EmbeddingProviderConfig,
+  fetchImpl: typeof fetch,
+): Promise<number[][]> {
   switch (config.provider) {
     case "ollama":
       return embedWithOllama(texts, config, fetchImpl);

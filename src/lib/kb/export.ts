@@ -20,6 +20,7 @@ export interface KbExportInput {
   sourceModel?: string;
   language?: string;
   embedding: EmbeddingProviderConfig;
+  embeddingConcurrency?: number;
   store: VectorStoreAdapter;
   collectionName: string;
 }
@@ -49,6 +50,8 @@ export async function runKbExport(input: KbExportInput): Promise<KbExportResult>
   const embeddings = await embedTexts(
     chunks.map((c) => c.text),
     input.embedding,
+    fetch,
+    { concurrency: input.embeddingConcurrency },
   );
   if (embeddings.length !== chunks.length) {
     throw new Error(

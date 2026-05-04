@@ -64,6 +64,7 @@ interface KbExportRequest extends Record<string, unknown> {
   vectorStore?: unknown;
   embedding?: unknown;
   chunking?: unknown;
+  embeddingConcurrency?: unknown;
 }
 
 export const POST = withMutationAuth("kb:write", async (request: NextRequest, { auth }) => {
@@ -80,6 +81,7 @@ export const POST = withMutationAuth("kb:write", async (request: NextRequest, { 
   const chunking = parseChunking(body.chunking);
   const embedding = parseEmbedding(body.embedding);
   const store = parseVectorStore(body.vectorStore);
+  const embeddingConcurrency = parseEmbeddingConcurrency(body.embeddingConcurrency);
 
   const job = await db.ocrJob.findFirst({
     where: { id: jobId, userId: auth.userId },
@@ -110,6 +112,7 @@ export const POST = withMutationAuth("kb:write", async (request: NextRequest, { 
     language,
     chunking,
     embedding,
+    embeddingConcurrency,
     store,
     collectionName,
   });
@@ -172,6 +175,18 @@ function parseChunking(raw: unknown): ChunkingOptions {
     throw new ApiRouteError("chunking.maxHeadingDepth must be an integer in 1..6", 400);
   }
   return { strategy, maxChunkSize, overlap, minChunkSize, breakpointPercentile, maxHeadingDepth };
+}
+
+function parseEmbeddingConcurrency(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    throw new ApiRouteError("embeddingConcurrency must be a number between 1 and 16", 400);
+  }
+  const t = Math.trunc(raw);
+  if (t < 1 || t > 16) {
+    throw new ApiRouteError("embeddingConcurrency must be between 1 and 16", 400);
+  }
+  return t;
 }
 
 function parseEmbedding(raw: unknown): EmbeddingProviderConfig {
