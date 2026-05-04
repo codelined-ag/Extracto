@@ -53,9 +53,30 @@ export class OpenSearchAdapter implements VectorStoreAdapter {
       body,
     });
     if (!resp.ok) throw await this.parseError(resp, "bulk");
-    const json = (await resp.json().catch(() => null)) as { errors?: boolean; items?: unknown[] } | null;
+    const json = (await resp.json().catch(() => null)) as
+      | {
+          errors?: boolean;
+          items?: Array<Record<string, { _id?: string; status?: number; error?: { type?: string; reason?: string } }>>;
+        }
+      | null;
     if (json?.errors) {
-      throw new VectorStoreError("opensearch", `bulk reported errors on ${json.items?.length ?? 0} items`, resp.status);
+      const failures: string[] = [];
+      for (const item of json.items ?? []) {
+        const op = Object.values(item)[0];
+        if (op?.error) {
+          const id = op._id ? `${op._id}: ` : "";
+          const detail = op.error.reason ?? op.error.type ?? `status ${op.status ?? "?"}`;
+          failures.push(`${id}${detail}`);
+          if (failures.length >= 3) break;
+        }
+      }
+      const summary = failures.length > 0 ? ` — ${failures.join("; ")}` : "";
+      const failingCount = (json.items ?? []).filter((i) => Object.values(i)[0]?.error).length;
+      throw new VectorStoreError(
+        "opensearch",
+        `bulk reported errors on ${failingCount} item(s)${summary}`,
+        resp.status,
+      );
     }
   }
 

@@ -56,13 +56,26 @@ describe("OpenSearchAdapter", () => {
     expect(JSON.parse(lines[1]).vector).toEqual([0.1, 0.2, 0.3]);
   });
 
-  it("throws when bulk reports errors=true", async () => {
+  it("throws when bulk reports errors=true and surfaces per-item reasons", async () => {
     const fetchImpl = mockFetch((url, init) => {
       if (init.method === "HEAD") return new Response("", { status: 200 });
-      return new Response(JSON.stringify({ errors: true, items: [{}] }), { status: 200 });
+      return new Response(
+        JSON.stringify({
+          errors: true,
+          items: [
+            { index: { _id: "doc-1", status: 400, error: { type: "mapper_parsing_exception", reason: "vector dim mismatch" } } },
+            { index: { _id: "doc-2", status: 200 } },
+          ],
+        }),
+        { status: 200 },
+      );
     });
     const a = new OpenSearchAdapter({ baseUrl: "http://os" }, fetchImpl);
-    await expect(a.upsert([chunk("a", 0)], "kb1")).rejects.toThrow(/bulk reported errors/);
+    const err = await a.upsert([chunk("a", 0), chunk("b", 1)], "kb1").catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(String(err)).toMatch(/1 item/);
+    expect(String(err)).toMatch(/doc-1/);
+    expect(String(err)).toMatch(/vector dim mismatch/);
   });
 
   it("supports basic auth fallback when apiKey is not set", async () => {
