@@ -27,11 +27,16 @@ export interface OcrProgressEventView {
   message?: string;
 }
 
+export type KbExportPhase = "queued" | "chunking" | "embedding" | "upserting" | "done" | "error";
+
 export interface KbExportFileState {
   status: "idle" | "pending" | "success" | "error";
   chunkCount?: number;
   collectionName?: string;
   error?: string;
+  phase?: KbExportPhase;
+  embeddingDone?: number;
+  embeddingTotal?: number;
 }
 
 export interface ProcessingFile {

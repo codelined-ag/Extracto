@@ -11,6 +11,13 @@ import type {
   VectorStoreAdapter,
 } from "@/lib/kb/types";
 
+export interface KbExportProgress {
+  phase: "chunking" | "embedding" | "upserting";
+  embeddingDone?: number;
+  embeddingTotal?: number;
+  chunkCount?: number;
+}
+
 export interface KbExportInput {
   jobId: string;
   fileName: string;
@@ -23,6 +30,7 @@ export interface KbExportInput {
   embeddingConcurrency?: number;
   store: VectorStoreAdapter;
   collectionName: string;
+  onProgress?: (event: KbExportProgress) => void;
 }
 
 export interface KbExportResult {
@@ -33,6 +41,7 @@ export interface KbExportResult {
 }
 
 export async function runKbExport(input: KbExportInput): Promise<KbExportResult> {
+  input.onProgress?.({ phase: "chunking" });
   const pieces = await chunkForStrategy(input);
   if (pieces.length === 0) {
     return {
@@ -47,17 +56,42 @@ export async function runKbExport(input: KbExportInput): Promise<KbExportResult>
     buildChunk(input, piece, idx, pieces.length),
   );
 
+  input.onProgress?.({
+    phase: "embedding",
+    embeddingDone: 0,
+    embeddingTotal: chunks.length,
+    chunkCount: chunks.length,
+  });
+
   const embeddings = await embedTexts(
     chunks.map((c) => c.text),
     input.embedding,
     fetch,
-    { concurrency: input.embeddingConcurrency },
+    {
+      concurrency: input.embeddingConcurrency,
+      onBatch: input.onProgress
+        ? ({ done, total }) =>
+            input.onProgress!({
+              phase: "embedding",
+              embeddingDone: done,
+              embeddingTotal: total,
+              chunkCount: chunks.length,
+            })
+        : undefined,
+    },
   );
   if (embeddings.length !== chunks.length) {
     throw new Error(
       `Embedding provider returned ${embeddings.length} vectors for ${chunks.length} chunks`,
     );
   }
+
+  input.onProgress?.({
+    phase: "upserting",
+    embeddingDone: chunks.length,
+    embeddingTotal: chunks.length,
+    chunkCount: chunks.length,
+  });
 
   const enriched = chunks.map((c, i) => ({ ...c, embedding: embeddings[i] }));
   await input.store.upsert(enriched, input.collectionName);

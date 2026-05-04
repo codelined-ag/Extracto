@@ -12,6 +12,7 @@ import { withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { runKbExport } from "@/lib/kb/export";
 import { isKbExportEnabled } from "@/lib/kb/feature-flag";
+import { registerKbExport, updateKbExport } from "@/lib/kb/export-progress";
 import { ChromaAdapter } from "@/lib/kb/stores/chroma";
 import { QdrantAdapter } from "@/lib/kb/stores/qdrant";
 import { WeaviateAdapter } from "@/lib/kb/stores/weaviate";
@@ -99,7 +100,14 @@ export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { 
       : undefined;
 
   const language = pickLanguage(job.metadata);
-  const result = await runKbExport({
+
+  const progress = registerKbExport({
+    userId: auth.userId,
+    jobId: job.id,
+    collectionName,
+  });
+
+  void runKbExport({
     jobId: job.id,
     fileName: job.fileName,
     extractedText: job.extractedText,
@@ -111,9 +119,30 @@ export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { 
     embeddingConcurrency,
     store: buildVectorStore(vectorStore.kind, vectorStore.baseUrl, vectorStore.apiKey || undefined, vectorStore.dimensions),
     collectionName,
-  });
+    onProgress: (event) =>
+      updateKbExport(progress.exportId, {
+        phase: event.phase,
+        embeddingDone: event.embeddingDone ?? 0,
+        embeddingTotal: event.embeddingTotal ?? 0,
+        chunkCount: event.chunkCount ?? 0,
+      }),
+  })
+    .then((result) => {
+      updateKbExport(progress.exportId, {
+        phase: "done",
+        chunkCount: result.chunkCount,
+        embeddingDone: result.chunkCount,
+        embeddingTotal: result.chunkCount,
+      });
+    })
+    .catch((err: unknown) => {
+      updateKbExport(progress.exportId, {
+        phase: "error",
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
 
-  return NextResponse.json(result);
+  return NextResponse.json({ exportId: progress.exportId, collectionName }, { status: 202 });
 });
 
 function pickLanguage(metadata: unknown): string | undefined {

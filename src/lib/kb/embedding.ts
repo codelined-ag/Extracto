@@ -13,6 +13,7 @@ export const EMBEDDING_CONCURRENCY_MAX = 16;
 
 export interface EmbedTextsOptions {
   concurrency?: number;
+  onBatch?: (event: { done: number; total: number }) => void;
 }
 
 export async function embedTexts(
@@ -24,12 +25,25 @@ export async function embedTexts(
   if (texts.length === 0) return [];
 
   const concurrency = clampEmbeddingConcurrency(options.concurrency ?? 1);
+  const total = texts.length;
   if (concurrency <= 1 || texts.length <= 1) {
-    return runOneBatch(texts, config, fetchImpl);
+    options.onBatch?.({ done: 0, total });
+    const out = await runOneBatch(texts, config, fetchImpl);
+    options.onBatch?.({ done: total, total });
+    return out;
   }
 
   const slices = sliceTexts(texts, concurrency);
-  const results = await Promise.all(slices.map((slice) => runOneBatch(slice, config, fetchImpl)));
+  options.onBatch?.({ done: 0, total });
+  let done = 0;
+  const results = await Promise.all(
+    slices.map(async (slice) => {
+      const r = await runOneBatch(slice, config, fetchImpl);
+      done += slice.length;
+      options.onBatch?.({ done, total });
+      return r;
+    }),
+  );
   return results.flat();
 }
 
