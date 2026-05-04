@@ -30,12 +30,7 @@
   </picture>
 </p>
 
-<!--
-  Replace the screenshot above with docs/demo.gif once recorded.
-  Run: ./scripts/demo/record.sh   (see scripts/demo/README.md)
--->
-
-> **v0.7.0**: first-run guided tour and setup wizard, OpenAPI spec at `/api/v1/openapi.yaml` with a [Scalar reference](https://extracto.help/api/overview) at `/api/v1/docs`, single-command `quickstart.sh` install path that finishes inside the healthcheck window, and the last user-visible English-only strings translated end-to-end. See the [changelog](./CHANGELOG.md).
+> **v0.8.0**: tags for OCR jobs, smart History filters (file name, model, date range, tags), bulk-tag selection action, and saved searches that persist a filter set under a name. Each capability ships on REST, MCP, CLI, and the History dialog. See the [changelog](./CHANGELOG.md).
 
 ---
 
