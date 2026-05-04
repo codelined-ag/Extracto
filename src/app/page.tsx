@@ -7,10 +7,8 @@ import {
  AlertCircle,
  ScanLine,
  ImageOff,
- KeyRoundIcon,
  Cloud,
  Layers,
- BellRing,
 } from"lucide-react";
 
 import { ArchiveIcon } from"@/components/ui/archive";
@@ -21,7 +19,6 @@ import { ClockIcon } from"@/components/ui/clock";
 import { DatabaseBackupIcon } from"@/components/ui/database-backup";
 import { FileTextIcon } from"@/components/ui/file-text";
 import { HistoryIcon } from"@/components/ui/history";
-import { LanguagesIcon } from"@/components/ui/languages";
 import { LoaderCircleIcon } from"@/components/ui/loader-circle";
 import { PauseIcon } from"@/components/ui/pause";
 import { PlayIcon } from"@/components/ui/play";
@@ -83,16 +80,14 @@ import {
 } from "@/app/page-components/page-utils";
 import {
   HintInfo,
-  SettingsSection,
 } from "@/app/page-components/settings-primitives";
 import { FileListCard } from "@/app/page-components/file-list-card";
 import { Footer } from "@/app/page-components/footer";
 import { HeaderBar } from "@/app/page-components/header-bar";
 import { ChangePasswordDialog } from "@/app/page-components/change-password-dialog";
-import { ApiKeysSection } from "@/app/page-components/api-keys-section";
+import { AccountDialog } from "@/app/page-components/account-dialog";
+import { SettingsAccordion, SettingsAccordionItem } from "@/app/page-components/settings-accordion";
 import { S3SettingsSection } from "@/app/page-components/s3-settings-section";
-import { NotificationsSection } from "@/app/page-components/notifications-section";
-import { UsageSection } from "@/app/page-components/usage-section";
 import { WatchersSection } from "@/app/page-components/watchers-section";
 import { TemplatesSection } from "@/app/page-components/templates-section";
 import { clearQueue, deletePagePreviews, loadAllPagePreviews, loadQueue, persistPagePreviews, persistQueue, reconcileJobFromServer } from "@/app/page-components/queue-persistence";
@@ -199,22 +194,6 @@ type ApiSettingsForm = ClientApiSettings & { apiKey: string };
 type ProviderModelSelections = Partial<Record<ProviderKind, string>>;
 
 const UI_LANGUAGES: UiLanguage[] = ["it","en","fr","es","de"];
-
-const UI_LANGUAGE_FLAGS: Record<UiLanguage, string> = {
- it:"🇮🇹",
- en:"🇬🇧",
- fr:"🇫🇷",
- es:"🇪🇸",
- de:"🇩🇪",
-};
-
-const UI_LANGUAGE_LABELS: Record<UiLanguage, string> = {
- it:"IT",
- en:"EN",
- fr:"FR",
- es:"ES",
- de:"DE",
-};
 
 function isUiLanguage(value: unknown): value is UiLanguage {
  return typeof value ==="string"&& (UI_LANGUAGES as string[]).includes(value);
@@ -534,7 +513,7 @@ export default function ExtractoPage() {
  const [selectedFileId, setSelectedFileId] = React.useState<string | null>(null);
  const [copied, setCopied] = React.useState<"md"|"json"| null>(null);
  const [apiSettingsOpen, setApiSettingsOpen] = React.useState(false);
- const [settingsTab, setSettingsTab] = React.useState<SettingsTab>("model");
+ const [settingsTab, setSettingsTab] = React.useState<SettingsTab>("ocr");
  const [viewMode, setViewMode] = React.useState<"preview"|"split"|"result">("split");
  const pdfPagePreviewCacheRef = React.useRef<Record<string, string[]>>({});
  const persistQuotaWarnedRef = React.useRef(false);
@@ -545,6 +524,8 @@ export default function ExtractoPage() {
  const [isSavingApiSettings, setIsSavingApiSettings] = React.useState(false);
  const [isSigningOut, setIsSigningOut] = React.useState(false);
  const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
+ const [accountDialogOpen, setAccountDialogOpen] = React.useState(false);
+ const [ocrAccordionOpen, setOcrAccordionOpen] = React.useState<string | null>("provider");
  const [modelError, setModelError] = React.useState("");
  const [historyOpen, setHistoryOpen] = React.useState(false);
 
@@ -2279,6 +2260,7 @@ export default function ExtractoPage() {
       <HeaderBar
         t={t}
         onOpenSettings={openSettingsTab}
+        onOpenAccount={() => setAccountDialogOpen(true)}
         onChangePassword={() => setChangePasswordOpen(true)}
         onSignOut={signOut}
         isSigningOut={isSigningOut}
@@ -2288,6 +2270,14 @@ export default function ExtractoPage() {
         open={changePasswordOpen}
         onOpenChange={setChangePasswordOpen}
         t={t}
+      />
+
+      <AccountDialog
+        open={accountDialogOpen}
+        onOpenChange={setAccountDialogOpen}
+        t={t}
+        uiLanguage={uiLanguage}
+        setUiLanguage={setUiLanguage}
       />
 
  <Dialog
@@ -2322,29 +2312,73 @@ export default function ExtractoPage() {
  <Tabs value={settingsTab} onValueChange={(v) => setSettingsTab(v as typeof settingsTab)} className="flex-1 min-h-0 flex flex-col gap-0">
  <div className="px-6">
  <TabsList className="w-full justify-start gap-0.5">
- <TabsTrigger value="model"className="gap-1.5 px-2.5"><SparklesIcon size={14} className="inline-flex items-center justify-center"/>{t("Modello","Model","Modèle","Modelo","Modell")}</TabsTrigger>
- <TabsTrigger value="kb"className="gap-1.5 px-2.5"><DatabaseBackupIcon size={14} className="inline-flex items-center justify-center"/>KB</TabsTrigger>
- <TabsTrigger value="provider"className="gap-1.5 px-2.5"><SettingsIcon size={14} className="inline-flex items-center justify-center"/>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</TabsTrigger>
- <TabsTrigger value="general"className="gap-1.5 px-2.5"><LanguagesIcon size={14} className="inline-flex items-center justify-center"/>{t("Generale","General","Général","General","Allgemein")}</TabsTrigger>
- <TabsTrigger value="keys"className="gap-1.5 px-2.5"><KeyRoundIcon size={14} className="inline-flex items-center justify-center"/>{t("Chiavi","Keys","Clés","Claves","Schlüssel")}</TabsTrigger>
- <TabsTrigger value="s3"className="gap-1.5 px-2.5"><Cloud className="size-3.5"/>S3</TabsTrigger>
+ <TabsTrigger value="ocr"className="gap-1.5 px-2.5"><SparklesIcon size={14} className="inline-flex items-center justify-center"/>OCR</TabsTrigger>
+ <TabsTrigger value="kb"className="gap-1.5 px-2.5"><DatabaseBackupIcon size={14} className="inline-flex items-center justify-center"/>{t("Knowledge base","Knowledge base","Base de connaissances","Base de conocimiento","Wissensdatenbank")}</TabsTrigger>
+ <TabsTrigger value="storage"className="gap-1.5 px-2.5"><Cloud className="size-3.5"/>{t("Archiviazione","Storage","Stockage","Almacenamiento","Speicher")}</TabsTrigger>
  <TabsTrigger value="templates"className="gap-1.5 px-2.5"><Layers className="size-3.5"/>{t("Template","Templates","Modèles","Plantillas","Vorlagen")}</TabsTrigger>
- <TabsTrigger value="notifications"className="gap-1.5 px-2.5"><BellRing className="size-3.5"/>{t("Notifiche","Push","Push","Push","Push")}</TabsTrigger>
  </TabsList>
  </div>
 
  <ScrollArea className="flex-1 min-h-0 px-6 pb-2">
- <TabsContent value="model"className="space-y-5 mt-4">
- <SettingsSection
- title={t("Modello OCR","OCR model","Modèle OCR","Modelo OCR","OCR-Modell")}
+ <TabsContent value="ocr"className="mt-4 space-y-3">
+ <SettingsAccordion value={ocrAccordionOpen} onValueChange={setOcrAccordionOpen}>
+ <SettingsAccordionItem
+ value="provider"
+ title={t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}
  hint={t(
-"Il modello che legge ogni pagina e ne tira fuori il testo. Cerca per nome, oppure incolla un ID se il provider non lo elenca.",
-"The model that reads each page and pulls the text out. Search by name, or paste an ID if the provider doesn't list it.",
-"Le modèle qui lit chaque page et en extrait le texte. Cherchez par nom ou collez un ID si le fournisseur ne le liste pas.",
-"El modelo que lee cada página y extrae el texto. Busca por nombre o pega un ID si el proveedor no lo lista.",
-"Das Modell, das jede Seite liest und den Text extrahiert. Suche per Name, oder füge eine ID ein, falls der Anbieter sie nicht listet.",
+"Dove gira l'intelligenza artificiale che legge i tuoi documenti.",
+"Where the AI that reads your documents actually runs.",
+"Où l'IA qui lit vos documents s'exécute.",
+"Dónde se ejecuta la IA que lee tus documentos.",
+"Wo die KI läuft, die deine Dokumente liest.",
 )}
  >
+ <div className="space-y-3">
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</Label>
+ <Select value={apiSettingsDraft.provider} onValueChange={(value) => setApiSettingsDraft((prev) => { const nextProvider = normalizeProvider(value); return { ...prev, provider: nextProvider, apiEndpoint: defaultEndpointForProvider(nextProvider) }; })}>
+ <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ <SelectItem value="ollama">Ollama</SelectItem>
+ <SelectItem value="mistral">Mistral OCR API</SelectItem>
+ <SelectItem value="openrouter">OpenRouter</SelectItem>
+ <SelectItem value="openai_compat">OpenAI-compatible</SelectItem>
+ </SelectContent>
+ </Select>
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">Endpoint</Label>
+ <Input value={apiSettingsDraft.apiEndpoint} onChange={(event) => setApiSettingsDraft((prev) => ({ ...prev, apiEndpoint: event.target.value }))} placeholder={defaultEndpointForProvider(normalizeProvider(apiSettingsDraft.provider))}/>
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">API key</Label>
+ <Input
+ type="password"
+ value={apiSettingsDraft.apiKey}
+ onChange={(event) => setApiSettingsDraft((prev) => { setApiKeyDirty(true); return { ...prev, apiKey: event.target.value }; })}
+ placeholder={!apiKeyDirty && apiSettingsDraft.hasApiKey ? t("Salvata (nascosta)","Saved (hidden)","Enregistrée (masquée)","Guardada (oculta)","Gespeichert (verborgen)") :"sk-..."}
+ />
+ {!apiKeyDirty && apiSettingsDraft.hasApiKey ? (
+ <p className="text-[11px] text-muted-foreground/80">{t("Lascia invariata per mantenere la chiave corrente.","Leave unchanged to keep the current key.","Laissez tel quel pour conserver la clé.","Déjala igual para mantener la clave.","Unverändert lassen, um den aktuellen Schlüssel zu behalten.")}</p>
+ ) : null}
+ </div>
+ </div>
+ </SettingsAccordionItem>
+
+ <SettingsAccordionItem
+ value="model"
+ title={t("Modello e velocità","Model and speed","Modèle et vitesse","Modelo y velocidad","Modell und Geschwindigkeit")}
+ hint={t(
+"Quale modello legge ogni pagina e quante pagine processare in parallelo.",
+"Which model reads each page and how many pages run in parallel.",
+"Quel modèle lit chaque page et combien de pages traiter en parallèle.",
+"Qué modelo lee cada página y cuántas se procesan en paralelo.",
+"Welches Modell jede Seite liest und wie viele Seiten parallel laufen.",
+)}
+ >
+ <div className="space-y-4">
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Modello OCR","OCR model","Modèle OCR","Modelo OCR","OCR-Modell")}</Label>
  <Combobox
  options={models.map((m) => ({ value: m.id, label: m.name, hint: m.provider }))}
  value={selectedModel}
@@ -2359,18 +2393,9 @@ export default function ExtractoPage() {
  ariaLabel={t("Modello OCR","OCR model","Modèle OCR","Modelo OCR","OCR-Modell")}
  />
  {modelError ? <p className="text-[11px] text-destructive">{modelError}</p> : null}
- </SettingsSection>
-
- <SettingsSection
- title={t("Pagine in parallelo","Pages in parallel","Pages en parallèle","Páginas en paralelo","Seiten parallel")}
- hint={t(
-"Numero di pagine OCR contemporanee per ogni job. 0 = automatico (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Massimo 16.",
-"How many OCR pages run in parallel per job. 0 = auto (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max 16.",
-"Nombre de pages OCR exécutées en parallèle par job. 0 = auto (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max 16.",
-"Cuántas páginas OCR se ejecutan en paralelo por trabajo. 0 = automático (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Máximo 16.",
-"Wie viele OCR-Seiten parallel pro Job laufen. 0 = automatisch (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max. 16.",
- )}
- >
+ </div>
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Pagine in parallelo","Pages in parallel","Pages en parallèle","Páginas en paralelo","Seiten parallel")}</Label>
  <div className="flex items-center gap-2">
  <Input
  type="number"
@@ -2391,23 +2416,33 @@ export default function ExtractoPage() {
  </Badge>
  ) : null}
  </div>
- </SettingsSection>
+ <p className="text-[11px] text-muted-foreground/70">{t(
+"0 = automatico (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Massimo 16.",
+"0 = auto (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max 16.",
+"0 = auto (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max 16.",
+"0 = automático (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Máximo 16.",
+"0 = automatisch (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max. 16.",
+)}</p>
+ </div>
+ </div>
+ </SettingsAccordionItem>
 
- <SettingsSection
- title={t("Post-processing","Post-processing","Post-traitement","Post-procesamiento","Nachverarbeitung")}
+ <SettingsAccordionItem
+ value="post"
+ title={t("Rifinitura output","Polish output","Affiner la sortie","Refinar resultado","Ergebnis verfeinern")}
  hint={t(
-"Una seconda passata facoltativa: riformatta il risultato OCR o estrae campi specifici (es. tabelle, totali, schede prodotto).",
-"An optional second pass: reformat the OCR output or pull out specific fields (think tables, totals, product cards).",
-"Une seconde passe optionnelle : reformatte la sortie OCR ou en extrait des champs précis (tableaux, totaux, fiches produit).",
-"Una segunda pasada opcional: reformatea la salida OCR o extrae campos concretos (tablas, totales, fichas).",
-"Ein optionaler zweiter Durchgang: formatiert die OCR-Ausgabe um oder extrahiert bestimmte Felder (Tabellen, Summen, Produktkarten).",
+"Una seconda passata facoltativa per ripulire il risultato o estrarre campi specifici.",
+"Optional second pass to clean up the result or pull specific fields.",
+"Une seconde passe optionnelle pour nettoyer le résultat ou en extraire des champs.",
+"Segunda pasada opcional para limpiar el resultado o extraer campos.",
+"Optionaler zweiter Durchgang, um das Ergebnis zu bereinigen oder Felder zu extrahieren.",
 )}
  right={
- <Switch checked={postProcessing.enabled} onCheckedChange={(enabled) => setPostProcessing((prev) => ({ ...prev, enabled }))} />
+ <Switch checked={postProcessing.enabled} onCheckedChange={(enabled) => { setPostProcessing((prev) => ({ ...prev, enabled })); if (enabled) setOcrAccordionOpen("post"); }} />
  }
  >
  {postProcessing.enabled ? (
- <div className="space-y-3 surface-soft rounded-xl p-3 mt-2">
+ <div className="space-y-3">
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
  {t("Istruzione","Instruction","Instruction","Instrucción","Anweisung")}
@@ -2452,22 +2487,39 @@ export default function ExtractoPage() {
  </div>
  </div>
  </div>
- ) : null}
- </SettingsSection>
+ ) : (
+ <p className="text-[12px] text-muted-foreground/80">{t(
+"Attiva la rifinitura per riformattare l'output o estrarre campi specifici.",
+"Turn on to reformat the output or pull specific fields.",
+"Activez pour reformater la sortie ou extraire des champs.",
+"Activa para reformatear el resultado o extraer campos.",
+"Aktivieren, um die Ausgabe umzuformatieren oder Felder zu extrahieren.",
+)}</p>
+ )}
+ </SettingsAccordionItem>
+ </SettingsAccordion>
+
+ <div className="flex justify-end pt-2">
+ <Button onClick={saveApiSettings} disabled={isSavingApiSettings}>
+ {isSavingApiSettings ? <LoaderCircleIcon size={16} className="inline-flex items-center justify-center mr-1.5 animate-spin"/> : null}
+ {t("Salva provider","Save provider","Enregistrer le fournisseur","Guardar proveedor","Provider speichern")}
+ </Button>
+ </div>
  </TabsContent>
 
- <TabsContent value="kb"className="space-y-5 mt-4">
- <p className="text-xs text-muted-foreground">
- {t(
-"Configura embedding, chunking e vector store.",
-"Configure embedding, chunking, and vector store.",
-"Configurez embedding, découpage et vector store.",
-"Configura embedding, chunking y vector store.",
-"Konfigurieren Sie Embedding, Chunking und Vektor-Store.",
- )}
- </p>
-
- <SettingsSection title={t("Embedding","Embedding","Embedding","Embedding","Embedding")}>
+ <TabsContent value="kb"className="mt-4 space-y-3">
+ <SettingsAccordion defaultOpen="embedding">
+ <SettingsAccordionItem
+ value="embedding"
+ title={t("Embedding","Embeddings","Embeddings","Embeddings","Embeddings")}
+ hint={t(
+"Come il testo diventa vettori cercabili.",
+"How text becomes searchable vectors.",
+"Comment le texte devient des vecteurs interrogeables.",
+"Cómo el texto se convierte en vectores buscables.",
+"Wie Text in durchsuchbare Vektoren umgewandelt wird.",
+)}
+ >
  <div className="space-y-3">
  <div className="grid grid-cols-2 gap-3">
  <div className="space-y-1.5">
@@ -2552,9 +2604,19 @@ export default function ExtractoPage() {
  </p>
  </div>
  </div>
- </SettingsSection>
+ </SettingsAccordionItem>
 
- <SettingsSection title={t("Chunking","Chunking","Découpage","Fragmentación","Chunking")}>
+ <SettingsAccordionItem
+ value="chunking"
+ title={t("Suddivisione testo","Text chunking","Découpage du texte","Fragmentación del texto","Textaufteilung")}
+ hint={t(
+"Come il testo viene tagliato in pezzi prima di essere indicizzato.",
+"How text is sliced into pieces before indexing.",
+"Comment le texte est découpé en morceaux avant indexation.",
+"Cómo se trocea el texto antes de indexar.",
+"Wie Text vor der Indexierung in Stücke geteilt wird.",
+)}
+ >
  <div className="space-y-3">
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Strategia","Strategy","Stratégie","Estrategia","Strategie")}</Label>
@@ -2640,9 +2702,19 @@ export default function ExtractoPage() {
  </div>
  ) : null}
  </div>
- </SettingsSection>
+ </SettingsAccordionItem>
 
- <SettingsSection title={t("Vector store","Vector store","Vector store","Vector store","Vektor-Store")}>
+ <SettingsAccordionItem
+ value="store"
+ title={t("Database vettoriale","Vector database","Base vectorielle","Base vectorial","Vektordatenbank")}
+ hint={t(
+"Dove vengono salvati i vettori dei tuoi documenti.",
+"Where your document vectors are stored.",
+"Où sont stockés les vecteurs de vos documents.",
+"Dónde se guardan los vectores de tus documentos.",
+"Wo deine Dokument-Vektoren gespeichert werden.",
+)}
+ >
  <div className="space-y-3">
  <div className="grid grid-cols-2 gap-3">
  <div className="space-y-1.5">
@@ -2756,7 +2828,8 @@ export default function ExtractoPage() {
  <Input value={kbDefaultsDraft.collectionTemplate} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, collectionTemplate: e.target.value }))} placeholder="extracto-{jobId}"/>
  </div>
  </div>
- </SettingsSection>
+ </SettingsAccordionItem>
+ </SettingsAccordion>
 
  <div className="flex justify-end pt-2">
  <Button onClick={saveKbDefaults} disabled={isSavingKbDefaults}>
@@ -2766,91 +2839,40 @@ export default function ExtractoPage() {
  </div>
  </TabsContent>
 
- <TabsContent value="provider"className="space-y-5 mt-4">
- <SettingsSection title={t("Provider","Provider","Fournisseur","Proveedor","Anbieter")} hint={t(
-"Chi esegue il modello: Ollama in locale per la massima privacy, Mistral o OpenRouter per più potenza, o un endpoint compatibile OpenAI tuo.",
-"Where the model actually runs: Ollama on your machine for full privacy, Mistral or OpenRouter for raw horsepower, or any OpenAI-compatible endpoint you trust.",
-"Qui exécute le modèle : Ollama en local pour la confidentialité, Mistral ou OpenRouter pour la puissance, ou un endpoint compatible OpenAI de votre choix.",
-"Quién ejecuta el modelo: Ollama en local para máxima privacidad, Mistral o OpenRouter para más potencia, o un endpoint compatible OpenAI.",
-"Wer das Modell ausführt: Ollama lokal für volle Privatsphäre, Mistral oder OpenRouter für Performance, oder ein eigener OpenAI-kompatibler Endpoint.",
-)}>
- <Select value={apiSettingsDraft.provider} onValueChange={(value) => setApiSettingsDraft((prev) => { const nextProvider = normalizeProvider(value); return { ...prev, provider: nextProvider, apiEndpoint: defaultEndpointForProvider(nextProvider) }; })}>
- <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
- <SelectContent>
- <SelectItem value="ollama">Ollama</SelectItem>
- <SelectItem value="mistral">Mistral OCR API</SelectItem>
- <SelectItem value="openrouter">OpenRouter</SelectItem>
- <SelectItem value="openai_compat">OpenAI-compatible</SelectItem>
- </SelectContent>
- </Select>
- </SettingsSection>
-
- <SettingsSection title={t("Endpoint","Endpoint","Endpoint","Endpoint","Endpoint")}>
- <Input value={apiSettingsDraft.apiEndpoint} onChange={(event) => setApiSettingsDraft((prev) => ({ ...prev, apiEndpoint: event.target.value }))} placeholder={defaultEndpointForProvider(normalizeProvider(apiSettingsDraft.provider))}/>
- </SettingsSection>
-
- <SettingsSection
- title="API key"
- hint={!apiKeyDirty && apiSettingsDraft.hasApiKey ? t("Lascia invariata per mantenere la chiave corrente.","Leave unchanged to keep the current key.","Laissez tel quel pour conserver la clé.","Déjala igual para mantener la clave.","Unverändert lassen, um den aktuellen Schlüssel zu behalten.") : undefined}
+ <TabsContent value="storage"className="mt-4">
+ <SettingsAccordion defaultOpen="s3">
+ <SettingsAccordionItem
+ value="s3"
+ title={t("Archiviazione S3","S3 cloud storage","Stockage S3","Almacenamiento S3","S3-Cloud-Speicher")}
+ hint={t(
+"Connetti un bucket per ingressi ed esportazioni.",
+"Connect a bucket for inputs and exports.",
+"Connectez un bucket pour les entrées et exports.",
+"Conecta un bucket para entradas y exportaciones.",
+"Verbinde einen Bucket für Eingaben und Exporte.",
+)}
  >
- <Input
- type="password"
- value={apiSettingsDraft.apiKey}
- onChange={(event) => setApiSettingsDraft((prev) => { setApiKeyDirty(true); return { ...prev, apiKey: event.target.value }; })}
- placeholder={!apiKeyDirty && apiSettingsDraft.hasApiKey ? t("Salvata (nascosta)","Saved (hidden)","Enregistrée (masquée)","Guardada (oculta)","Gespeichert (verborgen)") :"sk-..."}
- />
- </SettingsSection>
-
- <div className="flex justify-end pt-2">
- <Button onClick={saveApiSettings} disabled={isSavingApiSettings}>
- {isSavingApiSettings ? <LoaderCircleIcon size={16} className="inline-flex items-center justify-center mr-1.5 animate-spin"/> : null}
- {t("Salva provider","Save provider","Enregistrer le fournisseur","Guardar proveedor","Provider speichern")}
- </Button>
- </div>
- </TabsContent>
-
- <TabsContent value="general"className="space-y-5 mt-4">
- <SettingsSection title={t("Lingua interfaccia","Interface language","Langue d'interface","Idioma de la interfaz","Oberflächensprache")}>
- <Select value={uiLanguage} onValueChange={(value) => setUiLanguage(value as UiLanguage)}>
- <SelectTrigger className="w-full">
- <SelectValue>
- <span className="inline-flex items-center gap-2">
- <span aria-hidden>{UI_LANGUAGE_FLAGS[uiLanguage]}</span>
- <span>{UI_LANGUAGE_LABELS[uiLanguage]}</span>
- </span>
- </SelectValue>
- </SelectTrigger>
- <SelectContent>
- {UI_LANGUAGES.map((lang) => (
- <SelectItem key={lang} value={lang}>
- <span className="inline-flex items-center gap-2">
- <span aria-hidden>{UI_LANGUAGE_FLAGS[lang]}</span>
- <span>{UI_LANGUAGE_LABELS[lang]}</span>
- </span>
- </SelectItem>
- ))}
- </SelectContent>
- </Select>
- </SettingsSection>
-
- </TabsContent>
-
- <TabsContent value="keys"className="space-y-5 mt-4">
- <ApiKeysSection t={t} />
- </TabsContent>
-
- <TabsContent value="s3"className="space-y-8 mt-4">
  <S3SettingsSection t={t} />
- <div className="hairline-t pt-6"><WatchersSection t={t} /></div>
+ </SettingsAccordionItem>
+
+ <SettingsAccordionItem
+ value="watchers"
+ title={t("Cartelle monitorate","Watched folders","Dossiers surveillés","Carpetas vigiladas","Beobachtete Ordner")}
+ hint={t(
+"Importa automaticamente i documenti che arrivano in cartelle specifiche.",
+"Auto-import documents that land in specific folders.",
+"Importez automatiquement les documents arrivant dans des dossiers spécifiques.",
+"Importa automáticamente los documentos que llegan a carpetas específicas.",
+"Importiere automatisch Dokumente, die in bestimmten Ordnern landen.",
+)}
+ >
+ <WatchersSection t={t} />
+ </SettingsAccordionItem>
+ </SettingsAccordion>
  </TabsContent>
 
  <TabsContent value="templates"className="space-y-5 mt-4">
  <TemplatesSection t={t} />
- </TabsContent>
-
- <TabsContent value="notifications"className="space-y-8 mt-4">
- <NotificationsSection t={t} />
- <div className="hairline-t pt-6"><UsageSection t={t} /></div>
  </TabsContent>
 
  </ScrollArea>

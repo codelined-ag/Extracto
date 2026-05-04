@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-import { KeyRoundIcon } from "lucide-react";
+import { KeyRoundIcon, UserCogIcon } from "lucide-react";
 import { LogoutIcon } from "@/components/ui/logout";
 import { SettingsIcon } from "@/components/ui/settings";
 import { UserIcon } from "@/components/ui/user";
@@ -24,6 +24,7 @@ import type { SettingsTab, Translator } from "@/app/page-components/types";
 export interface HeaderBarProps {
   t: Translator;
   onOpenSettings: (tab: SettingsTab) => void;
+  onOpenAccount: () => void;
   onChangePassword: () => void;
   onSignOut: () => void;
   isSigningOut: boolean;
@@ -32,6 +33,7 @@ export interface HeaderBarProps {
 export function HeaderBar({
   t,
   onOpenSettings,
+  onOpenAccount,
   onChangePassword,
   onSignOut,
   isSigningOut,
@@ -69,7 +71,7 @@ export function HeaderBar({
                   variant="ghost"
                   size="icon"
                   className="group"
-                  onClick={() => onOpenSettings("model")}
+                  onClick={() => onOpenSettings("ocr")}
                   aria-label={t("Impostazioni", "Settings", "Paramètres", "Configuración", "Einstellungen")}
                 >
                   <SettingsIcon
@@ -115,6 +117,18 @@ export function HeaderBar({
               <TooltipContent>{t("Account", "Account", "Compte", "Cuenta", "Konto")}</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" className="min-w-[12rem]">
+              <DropdownMenuItem onSelect={onOpenAccount}>
+                <UserCogIcon size={16} className="inline-flex" />
+                <span>
+                  {t(
+                    "Il tuo account",
+                    "Your account",
+                    "Votre compte",
+                    "Tu cuenta",
+                    "Dein Konto",
+                  )}
+                </span>
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={onChangePassword}>
                 <KeyRoundIcon size={16} className="inline-flex" />
                 <span>
