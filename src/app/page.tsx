@@ -237,15 +237,36 @@ const DEFAULT_API_SETTINGS: ApiSettingsForm = {
  hasApiKey: false,
 };
 
-// Fallback list before first model fetch (Ollama only; Mistral is dynamic).
 const OLLAMA_FALLBACK_MODELS: Model[] = [
  { id:"llama3.2-vision:latest", name:"Llama 3.2 Vision", provider:"ollama"},
  { id:"llava:latest", name:"LLaVA", provider:"ollama"},
  { id:"minicpm-v:latest", name:"MiniCPM-V", provider:"ollama"},
 ];
+const MISTRAL_FALLBACK_MODELS: Model[] = [
+ { id:"mistral-ocr-latest", name:"mistral-ocr-latest", provider:"mistral"},
+ { id:"mistral-ocr", name:"mistral-ocr", provider:"mistral"},
+ { id:"pixtral-12b", name:"pixtral-12b", provider:"mistral"},
+];
+const OPENROUTER_FALLBACK_MODELS_UI: Model[] = [
+ { id:"anthropic/claude-3.5-sonnet", name:"anthropic/claude-3.5-sonnet", provider:"openrouter"},
+ { id:"openai/gpt-4o", name:"openai/gpt-4o", provider:"openrouter"},
+ { id:"openai/gpt-4o-mini", name:"openai/gpt-4o-mini", provider:"openrouter"},
+ { id:"google/gemini-2.0-flash-001", name:"google/gemini-2.0-flash-001", provider:"openrouter"},
+ { id:"qwen/qwen-2-vl-72b-instruct", name:"qwen/qwen-2-vl-72b-instruct", provider:"openrouter"},
+];
+const OPENAI_COMPAT_FALLBACK_MODELS: Model[] = [
+ { id:"gpt-4o", name:"gpt-4o", provider:"openai_compat"},
+ { id:"gpt-4o-mini", name:"gpt-4o-mini", provider:"openai_compat"},
+];
 
 function getFallbackModelsForProvider(provider: ProviderKind): Model[] {
- return provider ==="ollama"? OLLAMA_FALLBACK_MODELS : [];
+ switch (provider) {
+ case"ollama": return OLLAMA_FALLBACK_MODELS;
+ case"mistral": return MISTRAL_FALLBACK_MODELS;
+ case"openrouter": return OPENROUTER_FALLBACK_MODELS_UI;
+ case"openai_compat": return OPENAI_COMPAT_FALLBACK_MODELS;
+ default: return [];
+ }
 }
 
 // Languages (OCR-detectable; not the UI language)
@@ -2058,7 +2079,6 @@ export default function ExtractoPage() {
  loading={isLoadingModels}
  onRefresh={() => { void fetchAvailableModels(apiSettings); }}
  refreshLabel={t("AGGIORNA","REFRESH","ACTUALISER","ACTUALIZAR","AKTUALISIEREN")}
- disabled={models.length === 0 && !isLoadingModels}
  allowCustom
  ariaLabel={t("Modello OCR","OCR model","Modèle OCR","Modelo OCR","OCR-Modell")}
  />
