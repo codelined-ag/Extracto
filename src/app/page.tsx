@@ -579,13 +579,13 @@ export default function ExtractoPage() {
  }
  const payload = await resp.json() as { embeddings: string[]; others: string[] };
  const opts: { value: string; label: string; hint?: string }[] = [
- ...payload.embeddings.map((id) => ({ value: id, label: id, hint:"embedding"})),
+ ...payload.embeddings.map((id) => ({ value: id, label: id, hint: t("embedding","embedding","embedding","embedding","Embedding") })),
  ...payload.others.map((id) => ({ value: id, label: id })),
  ];
  setEmbeddingModelOptions(opts);
  } catch (error) {
  toast({
- title:"Model discovery failed",
+ title: t("Ricerca modelli fallita","Model discovery failed","Échec de la recherche de modèles","Falló la búsqueda de modelos","Modellsuche fehlgeschlagen"),
  description: error instanceof Error ? error.message :"",
  variant:"destructive",
  });

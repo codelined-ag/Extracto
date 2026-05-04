@@ -48,7 +48,13 @@ export function NotificationsSection({ t }: NotificationsSectionProps) {
       if (perm !== "granted") return;
 
       const keyResp = await fetch("/api/push/subscribe", { cache: "no-store" });
-      if (!keyResp.ok) throw new Error("Could not fetch VAPID public key");
+      if (!keyResp.ok) throw new Error(t(
+        "Impossibile recuperare la chiave VAPID pubblica.",
+        "Could not fetch the VAPID public key.",
+        "Impossible de récupérer la clé VAPID publique.",
+        "No se pudo obtener la clave VAPID pública.",
+        "VAPID-Public-Key konnte nicht geladen werden.",
+      ));
       const { publicKey } = (await keyResp.json()) as { publicKey: string };
 
       const reg = await navigator.serviceWorker.ready;
@@ -67,7 +73,13 @@ export function NotificationsSection({ t }: NotificationsSectionProps) {
           userAgent: navigator.userAgent,
         }),
       });
-      if (!r.ok) throw new Error(`Server rejected subscription (${r.status})`);
+      if (!r.ok) throw new Error(t(
+        `Il server ha rifiutato la sottoscrizione (${r.status}).`,
+        `Server rejected the subscription (${r.status}).`,
+        `Le serveur a refusé l'abonnement (${r.status}).`,
+        `El servidor rechazó la suscripción (${r.status}).`,
+        `Server hat das Abonnement abgelehnt (${r.status}).`,
+      ));
       setSubscribed(true);
       toast({ title: t("Notifiche attivate", "Notifications enabled", "Notifications activées", "Notificaciones activadas", "Benachrichtigungen aktiviert") });
     } catch (err) {
