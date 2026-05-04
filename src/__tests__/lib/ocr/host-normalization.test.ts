@@ -3,6 +3,7 @@ import {
   normalizeHostEndpoint,
   isLikelyLocalhostEndpoint,
   resolveOllamaHostEndpoint,
+  rewriteLocalhostForContainer,
 } from "@/lib/ocr/host-normalization";
 
 // ---------------------------------------------------------------------------
@@ -153,5 +154,41 @@ describe("resolveOllamaHostEndpoint", () => {
     // because `fallback` is falsy in the condition check.
     const result = resolveOllamaHostEndpoint("http://localhost:11434", "");
     expect(result).toBe("http://localhost:11434");
+  });
+});
+
+describe("rewriteLocalhostForContainer", () => {
+  it("rewrites 127.0.0.1 to a docker-gateway-reachable host while preserving port and path", () => {
+    const out = rewriteLocalhostForContainer("http://127.0.0.1:8001/api/v2");
+    expect(out).toMatch(/^http:\/\/(?!127\.0\.0\.1)[^/]+:8001\/api\/v2$/);
+  });
+
+  it("rewrites localhost too", () => {
+    const out = rewriteLocalhostForContainer("http://localhost:6333");
+    expect(out).not.toMatch(/localhost/);
+    expect(out).toMatch(/:6333$/);
+  });
+
+  it("rewrites 0.0.0.0", () => {
+    const out = rewriteLocalhostForContainer("http://0.0.0.0:11434/api/embed");
+    expect(out).not.toMatch(/0\.0\.0\.0/);
+    expect(out).toMatch(/:11434\/api\/embed$/);
+  });
+
+  it("leaves a non-localhost URL untouched", () => {
+    expect(rewriteLocalhostForContainer("https://api.openai.com/v1/embeddings")).toBe(
+      "https://api.openai.com/v1/embeddings",
+    );
+  });
+
+  it("leaves an already-docker-internal URL untouched (no double-rewrite)", () => {
+    expect(rewriteLocalhostForContainer("http://host.docker.internal:8001")).toBe(
+      "http://host.docker.internal:8001",
+    );
+  });
+
+  it("returns the original on garbage input", () => {
+    expect(rewriteLocalhostForContainer("not a url")).toBe("not a url");
+    expect(rewriteLocalhostForContainer("")).toBe("");
   });
 });

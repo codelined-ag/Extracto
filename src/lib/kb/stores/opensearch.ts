@@ -23,20 +23,25 @@ export class OpenSearchAdapter implements VectorStoreAdapter {
   }
 
   async collectionExists(name: string): Promise<boolean> {
-    const resp = await this.req(`/${encodeURIComponent(name)}`, "HEAD");
+    const resp = await this.req(`/${encodeURIComponent(this.normalizeIndexName(name))}`, "HEAD");
     return resp.ok;
+  }
+
+  private normalizeIndexName(name: string): string {
+    return name.toLowerCase().replace(/^[_-]+/, "").replace(/[^a-z0-9_\-.]/g, "-");
   }
 
   async upsert(chunks: Array<Chunk & { embedding: number[] }>, collectionName: string): Promise<void> {
     if (chunks.length === 0) return;
-    await this.ensureIndex(collectionName, chunks[0].embedding.length);
+    const indexName = this.normalizeIndexName(collectionName);
+    await this.ensureIndex(indexName, chunks[0].embedding.length);
 
     const lines: string[] = [];
     for (const chunk of chunks) {
       const idSource = chunk.metadata.contentHash
         ? `${chunk.metadata.jobId}:${chunk.metadata.contentHash}`
         : `${chunk.metadata.jobId}:${chunk.metadata.chunkIndex}:${chunk.metadata.pageNumber ?? 0}`;
-      lines.push(JSON.stringify({ index: { _index: collectionName, _id: idSource } }));
+      lines.push(JSON.stringify({ index: { _index: indexName, _id: idSource } }));
       const doc: Record<string, unknown> = { text: chunk.text, vector: chunk.embedding };
       for (const [k, v] of Object.entries(chunk.metadata)) {
         if (v === undefined) continue;

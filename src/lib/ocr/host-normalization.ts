@@ -81,6 +81,26 @@ export function isLikelyLocalhostEndpoint(endpoint: string): boolean {
   return LOCALHOST_PATTERNS.test(normalizeScheme(endpoint));
 }
 
+/**
+ * Rewrite localhost-flavored URLs to docker-gateway-reachable URLs while
+ * preserving scheme, port, and path. No-ops outside container contexts.
+ * Used by KB export so user-saved "http://127.0.0.1:8001" works from inside
+ * the bridged Extracto container.
+ */
+export function rewriteLocalhostForContainer(rawEndpoint: string): string {
+  const normalized = normalizeScheme(rawEndpoint);
+  if (!normalized || !isLikelyLocalhostEndpoint(normalized)) return rawEndpoint;
+  try {
+    const url = new URL(normalized);
+    const candidates = readContainerGatewayIps();
+    const replacement = candidates[0] ?? "host.docker.internal";
+    url.hostname = replacement;
+    return url.toString().replace(/\/+$/u, "");
+  } catch {
+    return rawEndpoint;
+  }
+}
+
 export function resolveOllamaHostEndpoint(
   rawEndpoint: string,
   fallbackHost: string

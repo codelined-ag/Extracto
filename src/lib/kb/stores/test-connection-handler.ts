@@ -7,6 +7,7 @@ import {
   type VectorStoreKind,
 } from "@/lib/kb/stores/test-connection";
 import { enforceVectorStoreEndpointPolicy } from "@/lib/ocr/endpoint-policy";
+import { rewriteLocalhostForContainer } from "@/lib/ocr/host-normalization";
 
 const VALID_STORES = ["chroma", "qdrant", "weaviate", "milvus", "opensearch", "pinecone", "typesense"] as const;
 
@@ -33,7 +34,7 @@ export async function handleKbTestConnection(
   if (typeof baseUrlRaw !== "string" || !baseUrlRaw.trim()) {
     throw new ApiRouteError("baseUrl (string) is required", 400);
   }
-  const baseUrl = enforceVectorStoreEndpointPolicy(baseUrlRaw);
+  const baseUrl = enforceVectorStoreEndpointPolicy(rewriteLocalhostForContainer(baseUrlRaw));
 
   const apiKeyProvided = Object.prototype.hasOwnProperty.call(body, "apiKey")
     && typeof body.apiKey === "string";

@@ -39,6 +39,11 @@ import type {
   VectorStoreAdapter,
 } from "@/lib/kb/types";
 import { enforceProviderEndpointPolicy, enforceVectorStoreEndpointPolicy } from "@/lib/ocr/endpoint-policy";
+import {
+  getFallbackOllamaHost,
+  resolveOllamaHostEndpoint,
+  rewriteLocalhostForContainer,
+} from "@/lib/ocr/host-normalization";
 import { readResultText } from "@/lib/ocr/result-store";
 import {
   getDefaultOpenAICompatApiUrl,
@@ -210,9 +215,13 @@ function parseEmbedding(raw: unknown): EmbeddingProviderConfig {
   }
   const provider = rawProvider as EmbeddingProviderKind;
   const rawEndpoint = stringField(r.apiEndpoint, "embedding.apiEndpoint");
+  const dockerNormalized =
+    provider === "ollama"
+      ? resolveOllamaHostEndpoint(rawEndpoint, getFallbackOllamaHost())
+      : rawEndpoint;
   const apiEndpoint = enforceProviderEndpointPolicy(
     provider,
-    rawEndpoint,
+    dockerNormalized,
     getEmbeddingProviderFallback(provider),
   );
   const model = stringField(r.model, "embedding.model");
@@ -236,7 +245,7 @@ function parseVectorStore(raw: unknown): VectorStoreAdapter {
     );
   }
   const rawBaseUrl = stringField(r.baseUrl, "vectorStore.baseUrl");
-  const baseUrl = enforceVectorStoreEndpointPolicy(rawBaseUrl);
+  const baseUrl = enforceVectorStoreEndpointPolicy(rewriteLocalhostForContainer(rawBaseUrl));
   const apiKey = typeof r.apiKey === "string" ? r.apiKey : undefined;
   const dimensions = typeof r.dimensions === "number" && Number.isInteger(r.dimensions) && r.dimensions > 0
     ? r.dimensions

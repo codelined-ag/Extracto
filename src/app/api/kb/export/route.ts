@@ -18,6 +18,11 @@ import {
   enforceProviderEndpointPolicy,
   enforceVectorStoreEndpointPolicy,
 } from "@/lib/ocr/endpoint-policy";
+import {
+  getFallbackOllamaHost,
+  resolveOllamaHostEndpoint,
+  rewriteLocalhostForContainer,
+} from "@/lib/ocr/host-normalization";
 import { ChromaAdapter } from "@/lib/kb/stores/chroma";
 import { QdrantAdapter } from "@/lib/kb/stores/qdrant";
 import { WeaviateAdapter } from "@/lib/kb/stores/weaviate";
@@ -85,11 +90,15 @@ export const POST = withMutationAuth("kb:write", async (request: NextRequest, { 
     ...(body.overrides?.embedding ?? {}),
     apiKey: defaults.embedding.apiKey,
   };
+  const dockerNormalizedEmbeddingEndpoint =
+    embeddingMerged.provider === "ollama"
+      ? resolveOllamaHostEndpoint(embeddingMerged.apiEndpoint, getFallbackOllamaHost())
+      : embeddingMerged.apiEndpoint;
   const embedding = {
     ...embeddingMerged,
     apiEndpoint: enforceProviderEndpointPolicy(
       embeddingMerged.provider,
-      embeddingMerged.apiEndpoint,
+      dockerNormalizedEmbeddingEndpoint,
       embeddingMerged.apiEndpoint,
     ),
   };
@@ -101,7 +110,7 @@ export const POST = withMutationAuth("kb:write", async (request: NextRequest, { 
   };
   const vectorStore = {
     ...vectorStoreMerged,
-    baseUrl: enforceVectorStoreEndpointPolicy(vectorStoreMerged.baseUrl),
+    baseUrl: enforceVectorStoreEndpointPolicy(rewriteLocalhostForContainer(vectorStoreMerged.baseUrl)),
   };
 
   const job = await db.ocrJob.findFirst({
