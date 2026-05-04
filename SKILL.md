@@ -79,6 +79,16 @@ extracto jobs wait <job-id>
 
 `wait` polls every 2 seconds and prints the final state when the status leaves `QUEUED`/`RUNNING`.
 
+### Edit a page (with version history)
+
+```bash
+extracto jobs edit-page <job-id> <page-number> --text "Cleaned-up markdown..."
+extracto jobs edit-page <job-id> <page-number> --from-file path/to/page.md
+extracto jobs page-history <job-id> <page-number>
+```
+
+`edit-page` replaces the markdown of one page on a `COMPLETED` job and re-stitches the job's `extractedText`. The previous text is appended to the page's edit history (max 20 entries; newest first). The job is flagged `userEdited: true`, and prior KB/S3 exports are marked stale, you'll need to re-export to update them.
+
 ### Cancel or delete a job
 
 ```bash

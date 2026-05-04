@@ -477,6 +477,69 @@ paths:
                 type: object
                 properties: { deleted: { type: integer } }
 
+  /api/v1/jobs/{id}/pages/{pageNumber}:
+    get:
+      summary: Fetch the edit history for one page on a COMPLETED job
+      operationId: getJobPageHistory
+      tags: [Jobs]
+      parameters:
+        - { $ref: "#/components/parameters/JobId" }
+        - name: pageNumber
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Page edit history (newest first, max 20 entries)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pageNumber: { type: integer }
+                  history:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        text: { type: string }
+                        editedAt: { type: string, format: date-time }
+                        characterCount: { type: integer }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Replace the markdown of a single page; the previous text is added to the page's history
+      operationId: editJobPage
+      tags: [Jobs]
+      parameters:
+        - { $ref: "#/components/parameters/JobId" }
+        - name: pageNumber
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, maxLength: 1000000 }
+      responses:
+        "200":
+          description: Page updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  pageNumber: { type: integer }
+                  extractedTextLength: { type: integer }
+                  historyLength: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/v1/jobs/bulk/tags:
     post:
       summary: Apply tags to many jobs in one call

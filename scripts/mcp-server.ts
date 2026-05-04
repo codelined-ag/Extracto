@@ -267,6 +267,36 @@ server.tool(
 );
 
 server.tool(
+  "job_edit_page",
+  "Replace the markdown text of a single page on a COMPLETED job. The previous text is appended to the per-page edit history; the job's extractedText is re-stitched. Marks the job's prior exports as stale.",
+  {
+    jobId: z.string(),
+    pageNumber: z.number().int().min(1),
+    text: z.string().max(1_000_000),
+  },
+  async ({ jobId, pageNumber, text }) =>
+    asTextResult(
+      await call(`/api/v1/jobs/${encodeURIComponent(jobId)}/pages/${pageNumber}`, {
+        method: "PATCH",
+        body: { text },
+      }),
+    ),
+);
+
+server.tool(
+  "job_page_history",
+  "Fetch the edit history for one page on a job. Each entry has the prior text, characterCount, and editedAt timestamp; the newest entry is first.",
+  {
+    jobId: z.string(),
+    pageNumber: z.number().int().min(1),
+  },
+  async ({ jobId, pageNumber }) =>
+    asTextResult(
+      await call(`/api/v1/jobs/${encodeURIComponent(jobId)}/pages/${pageNumber}`),
+    ),
+);
+
+server.tool(
   "job_set_tags",
   "Replace the set of tags applied to a job. Pass an empty array to clear all tags.",
   { jobId: z.string(), tagIds: z.array(z.string()) },

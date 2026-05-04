@@ -31,6 +31,7 @@ import { LoaderCircleIcon } from "@/components/ui/loader-circle";
 import { SearchIcon } from "@/components/ui/search";
 
 import { deriveHistoryStatus, formatTimestamp, getDocumentMetadata, getDocumentType, summarizeDetectedLanguages } from "@/app/page-components/page-utils";
+import { PageEditor, type PageEditorPage } from "@/app/page-components/page-editor";
 import { TagPicker } from "@/app/page-components/tag-picker";
 import { tagChipClass, tagSwatchClass } from "@/app/page-components/tag-utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -76,6 +77,7 @@ export interface HistoryDialogProps {
   onUpdateTag: (id: string, patch: { name?: string; color?: TagColor }) => Promise<void>;
   onDeleteTag: (id: string) => Promise<void>;
   onUpdateJobTags: (jobId: string, tagIds: string[]) => Promise<void>;
+  onPageSaved: (jobId: string) => Promise<void>;
   onApplyFilters: (filters: {
     q?: string;
     status?: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "all";
@@ -111,6 +113,7 @@ export function HistoryDialog({
   onUpdateTag,
   onDeleteTag,
   onUpdateJobTags,
+  onPageSaved,
   onApplyFilters,
   savedSearches,
   onSaveSearch,
@@ -804,6 +807,10 @@ export function HistoryDialog({
                         <FileTextIcon size={14} className="inline-flex items-center justify-center" />
                         {t("Grezzo", "Raw", "Brut", "Sin procesar", "Roh")}
                       </TabsTrigger>
+                      <TabsTrigger value="pages" className="gap-1.5">
+                        <FileTextIcon size={14} className="inline-flex items-center justify-center" />
+                        {t("Pagine", "Pages", "Pages", "Páginas", "Seiten")}
+                      </TabsTrigger>
                       <TabsTrigger value="json" className="gap-1.5">
                         <Code className="size-3.5" />
                         JSON
@@ -821,6 +828,41 @@ export function HistoryDialog({
                         <pre className="px-7 py-4 text-xs font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-foreground/90">
                           {selectedMarkdown}
                         </pre>
+                      </ScrollArea>
+                    </TabsContent>
+                    <TabsContent value="pages" className="h-full m-0">
+                      <ScrollArea className="h-full">
+                        <PageEditor
+                          t={t}
+                          jobId={selectedJobDetail.id}
+                          pages={(() => {
+                            const pages: PageEditorPage[] = [];
+                            const meta = selectedJobDetail.metadata;
+                            if (meta && typeof meta === "object" && !Array.isArray(meta)) {
+                              const records = (meta as Record<string, unknown>).pageRecords;
+                              if (Array.isArray(records)) {
+                                for (const r of records) {
+                                  if (!r || typeof r !== "object") continue;
+                                  const pageNumber = (r as Record<string, unknown>).pageNumber;
+                                  const text = (r as Record<string, unknown>).text;
+                                  if (typeof pageNumber === "number" && typeof text === "string") {
+                                    pages.push({ pageNumber, text });
+                                  }
+                                }
+                              }
+                            }
+                            if (pages.length === 0 && selectedJobDetail.extractedText) {
+                              const chunks = selectedJobDetail.extractedText.split("\n\n---\n\n");
+                              for (let i = 0; i < chunks.length; i += 1) {
+                                pages.push({ pageNumber: i + 1, text: chunks[i] });
+                              }
+                            }
+                            return pages.sort((a, b) => a.pageNumber - b.pageNumber);
+                          })()}
+                          onSaved={async () => {
+                            await onPageSaved(selectedJobDetail.id);
+                          }}
+                        />
                       </ScrollArea>
                     </TabsContent>
                     <TabsContent value="json" className="h-full m-0">

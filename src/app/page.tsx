@@ -2994,6 +2994,10 @@ export default function ExtractoPage() {
           await history.loadJobs();
           if (history.selectedId) await history.loadDetail(history.selectedId);
         }}
+        onPageSaved={async (jobId) => {
+          await history.loadDetail(jobId);
+          await history.loadJobs();
+        }}
         onApplyFilters={historyApplyFilters}
         savedSearches={savedSearches.items}
         onSaveSearch={async (name, filters) => {

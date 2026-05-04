@@ -491,6 +491,30 @@ cmd_jobs() {
       done
       printf "%s\n" "$body"
       ;;
+    edit-page)
+      [ -n "${1:-}" ] && [ -n "${2:-}" ] || die "usage: extracto jobs edit-page <job-id> <page-number> (--text TEXT | --from-file PATH)"
+      local ep_job_id="$1"
+      local ep_page="$2"
+      shift 2
+      local ep_text=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --text) ep_text="${2:-}"; shift 2 ;;
+          --from-file)
+            [ -f "${2:-}" ] || die "file not found: ${2:-}"
+            ep_text="$(cat "$2")"; shift 2 ;;
+          *) die "unknown flag: $1" ;;
+        esac
+      done
+      [ -n "$ep_text" ] || die "--text or --from-file is required"
+      api_patch_json "/api/v1/jobs/${ep_job_id}/pages/${ep_page}" \
+        "$(printf '{"text":%s}' \
+          "$(printf '%s' "$ep_text" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")"
+      ;;
+    page-history)
+      [ -n "${1:-}" ] && [ -n "${2:-}" ] || die "usage: extracto jobs page-history <job-id> <page-number>"
+      api_get "/api/v1/jobs/${1}/pages/${2}"
+      ;;
     bulk-tag)
       local mode="add"
       local job_csv=""
@@ -525,7 +549,7 @@ cmd_jobs() {
       api_put_json "/api/v1/jobs/${job_id}/tags" "$(printf '{"tagIds":%s}' "$ids_json")"
       ;;
     *)
-      die "usage: extracto jobs <list|get|delete|cancel|wait|set-tags|bulk-tag> [args...]"
+      die "usage: extracto jobs <list|get|delete|cancel|wait|set-tags|bulk-tag|edit-page|page-history> [args...]"
       ;;
   esac
 }
@@ -1141,6 +1165,9 @@ Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
   jobs delete <id>              Delete a job
   jobs cancel <id>              Request a job stop
   jobs wait <id>                Poll until the job leaves QUEUED/RUNNING
+  jobs edit-page <id> <n> (--text TEXT | --from-file PATH)
+                                Replace the markdown text of page n on a COMPLETED job. Previous text is added to the per-page history.
+  jobs page-history <id> <n>    Show the edit history for page n
   jobs set-tags <id> [tag-id...]  Replace the tags applied to a job
   jobs bulk-tag --jobs id,id,... --tags id,id,... [--mode add|replace]
                                 Apply tags to many jobs at once (default mode add = union).
