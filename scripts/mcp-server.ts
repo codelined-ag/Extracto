@@ -112,6 +112,15 @@ server.tool(
                 .describe(
                   "Per-document-type prompt preset that sharpens extraction for the specified shape (e.g. invoice => structured JSON of line items).",
                 ),
+              pageConcurrency: z
+                .number()
+                .int()
+                .min(0)
+                .max(16)
+                .optional()
+                .describe(
+                  "How many pages to OCR in parallel. 0 = auto (per-provider sane default: ollama=1, mistral=4, openrouter=4, openai_compat=2). Clamped to 1..16.",
+                ),
             })
             .partial()
             .optional(),
@@ -219,6 +228,15 @@ server.tool(
       breakpointPercentile: z.number().min(0).max(100).optional(),
       maxHeadingDepth: z.number().int().min(1).max(6).optional(),
     }),
+    embeddingConcurrency: z
+      .number()
+      .int()
+      .min(1)
+      .max(16)
+      .optional()
+      .describe(
+        "How many parallel embedding-batch requests to fan out. Default 1 = single batch (current behavior). Higher values speed up large exports against providers with high concurrent capacity (OpenRouter, hosted OpenAI-compat). Keep at 1 for local Ollama unless OLLAMA_NUM_PARALLEL is raised.",
+      ),
   },
   async (input) => asTextResult(await call("/api/v1/export/kb", { method: "POST", body: input })),
 );

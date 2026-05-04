@@ -368,7 +368,7 @@ function Resolve-PageSpec {
 
 function Cmd-Ocr {
     if ($RemainingArguments.Count -lt 1) {
-        Fail "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7] [--preset generic|academic|invoice|contract|form] [--no-text-layer]"
+        Fail "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7] [--preset generic|academic|invoice|contract|form] [--no-text-layer] [--page-concurrency N]"
     }
     $file = $RemainingArguments[0]
     if (-not (Test-Path -LiteralPath $file)) { Fail "file not found: $file" }
@@ -379,6 +379,7 @@ function Cmd-Ocr {
     $pagesSpec = ""
     $preset = ""
     $preferTextLayer = $null
+    $pageConcurrency = $null
     $i = 1
     while ($i -lt $RemainingArguments.Count) {
         $arg = $RemainingArguments[$i]
@@ -396,6 +397,15 @@ function Cmd-Ocr {
             }
             "--no-text-layer"  { $preferTextLayer = $false; $i += 1 }
             "--text-layer"     { $preferTextLayer = $true; $i += 1 }
+            "--page-concurrency" {
+                $pcRaw = $RemainingArguments[$i + 1]
+                $pc = 0
+                if (-not [int]::TryParse($pcRaw, [ref]$pc) -or $pc -lt 1 -or $pc -gt 16) {
+                    Fail "--page-concurrency must be an integer between 1 and 16 (got '$pcRaw')"
+                }
+                $pageConcurrency = $pc
+                $i += 2
+            }
             default            { Fail "unknown ocr flag: $arg" }
         }
     }
@@ -420,6 +430,7 @@ function Cmd-Ocr {
     $settingsHash = [ordered]@{}
     if ($preset) { $settingsHash.documentPreset = $preset }
     if ($null -ne $preferTextLayer) { $settingsHash.preferTextLayer = $preferTextLayer }
+    if ($null -ne $pageConcurrency) { $settingsHash.pageConcurrency = $pageConcurrency }
 
     $bodyEntry = $null
     if ($pagesSpec) {
@@ -597,6 +608,14 @@ function Parse-KbExportFlags {
             "--min-chunk-size"        { $opts.MinChunkSize = [int]$Args[$i + 1]; $i += 2 }
             "--breakpoint-percentile" { $opts.BreakpointPercentile = [double]$Args[$i + 1]; $i += 2 }
             "--max-heading-depth"     { $opts.MaxHeadingDepth = [int]$Args[$i + 1]; $i += 2 }
+            "--embed-concurrency"     {
+                $ec = 0
+                if (-not [int]::TryParse($Args[$i + 1], [ref]$ec) -or $ec -lt 1 -or $ec -gt 16) {
+                    Fail "--embed-concurrency must be an integer between 1 and 16"
+                }
+                $opts.EmbedConcurrency = $ec
+                $i += 2
+            }
             default                   { Fail "unknown kb export flag: $arg" }
         }
     }
@@ -638,6 +657,7 @@ function Cmd-Kb {
             if ($opts.MinChunkSize -gt 0) { $payload.chunking.minChunkSize = $opts.MinChunkSize }
             if ($null -ne $opts.BreakpointPercentile) { $payload.chunking.breakpointPercentile = $opts.BreakpointPercentile }
             if ($null -ne $opts.MaxHeadingDepth) { $payload.chunking.maxHeadingDepth = $opts.MaxHeadingDepth }
+            if ($null -ne $opts.EmbedConcurrency) { $payload.embeddingConcurrency = $opts.EmbedConcurrency }
 
             Write-Info "exporting job $jobId to $($opts.StoreKind)://$($opts.StoreUrl)/$($opts.Collection)..."
             Write-Output (Invoke-Api -Method POST -Path "/api/v1/export/kb" -Body $payload)

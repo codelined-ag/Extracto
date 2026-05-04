@@ -427,9 +427,9 @@ cmd_settings() {
 
 cmd_ocr() {
   local file="${1:-}"
-  [ -n "$file" ] || die "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7] [--preset generic|academic|invoice|contract|form] [--no-text-layer]"
+  [ -n "$file" ] || die "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7] [--preset generic|academic|invoice|contract|form] [--no-text-layer] [--page-concurrency N]"
   [ -f "$file" ] || die "file not found: $file"
-  local out="" model="" wait_flag=1 pages_spec="" preset="" prefer_text_layer=""
+  local out="" model="" wait_flag=1 pages_spec="" preset="" prefer_text_layer="" page_concurrency=""
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -458,6 +458,16 @@ cmd_ocr() {
         ;;
       --text-layer)
         prefer_text_layer="true"; shift
+        ;;
+      --page-concurrency)
+        page_concurrency="${2:-}"
+        case "$page_concurrency" in
+          ''|*[!0-9]*) die "--page-concurrency must be a positive integer (got '${page_concurrency}')" ;;
+        esac
+        if [ "$page_concurrency" -lt 1 ] || [ "$page_concurrency" -gt 16 ]; then
+          die "--page-concurrency must be between 1 and 16"
+        fi
+        shift 2
         ;;
       *)
         die "unknown ocr flag: $1"
@@ -593,7 +603,7 @@ PY
     body="$(python3 -c '
 import json, sys
 data = sys.stdin.read().split("\x1f")
-file_name, model, page_numbers_csv, pages_concat, preset, prefer_text_layer, source_pdf = data[0], data[1], data[2], data[3], data[4], data[5], data[6]
+file_name, model, page_numbers_csv, pages_concat, preset, prefer_text_layer, source_pdf, page_concurrency = data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]
 pages = pages_concat.split("\x1e") if pages_concat else []
 page_numbers = [int(n) for n in page_numbers_csv.split(",") if n]
 preview = pages[0] if pages else ""
@@ -605,15 +615,17 @@ if preset:
     settings["documentPreset"] = preset
 if prefer_text_layer:
     settings["preferTextLayer"] = prefer_text_layer == "true"
+if page_concurrency:
+    settings["pageConcurrency"] = int(page_concurrency)
 if settings:
     file_entry["settings"] = settings
 print(json.dumps({"files": [file_entry]}, separators=(",", ":")))
-' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${page_numbers_list}"$'\x1f'"${pages_payload}"$'\x1f'"${preset}"$'\x1f'"${prefer_text_layer}"$'\x1f'"${source_pdf}")"
+' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${page_numbers_list}"$'\x1f'"${pages_payload}"$'\x1f'"${preset}"$'\x1f'"${prefer_text_layer}"$'\x1f'"${source_pdf}"$'\x1f'"${page_concurrency}")"
   else
     body="$(python3 -c '
 import json, sys
 data = sys.stdin.read().split("\x1f")
-file_name, model, preview, preset, prefer_text_layer, source_pdf = data[0], data[1], data[2], data[3], data[4], data[5]
+file_name, model, preview, preset, prefer_text_layer, source_pdf, page_concurrency = data[0], data[1], data[2], data[3], data[4], data[5], data[6]
 file_entry = {"fileName": file_name, "model": model, "preview": preview}
 if source_pdf:
     file_entry["sourcePdf"] = source_pdf
@@ -622,10 +634,12 @@ if preset:
     settings["documentPreset"] = preset
 if prefer_text_layer:
     settings["preferTextLayer"] = prefer_text_layer == "true"
+if page_concurrency:
+    settings["pageConcurrency"] = int(page_concurrency)
 if settings:
     file_entry["settings"] = settings
 print(json.dumps({"files": [file_entry]}, separators=(",", ":")))
-' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${preview_payload}"$'\x1f'"${preset}"$'\x1f'"${prefer_text_layer}"$'\x1f'"${source_pdf}")"
+' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${preview_payload}"$'\x1f'"${preset}"$'\x1f'"${prefer_text_layer}"$'\x1f'"${source_pdf}"$'\x1f'"${page_concurrency}")"
   fi
 
   info "submitting OCR for ${file_basename}..."
@@ -657,12 +671,12 @@ cmd_kb() {
   case "$sub" in
     export)
       local job_id="${1:-}"
-      [ -n "$job_id" ] || die "usage: extracto kb export <job-id> --collection NAME --store-url URL --embed-model MODEL [--strategy fixed|sentence|paragraph|hierarchical|semantic] [--chunk-size N] [--overlap N] [--breakpoint-percentile N] [--max-heading-depth N]"
+      [ -n "$job_id" ] || die "usage: extracto kb export <job-id> --collection NAME --store-url URL --embed-model MODEL [--strategy fixed|sentence|paragraph|hierarchical|semantic] [--chunk-size N] [--overlap N] [--breakpoint-percentile N] [--max-heading-depth N] [--embed-concurrency N]"
       shift
       local collection="" store_url="" store_kind="chroma" store_key="" \
             embed_model="" embed_provider="ollama" embed_endpoint="http://127.0.0.1:11434" embed_key="" \
             strategy="paragraph" chunk_size=1200 overlap="" min_chunk_size=0 \
-            breakpoint_percentile="" max_heading_depth=""
+            breakpoint_percentile="" max_heading_depth="" embed_concurrency=""
       while [ $# -gt 0 ]; do
         case "$1" in
           --collection)            collection="${2:-}"; shift 2 ;;
@@ -679,6 +693,16 @@ cmd_kb() {
           --min-chunk-size)        min_chunk_size="${2:-}"; shift 2 ;;
           --breakpoint-percentile) breakpoint_percentile="${2:-}"; shift 2 ;;
           --max-heading-depth)     max_heading_depth="${2:-}"; shift 2 ;;
+          --embed-concurrency)
+            embed_concurrency="${2:-}"
+            case "$embed_concurrency" in
+              ''|*[!0-9]*) die "--embed-concurrency must be a positive integer (got '${embed_concurrency}')" ;;
+            esac
+            if [ "$embed_concurrency" -lt 1 ] || [ "$embed_concurrency" -gt 16 ]; then
+              die "--embed-concurrency must be between 1 and 16"
+            fi
+            shift 2
+            ;;
           *) die "unknown kb export flag: $1" ;;
         esac
       done
@@ -693,7 +717,7 @@ parts = sys.stdin.read().split("\x1f")
 (job_id, collection, store_kind, store_url, store_key,
  embed_provider, embed_endpoint, embed_key, embed_model,
  strategy, chunk_size, overlap, min_chunk_size,
- breakpoint_percentile, max_heading_depth) = parts
+ breakpoint_percentile, max_heading_depth, embed_concurrency) = parts
 
 payload = {
   "jobId": job_id,
@@ -718,9 +742,11 @@ if breakpoint_percentile:
   payload["chunking"]["breakpointPercentile"] = float(breakpoint_percentile)
 if max_heading_depth:
   payload["chunking"]["maxHeadingDepth"] = int(max_heading_depth)
+if embed_concurrency:
+  payload["embeddingConcurrency"] = int(embed_concurrency)
 
 print(json.dumps(payload, separators=(",", ":")))
-' <<<"${job_id}"$'\x1f'"${collection}"$'\x1f'"${store_kind}"$'\x1f'"${store_url}"$'\x1f'"${store_key}"$'\x1f'"${embed_provider}"$'\x1f'"${embed_endpoint}"$'\x1f'"${embed_key}"$'\x1f'"${embed_model}"$'\x1f'"${strategy}"$'\x1f'"${chunk_size}"$'\x1f'"${overlap}"$'\x1f'"${min_chunk_size}"$'\x1f'"${breakpoint_percentile}"$'\x1f'"${max_heading_depth}")"
+' <<<"${job_id}"$'\x1f'"${collection}"$'\x1f'"${store_kind}"$'\x1f'"${store_url}"$'\x1f'"${store_key}"$'\x1f'"${embed_provider}"$'\x1f'"${embed_endpoint}"$'\x1f'"${embed_key}"$'\x1f'"${embed_model}"$'\x1f'"${strategy}"$'\x1f'"${chunk_size}"$'\x1f'"${overlap}"$'\x1f'"${min_chunk_size}"$'\x1f'"${breakpoint_percentile}"$'\x1f'"${max_heading_depth}"$'\x1f'"${embed_concurrency}")"
 
       info "exporting job ${job_id} to ${store_kind}://${store_url}/${collection}..."
       api_post_json "/api/v1/export/kb" "$body"
