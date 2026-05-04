@@ -99,6 +99,7 @@ import type {
   ProcessingFile,
   SettingsTab,
   UiLanguage,
+  KbExportPhase,
 } from "@/app/page-components/types";
 import ReactMarkdown from"react-markdown";
 
@@ -1223,35 +1224,70 @@ export default function ExtractoPage() {
  });
  return;
  }
- updateFileById(file.id, (entry) => ({ ...entry, kbExport: { status:"pending"} }));
+ updateFileById(file.id, (entry) => ({ ...entry, kbExport: { status:"pending", phase:"queued", embeddingDone: 0, embeddingTotal: 0 } }));
  try {
  const resp = await fetch("/api/kb/export", {
  method:"POST",
  headers:{"Content-Type":"application/json"},
  body: JSON.stringify({ jobId: file.jobId }),
  });
- const payload = (await resp.json().catch(() => ({}))) as {
- error?: string;
- chunkCount?: number;
- collectionName?: string;
- };
- if (!resp.ok) {
+ const payload = (await resp.json().catch(() => ({}))) as { error?: string; exportId?: string; collectionName?: string };
+ if (!resp.ok || !payload.exportId) {
  throw new Error(payload.error || `Export failed (${resp.status})`);
  }
+ const exportId = payload.exportId;
+ const finalEvent = await new Promise<{ phase:"done"|"error"; chunkCount: number; collectionName: string; error?: string }>((resolve, reject) => {
+ const es = new EventSource(`/api/kb/export/${encodeURIComponent(exportId)}/stream`);
+ es.addEventListener("progress", (event) => {
+ try {
+ const data = JSON.parse((event as MessageEvent).data) as { phase: string; embeddingDone?: number; embeddingTotal?: number; chunkCount?: number; collectionName?: string; error?: string };
+ updateFileById(file.id, (entry) => ({
+ ...entry,
+ kbExport: {
+ status: data.phase === "done"?"success": data.phase === "error"?"error":"pending",
+ phase: data.phase as KbExportPhase,
+ embeddingDone: data.embeddingDone ?? 0,
+ embeddingTotal: data.embeddingTotal ?? 0,
+ chunkCount: data.chunkCount ?? entry.kbExport?.chunkCount ?? 0,
+ collectionName: data.collectionName ?? entry.kbExport?.collectionName ?? payload.collectionName ??"",
+ error: data.error,
+ },
+ }));
+ if (data.phase === "done"|| data.phase === "error") {
+ es.close();
+ if (data.phase === "done") {
+ resolve({ phase:"done", chunkCount: data.chunkCount ?? 0, collectionName: data.collectionName ?? payload.collectionName ??"" });
+ } else {
+ reject(new Error(data.error || "Export failed"));
+ }
+ }
+ } catch (err) {
+ es.close();
+ reject(err);
+ }
+ });
+ es.onerror = () => {
+ es.close();
+ reject(new Error("Lost connection to export progress stream"));
+ };
+ });
  updateFileById(file.id, (entry) => ({
  ...entry,
  kbExport: {
  status:"success",
- chunkCount: payload.chunkCount ?? 0,
- collectionName: payload.collectionName ??"",
+ chunkCount: finalEvent.chunkCount,
+ collectionName: finalEvent.collectionName,
+ phase:"done",
+ embeddingDone: finalEvent.chunkCount,
+ embeddingTotal: finalEvent.chunkCount,
  },
  }));
  toast({
  title: t("Esportato nel KB","Exported to KB","Exporté vers KB","Exportado a KB","In KB exportiert"),
- description: payload.collectionName
+ description: finalEvent.collectionName
  ? t(
- `${payload.chunkCount ?? 0} chunk in ${payload.collectionName}`,
- `${payload.chunkCount ?? 0} chunks in ${payload.collectionName}`,
+ `${finalEvent.chunkCount} chunk in ${finalEvent.collectionName}`,
+ `${finalEvent.chunkCount} chunks in ${finalEvent.collectionName}`,
  )
  : undefined,
  });

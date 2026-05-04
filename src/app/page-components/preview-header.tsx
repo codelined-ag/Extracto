@@ -199,7 +199,27 @@ export function PreviewHeader({
                         <DatabaseBackupIcon size={16} className="inline-flex" />
                       )}
                       <span>
-                        {selectedFile.kbExport?.status === "success"
+                        {selectedFile.kbExport?.status === "pending"
+                          ? (() => {
+                              const k = selectedFile.kbExport;
+                              if (k?.phase === "embedding" && (k.embeddingTotal ?? 0) > 0) {
+                                return t(
+                                  `Embedding ${k.embeddingDone ?? 0}/${k.embeddingTotal ?? 0}`,
+                                  `Embedding ${k.embeddingDone ?? 0}/${k.embeddingTotal ?? 0}`,
+                                  `Embedding ${k.embeddingDone ?? 0}/${k.embeddingTotal ?? 0}`,
+                                  `Embedding ${k.embeddingDone ?? 0}/${k.embeddingTotal ?? 0}`,
+                                  `Embedding ${k.embeddingDone ?? 0}/${k.embeddingTotal ?? 0}`,
+                                );
+                              }
+                              if (k?.phase === "chunking") {
+                                return t("Suddivisione...", "Chunking...", "Découpage...", "Fragmentando...", "Chunking...");
+                              }
+                              if (k?.phase === "upserting") {
+                                return t("Caricamento nel vector store...", "Upserting to vector store...", "Téléversement vers le vector store...", "Subiendo al vector store...", "In Vektor-Store laden...");
+                              }
+                              return t("In coda...", "Queued...", "En attente...", "En cola...", "In der Warteschlange...");
+                            })()
+                          : selectedFile.kbExport?.status === "success"
                           ? t(
                               "Riesporta verso KB",
                               "Re-export to KB",
