@@ -6,8 +6,23 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-04
+
+### Added
+- Account dialog for personal preferences (language, API keys, push, usage), reachable from the user menu.
+- Per-page OCR progress so the UI reflects work as each page completes.
+- Three Prisma migrations to formalize schema changes that previously rode on `db push`.
+
 ### Changed
-- Settings dialog regrouped into 4 tabs (OCR, Knowledge base, Storage, Templates) with collapsible sections; personal preferences (language, API keys, push, usage) moved to a dedicated Account dialog.
+- Settings dialog regrouped into 4 tabs with single-open collapsible sections and sticky save buttons.
+- Markdown results render with real typographic hierarchy in workspace and history.
+- OCR prompt asks for explicit Markdown structure so output has headings, paragraphs, lists, tables.
+- Friendly section names with one-line descriptions across Settings and Account.
+
+### Security
+- Hardened auth, rate-limit, and request-security paths with broader test coverage.
+- Tightened operator defaults in `docker.env`, Dockerfile, and the install script.
+- Updated security contact to supporto@codelined.com.
 
 ## [0.5.5] - 2026-05-04
 
