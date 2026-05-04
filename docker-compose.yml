@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/codelined-ag/extracto:${EXTRACTO_TAG:-v0.5.5}
+    image: ghcr.io/codelined-ag/extracto:${EXTRACTO_TAG:-v0.7.0}
     build:
       context: .
       dockerfile: Dockerfile
