@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { extractBearerToken, isLikelyApiKey } from "@/lib/auth/api-key-shared";
-import { getAuthCookieName, verifySessionToken } from "@/lib/auth/token";
+import { getAuthCookieName } from "@/lib/auth/token";
+import { verifyActiveSession } from "@/lib/auth/session";
 
 const JSON_HEADERS = { "content-type": "application/json" };
 const PUBLIC_PATHS = [
@@ -46,7 +47,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const token = request.cookies.get(getAuthCookieName())?.value;
-  const session = await verifySessionToken(token);
+  const session = await verifyActiveSession(token);
 
   if (session) {
     return NextResponse.next();
@@ -69,4 +70,5 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image).*)"],
+  runtime: "nodejs",
 };

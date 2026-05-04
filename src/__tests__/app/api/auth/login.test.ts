@@ -82,14 +82,14 @@ describe("POST /api/auth/login", () => {
   });
 
   it("returns 401 for incorrect password", async () => {
-    mockedFind.mockResolvedValueOnce({ id: "u1", email: "a@b.co", name: "A", passwordHash: "h" });
+    mockedFind.mockResolvedValueOnce({ id: "u1", email: "a@b.co", name: "A", passwordHash: "h", passwordChangedAt: new Date() });
     mockedVerify.mockReturnValueOnce(false);
     const res = await POST(makeReq({ email: "a@b.co", password: "longpassword" }) as never);
     expect(res.status).toBe(401);
   });
 
   it("issues a session cookie + user payload on success", async () => {
-    mockedFind.mockResolvedValueOnce({ id: "u1", email: "a@b.co", name: "A", passwordHash: "h" });
+    mockedFind.mockResolvedValueOnce({ id: "u1", email: "a@b.co", name: "A", passwordHash: "h", passwordChangedAt: new Date() });
     mockedVerify.mockReturnValueOnce(true);
     const res = await POST(makeReq({ email: "a@b.co", password: "longpassword" }) as never);
     expect(res.status).toBe(200);

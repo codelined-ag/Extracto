@@ -21,7 +21,7 @@ vi.mock("@/lib/rate-limit", () => ({
 
 vi.mock("@/lib/auth/credentials", () => ({
   findUserById: vi.fn(),
-  updateUserPassword: vi.fn(),
+  updateUserPassword: vi.fn().mockResolvedValue(new Date()),
   verifyPassword: vi.fn(),
 }));
 
@@ -82,11 +82,17 @@ function makeReq(body: unknown, opts: { cookie?: string; bearer?: string } = {})
 }
 
 const VALID_SESSION = { userId: "u1", email: "a@b.co", name: "A" };
-const VALID_USER = { id: "u1", email: "a@b.co", name: "A", passwordHash: "hash" };
+const VALID_USER = {
+  id: "u1",
+  email: "a@b.co",
+  name: "A",
+  passwordHash: "hash",
+  passwordChangedAt: new Date(),
+};
 
 beforeEach(() => {
   mockedFind.mockReset();
-  mockedUpdate.mockReset();
+  mockedUpdate.mockReset().mockResolvedValue(new Date());
   mockedVerify.mockReset();
   mockedRate.mockReset().mockReturnValue({ allowed: true });
   mockedTrust.mockReset().mockReturnValue(true);
@@ -181,11 +187,14 @@ describe("POST /api/auth/change-password", () => {
     );
     expect(res.status).toBe(200);
     expect(mockedUpdate).toHaveBeenCalledWith("u1", "newpasswordhere1");
-    expect(mockedCreateToken).toHaveBeenCalledWith({
-      userId: "u1",
-      email: "a@b.co",
-      name: "A",
-    });
+    expect(mockedCreateToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "u1",
+        email: "a@b.co",
+        name: "A",
+        pv: expect.any(Number),
+      }),
+    );
     const setCookie = res.headers.get("set-cookie") || "";
     expect(setCookie).toContain("estracto_session=fresh-token");
   });

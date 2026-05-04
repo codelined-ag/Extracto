@@ -10,7 +10,8 @@ import {
   isLikelyApiKey,
 } from "@/lib/auth/api-key";
 import { parseScopeList, scopeListGrants, type Scope, type ScopeEntry, WILDCARD_SCOPE } from "@/lib/auth/scopes";
-import { getAuthCookieName, verifySessionToken } from "@/lib/auth/token";
+import { getAuthCookieName } from "@/lib/auth/token";
+import { verifyActiveSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { isTrustedMutationRequest } from "@/lib/request-security";
 
@@ -123,7 +124,7 @@ export async function authenticateRequest(
   }
 
   const token = request.cookies.get(getAuthCookieName())?.value;
-  const payload = await verifySessionToken(token);
+  const payload = await verifyActiveSession(token);
   if (!payload) {
     return null;
   }

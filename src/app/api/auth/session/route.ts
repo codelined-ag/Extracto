@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
-import { getAuthCookieName, verifySessionToken } from "@/lib/auth/token";
+import { getAuthCookieName } from "@/lib/auth/token";
+import { verifyActiveSession } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
   const token = request.cookies.get(getAuthCookieName())?.value;
-  const payload = await verifySessionToken(token);
+  const payload = await verifyActiveSession(token);
 
   if (!payload) {
     return NextResponse.json({ authenticated: false }, { status: 401 });

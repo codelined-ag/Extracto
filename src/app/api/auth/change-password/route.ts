@@ -74,12 +74,13 @@ export const POST = withSessionAuth("mutation", "Password", async (request: Next
     return badRequest("New password must be different from the current password");
   }
 
-  await updateUserPassword(userId, newPassword);
+  const passwordChangedAt = await updateUserPassword(userId, newPassword);
 
   const token = await createSessionToken({
     userId: user.id,
     email: user.email,
     name: user.name,
+    pv: passwordChangedAt.getTime(),
   });
 
   const response = NextResponse.json({ ok: true });
