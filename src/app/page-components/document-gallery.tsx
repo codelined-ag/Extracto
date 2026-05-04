@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -307,44 +307,41 @@ export function DocumentGallery({
             >
               <ChevronRightIcon size={18} />
             </Button>
-            <AnimatePresence mode="wait">
-              <motion.img
-                key={activeIndex}
-                src={pagePreviews[activeIndex]}
-                alt={t(
-                  `Pagina ${activePage} di ${total}`,
-                  `Page ${activePage} of ${total}`,
-                  `Page ${activePage} sur ${total}`,
-                  `Página ${activePage} de ${total}`,
-                  `Seite ${activePage} von ${total}`,
-                )}
-                role="button"
-                aria-label={
-                  activeIsSelected
-                    ? t(
-                        `Deseleziona pagina ${activePage}`,
-                        `Deselect page ${activePage}`,
-                        `Désélectionner la page ${activePage}`,
-                        `Deseleccionar página ${activePage}`,
-                        `Seite ${activePage} abwählen`,
-                      )
-                    : t(
-                        `Seleziona pagina ${activePage}`,
-                        `Select page ${activePage}`,
-                        `Sélectionner la page ${activePage}`,
-                        `Seleccionar página ${activePage}`,
-                        `Seite ${activePage} auswählen`,
-                      )
-                }
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                className="max-h-full max-w-full object-contain rounded-md shadow-md cursor-pointer"
-                onClick={() => togglePage(activePage)}
-                draggable={false}
-              />
-            </AnimatePresence>
+            <motion.img
+              key={activeIndex}
+              src={pagePreviews[activeIndex]}
+              alt={t(
+                `Pagina ${activePage} di ${total}`,
+                `Page ${activePage} of ${total}`,
+                `Page ${activePage} sur ${total}`,
+                `Página ${activePage} de ${total}`,
+                `Seite ${activePage} von ${total}`,
+              )}
+              role="button"
+              aria-label={
+                activeIsSelected
+                  ? t(
+                      `Deseleziona pagina ${activePage}`,
+                      `Deselect page ${activePage}`,
+                      `Désélectionner la page ${activePage}`,
+                      `Deseleccionar página ${activePage}`,
+                      `Seite ${activePage} abwählen`,
+                    )
+                  : t(
+                      `Seleziona pagina ${activePage}`,
+                      `Select page ${activePage}`,
+                      `Sélectionner la page ${activePage}`,
+                      `Seleccionar página ${activePage}`,
+                      `Seite ${activePage} auswählen`,
+                    )
+              }
+              initial={{ opacity: 0.45 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.12, ease: "easeOut" }}
+              className="max-h-full max-w-full object-contain rounded-md shadow-md cursor-pointer"
+              onClick={() => togglePage(activePage)}
+              draggable={false}
+            />
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-background/80 backdrop-blur px-3 py-1 text-[11px]">
               <span className="font-medium">
                 {activePage} / {total}

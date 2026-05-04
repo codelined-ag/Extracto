@@ -9,6 +9,8 @@ import {
  ImageOff,
  KeyRoundIcon,
  Cloud,
+ Layers,
+ BellRing,
 } from"lucide-react";
 
 import { ArchiveIcon } from"@/components/ui/archive";
@@ -2277,10 +2279,8 @@ export default function ExtractoPage() {
  <TabsTrigger value="general"className="gap-1.5"><LanguagesIcon size={14} className="inline-flex items-center justify-center"/>{t("Generale","General","Général","General","Allgemein")}</TabsTrigger>
  <TabsTrigger value="keys"className="gap-1.5"><KeyRoundIcon size={14} className="inline-flex items-center justify-center"/>{t("Chiavi API","API keys","Clés API","Claves API","API-Schlüssel")}</TabsTrigger>
  <TabsTrigger value="s3"className="gap-1.5"><Cloud className="size-3.5"/>S3</TabsTrigger>
- <TabsTrigger value="watchers"className="gap-1.5">{t("Watcher","Watchers","Watchers","Watchers","Watcher")}</TabsTrigger>
- <TabsTrigger value="templates"className="gap-1.5">{t("Template","Templates","Modèles","Plantillas","Vorlagen")}</TabsTrigger>
- <TabsTrigger value="notifications"className="gap-1.5">{t("Notifiche","Notifications","Notifications","Notificaciones","Benachrichtigungen")}</TabsTrigger>
- <TabsTrigger value="usage"className="gap-1.5">{t("Utilizzo","Usage","Utilisation","Uso","Nutzung")}</TabsTrigger>
+ <TabsTrigger value="templates"className="gap-1.5"><Layers className="size-3.5"/>{t("Template","Templates","Modèles","Plantillas","Vorlagen")}</TabsTrigger>
+ <TabsTrigger value="notifications"className="gap-1.5"><BellRing className="size-3.5"/>{t("Notifiche","Notifications","Notifications","Notificaciones","Benachrichtigungen")}</TabsTrigger>
  </TabsList>
  </div>
 
@@ -2790,24 +2790,18 @@ export default function ExtractoPage() {
  <ApiKeysSection t={t} />
  </TabsContent>
 
- <TabsContent value="s3"className="space-y-5 mt-4">
+ <TabsContent value="s3"className="space-y-8 mt-4">
  <S3SettingsSection t={t} />
- </TabsContent>
-
- <TabsContent value="watchers"className="space-y-5 mt-4">
- <WatchersSection t={t} />
+ <div className="hairline-t pt-6"><WatchersSection t={t} /></div>
  </TabsContent>
 
  <TabsContent value="templates"className="space-y-5 mt-4">
  <TemplatesSection t={t} />
  </TabsContent>
 
- <TabsContent value="notifications"className="space-y-5 mt-4">
+ <TabsContent value="notifications"className="space-y-8 mt-4">
  <NotificationsSection t={t} />
- </TabsContent>
-
- <TabsContent value="usage"className="space-y-5 mt-4">
- <UsageSection t={t} />
+ <div className="hairline-t pt-6"><UsageSection t={t} /></div>
  </TabsContent>
 
  </ScrollArea>
