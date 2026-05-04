@@ -6,6 +6,33 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-05-04
+
+### Added
+- Queue + in-progress OCR state now persist across page refreshes via IndexedDB; the queue is rehydrated on load and active jobs reconcile against the server.
+- Watched S3 sources: per-user CRUD UI under Settings, background poller dedupes by `(sourceId, key)` with auto-pause after 5 consecutive list failures.
+- Job templates: save and reuse {provider, model, preset, language, customPrompt, postProcessing, autoExports} from a Settings tab.
+- Side-by-side OCR comparison: `POST /api/ocr/compare` spawns 2-4 parallel jobs sharing a `comparisonId`, returns 207 partial-success on per-model failures, capped at 3 concurrent comparisons per user.
+- Page-level corrections: `PATCH /api/jobs/:id/pages/:n` lets you fix one page's text and re-stitches `extractedText`; flags `metadata.staleExports = true` so you know to re-export.
+- Per-user storage/usage pane in Settings with job and resource counts.
+- PWA push notifications for completed/failed jobs (VAPID auto-generated, Settings opt-in, service worker handles `push` + `notificationclick`).
+- Per-job retry: transient provider errors (429, 5xx, timeouts) auto-retry with exponential backoff up to a per-provider cap (Mistral 2, OpenRouter 3, others 5) and a 120s wall-clock budget.
+- Drag-to-reorder queue priority: `PATCH /api/jobs/:id` accepts `{ priority }`.
+- Webhooks: new `WebhookDelivery` audit log, `GET /api/v1/webhooks/:id/deliveries`, new event `watcher.ingested`, `dispatchUserWebhooks` for non-job events.
+- New Prisma models: `OcrJobTemplate`, `WatchedS3Source`, `WatchedS3Object`, `PushSubscription`, `WebhookDelivery`.
+
+### Security
+- `PushSubscription` is globally unique by endpoint; `POST /api/push/subscribe` evicts any prior owner of the endpoint to prevent cross-user device hijack via leaked endpoints.
+- `withProviderRetry` enforces a hard per-page wall-clock budget and a per-provider attempt cap to prevent stuck retry loops from holding worker slots.
+- `S3 watcher` ingest takes the dedup row as a lock before downloading, eliminating the race window where a concurrent sweep could submit the same key twice; reverts the placeholder row on download or submit failure.
+- VAPID key generation is now serialized via an in-flight promise; key file `chmod 0o600` is enforced explicitly even when the file exists.
+- Service worker `notificationclick` only opens same-origin paths starting with `/`.
+- Push failure-notification body no longer includes raw provider error text.
+
+### Changed
+- Webhooks `SUPPORTED_EVENTS` trimmed to the four events that actually fire (`job.created`, `job.completed`, `job.failed`, `watcher.ingested`); the rest were dead-letter and were removed.
+- Settings now expose an `autoRetryMaxAttempts` field (1-8) for per-page transient retries.
+
 ## [0.5.4] - 2026-05-04
 
 ### Added
