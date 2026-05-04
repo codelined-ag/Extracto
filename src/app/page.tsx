@@ -91,7 +91,7 @@ import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { useHistory } from "@/app/page-components/use-history";
 import { PreviewHeader } from "@/app/page-components/preview-header";
 import { NoSelectionCard } from "@/app/page-components/no-selection-card";
-import { PagePicker } from "@/app/page-components/page-picker";
+import { DocumentGallery } from "@/app/page-components/document-gallery";
 import { UploadArea } from "@/app/page-components/upload-area";
 import type {
   OcrPageCheckpointView,
@@ -3003,7 +3003,7 @@ export default function ExtractoPage() {
  ) : (
  <div className="flex-1 flex flex-col min-h-0">
  {selectedFile.preview || allPagePreviews.length > 0 ? (
- <PagePicker
+ <DocumentGallery
  pagePreviews={
  allPagePreviewsForFileId === selectedFile.id && allPagePreviews.length > 0
  ? allPagePreviews
