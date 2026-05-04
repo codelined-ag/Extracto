@@ -1744,7 +1744,7 @@ export default function ExtractoPage() {
  };
 
  React.useEffect(() => {
- if (!selectedFile || !selectedFile.file || !isPdfFile(selectedFile.file)) {
+ if (!selectedFile) {
  setAllPagePreviews([]);
  setAllPagePreviewsForFileId(null);
  return;
@@ -1758,6 +1758,21 @@ export default function ExtractoPage() {
  const cached = pdfPagePreviewCacheRef.current[selectedFile.id];
  if (Array.isArray(cached) && cached.length > 0) {
  setAllPagePreviews(cached);
+ setAllPagePreviewsForFileId(selectedFile.id);
+ return;
+ }
+ const restoredPages = Array.isArray(selectedFile.pagePreviews)
+ ? selectedFile.pagePreviews.filter(Boolean)
+ : [];
+ if (restoredPages.length > 1) {
+ pdfPagePreviewCacheRef.current[selectedFile.id] = restoredPages;
+ setAllPagePreviews(restoredPages);
+ setAllPagePreviewsForFileId(selectedFile.id);
+ return;
+ }
+ if (!selectedFile.file || !isPdfFile(selectedFile.file)) {
+ const single = selectedFile.preview?.trim() || restoredPages[0];
+ setAllPagePreviews(single ? [single] : []);
  setAllPagePreviewsForFileId(selectedFile.id);
  return;
  }
