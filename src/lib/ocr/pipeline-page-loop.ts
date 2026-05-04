@@ -22,6 +22,7 @@ import {
 } from "@/lib/ocr/pipeline-result-builder";
 import { runProviderOcr } from "@/lib/ocr/provider-dispatch";
 import { OcrStopRequestedError } from "@/lib/ocr/providers/shared";
+import { effectiveMaxAttempts, withProviderRetry } from "@/lib/ocr/retry";
 import type { ProviderKind } from "@/lib/api-types";
 import type { ApiProviderSettings } from "@/lib/api-types";
 import type { AnchorPage } from "@/lib/ocr/pdf-anchoring";
@@ -57,6 +58,7 @@ export interface PageLoopDeps {
   preferTextLayer?: boolean;
   documentPresetExpectsJson?: boolean;
   pageConcurrency?: number;
+  autoRetryMaxAttempts?: number;
   startIndex: number;
   snapshot: (snap: ProgressSnapshotInput) => OcrProgressMetadata;
   ocrPct: () => number;
@@ -127,13 +129,19 @@ async function runOnePage(
         characterCount: anchor.characterCount,
       };
     } else {
-      ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await runProviderOcr(
-        deps.provider,
-        deps.settings,
-        deps.ocrModel,
-        effectivePrompt,
-        pagePreview,
-        abortController.signal,
+      ({ text: pageText, structured: pageStructured, metadata: pageMetadata } = await withProviderRetry(
+        () => runProviderOcr(
+          deps.provider,
+          deps.settings,
+          deps.ocrModel,
+          effectivePrompt,
+          pagePreview,
+          abortController.signal,
+        ),
+        {
+          maxAttempts: effectiveMaxAttempts(deps.provider, deps.autoRetryMaxAttempts ?? 1),
+          abortSignal: abortController.signal,
+        },
       ));
       if (anchored.usedAnchoring) {
         pageMetadata = { ...pageMetadata, anchored: true };

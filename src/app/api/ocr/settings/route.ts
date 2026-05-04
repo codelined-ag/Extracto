@@ -10,7 +10,7 @@ import {
 } from "@/lib/ocr/settings";
 
 const mapSettingsResponse = (
-  setting: { language: string; tableDetection: boolean; handwritingRecognition: boolean; preserveFormatting: boolean; customPrompt: string; quality: number; preferTextLayer?: boolean | null; documentPreset?: string | null },
+  setting: { language: string; tableDetection: boolean; handwritingRecognition: boolean; preserveFormatting: boolean; customPrompt: string; quality: number; preferTextLayer?: boolean | null; documentPreset?: string | null; pageConcurrency?: number | null; autoRetryMaxAttempts?: number | null },
 ) => ({
   language: setting.language,
   tableDetection: setting.tableDetection,
@@ -22,6 +22,10 @@ const mapSettingsResponse = (
     typeof setting.preferTextLayer === "boolean" ? setting.preferTextLayer : DEFAULT_SETTINGS.preferTextLayer,
   documentPreset:
     typeof setting.documentPreset === "string" ? setting.documentPreset : DEFAULT_SETTINGS.documentPreset,
+  pageConcurrency:
+    typeof setting.pageConcurrency === "number" ? setting.pageConcurrency : DEFAULT_SETTINGS.pageConcurrency,
+  autoRetryMaxAttempts:
+    typeof setting.autoRetryMaxAttempts === "number" ? setting.autoRetryMaxAttempts : DEFAULT_SETTINGS.autoRetryMaxAttempts,
 });
 
 export const GET = withAuth("settings:read", async (_request: NextRequest, { auth }) => {

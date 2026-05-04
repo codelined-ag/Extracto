@@ -3,8 +3,15 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/db";
 import { parseAllowlist, resolveAndCheckExternalUrl } from "@/lib/url-safety";
 
-const SUPPORTED_EVENTS = ["job.completed", "job.failed"] as const;
+const SUPPORTED_EVENTS = [
+  "job.created",
+  "job.completed",
+  "job.failed",
+  "watcher.ingested",
+] as const;
 export type WebhookEvent = (typeof SUPPORTED_EVENTS)[number];
+
+export const ALL_WEBHOOK_EVENTS: readonly WebhookEvent[] = SUPPORTED_EVENTS;
 
 const WEBHOOK_TIMEOUT_MS = 5_000;
 const WEBHOOK_USER_AGENT = "Extracto-Webhook/1.0";
@@ -142,6 +149,10 @@ export async function dispatchJobWebhooks(
       const signature = signPayload(webhook.secret, body, timestamp);
       const controller = new AbortController();
       const timeoutHandle = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+      const startedAt = Date.now();
+      let statusCode: number | null = null;
+      let ok = false;
+      let errorMessage: string | null = null;
       try {
         const safety = await resolveAndCheckExternalUrl(webhook.url, parseAllowlist(process.env.WEBHOOK_ALLOWED_HOSTS));
         if (!safety.ok) {
@@ -158,9 +169,11 @@ export async function dispatchJobWebhooks(
           body,
           signal: controller.signal,
         });
+        statusCode = response.status;
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
+        ok = true;
         await db.webhook
           .update({
             where: { id: webhook.id },
@@ -168,6 +181,7 @@ export async function dispatchJobWebhooks(
           })
           .catch(() => undefined);
       } catch (error) {
+        errorMessage = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
         console.error(`Webhook ${webhook.id} delivery failed:`, error);
         await db.webhook
           .update({
@@ -177,7 +191,88 @@ export async function dispatchJobWebhooks(
           .catch(() => undefined);
       } finally {
         clearTimeout(timeoutHandle);
+        await db.webhookDelivery
+          .create({
+            data: {
+              webhookId: webhook.id,
+              event,
+              url: webhook.url,
+              statusCode: statusCode ?? null,
+              ok,
+              durationMs: Date.now() - startedAt,
+              errorMessage,
+            },
+          })
+          .catch(() => undefined);
       }
     })
+  );
+}
+
+/**
+ * Fire-and-forget broadcast for non-job events (e.g. comparison or watcher
+ * ingest). Same signing + SSRF policy as the job dispatch path; the body
+ * shape is defined by the caller.
+ */
+export async function dispatchUserWebhooks(
+  userId: string,
+  event: WebhookEvent,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const webhooks = await db.webhook.findMany({
+    where: { userId, active: true },
+    select: { id: true, url: true, secret: true, events: true },
+  });
+  const matching = webhooks.filter((wh) => parseEventList(wh.events).includes(event));
+  if (matching.length === 0) return;
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const body = JSON.stringify({ event, occurredAt: new Date().toISOString(), ...payload });
+
+  await Promise.all(
+    matching.map(async (webhook) => {
+      const signature = signPayload(webhook.secret, body, timestamp);
+      const controller = new AbortController();
+      const timeoutHandle = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+      const startedAt = Date.now();
+      let statusCode: number | null = null;
+      let ok = false;
+      let errorMessage: string | null = null;
+      try {
+        const safety = await resolveAndCheckExternalUrl(webhook.url, parseAllowlist(process.env.WEBHOOK_ALLOWED_HOSTS));
+        if (!safety.ok) throw new Error(`Refusing delivery to ${webhook.url}: ${safety.reason}`);
+        const response = await fetch(webhook.url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": WEBHOOK_USER_AGENT,
+            "X-Extracto-Event": event,
+            "X-Extracto-Signature": `t=${timestamp},v1=${signature}`,
+          },
+          body,
+          signal: controller.signal,
+        });
+        statusCode = response.status;
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        ok = true;
+      } catch (error) {
+        errorMessage = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
+      } finally {
+        clearTimeout(timeoutHandle);
+        await db.webhookDelivery
+          .create({
+            data: {
+              webhookId: webhook.id,
+              event,
+              url: webhook.url,
+              statusCode: statusCode ?? null,
+              ok,
+              durationMs: Date.now() - startedAt,
+              errorMessage,
+            },
+          })
+          .catch(() => undefined);
+      }
+    }),
   );
 }

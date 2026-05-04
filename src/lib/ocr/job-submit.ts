@@ -3,6 +3,7 @@ import { OcrJobStatus } from "@prisma/client";
 import { ApiRouteError } from "@/lib/api-error";
 import type { ApiProviderSettings, ProviderKind } from "@/lib/api-types";
 import { db } from "@/lib/db";
+import { dispatchJobWebhooks } from "@/lib/background/webhooks";
 import { withOcrJobSlot } from "@/lib/ocr/job-control";
 import { seedPostProcessingMeta } from "@/lib/ocr/job-seed";
 import {
@@ -192,6 +193,7 @@ export async function submitOcrJob(
   });
 
   kickoffProcessing(createdJob.id, priority, input, startedAtMs);
+  void dispatchJobWebhooks(createdJob.id, "job.created").catch(() => undefined);
 
   return { jobId: createdJob.id, pageCount: input.inputPreviews.length };
 }

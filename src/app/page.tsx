@@ -89,6 +89,11 @@ import { HeaderBar } from "@/app/page-components/header-bar";
 import { ChangePasswordDialog } from "@/app/page-components/change-password-dialog";
 import { ApiKeysSection } from "@/app/page-components/api-keys-section";
 import { S3SettingsSection } from "@/app/page-components/s3-settings-section";
+import { NotificationsSection } from "@/app/page-components/notifications-section";
+import { UsageSection } from "@/app/page-components/usage-section";
+import { WatchersSection } from "@/app/page-components/watchers-section";
+import { TemplatesSection } from "@/app/page-components/templates-section";
+import { clearQueue, loadQueue, persistQueue, reconcileJobFromServer } from "@/app/page-components/queue-persistence";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { useHistory } from "@/app/page-components/use-history";
 import { PreviewHeader } from "@/app/page-components/preview-header";
@@ -552,6 +557,7 @@ export default function ExtractoPage() {
  preferTextLayer: true,
  documentPreset: "generic",
  pageConcurrency: 0,
+ autoRetryMaxAttempts: 1,
  });
  const [postProcessing, setPostProcessing] = React.useState<PostProcessingSettings>({
  enabled: false,
@@ -919,6 +925,25 @@ export default function ExtractoPage() {
  a.click();
  URL.revokeObjectURL(url);
  };
+
+ const queueHydrated = React.useRef(false);
+ React.useEffect(() => {
+ if (queueHydrated.current) return;
+ queueHydrated.current = true;
+ void (async () => {
+ const stored = await loadQueue();
+ if (stored.length === 0) return;
+ setFiles(stored);
+ const reconciled = await Promise.all(stored.map((f) => reconcileJobFromServer(f)));
+ setFiles(reconciled);
+ })();
+ }, []);
+
+ React.useEffect(() => {
+ if (!queueHydrated.current) return;
+ const t = setTimeout(() => { void persistQueue(files); }, 400);
+ return () => clearTimeout(t);
+ }, [files]);
 
  React.useEffect(() => {
  try {
@@ -1588,6 +1613,7 @@ export default function ExtractoPage() {
  setFiles([]);
  setSelectedFileId(null);
  setBulkSelectedIds(new Set());
+ void clearQueue();
  };
 
  const toggleBulkSelected = React.useCallback((id: string) => {
@@ -2251,6 +2277,10 @@ export default function ExtractoPage() {
  <TabsTrigger value="general"className="gap-1.5"><LanguagesIcon size={14} className="inline-flex items-center justify-center"/>{t("Generale","General","Général","General","Allgemein")}</TabsTrigger>
  <TabsTrigger value="keys"className="gap-1.5"><KeyRoundIcon size={14} className="inline-flex items-center justify-center"/>{t("Chiavi API","API keys","Clés API","Claves API","API-Schlüssel")}</TabsTrigger>
  <TabsTrigger value="s3"className="gap-1.5"><Cloud className="size-3.5"/>S3</TabsTrigger>
+ <TabsTrigger value="watchers"className="gap-1.5">{t("Watcher","Watchers","Watchers","Watchers","Watcher")}</TabsTrigger>
+ <TabsTrigger value="templates"className="gap-1.5">{t("Template","Templates","Modèles","Plantillas","Vorlagen")}</TabsTrigger>
+ <TabsTrigger value="notifications"className="gap-1.5">{t("Notifiche","Notifications","Notifications","Notificaciones","Benachrichtigungen")}</TabsTrigger>
+ <TabsTrigger value="usage"className="gap-1.5">{t("Utilizzo","Usage","Utilisation","Uso","Nutzung")}</TabsTrigger>
  </TabsList>
  </div>
 
@@ -2762,6 +2792,22 @@ export default function ExtractoPage() {
 
  <TabsContent value="s3"className="space-y-5 mt-4">
  <S3SettingsSection t={t} />
+ </TabsContent>
+
+ <TabsContent value="watchers"className="space-y-5 mt-4">
+ <WatchersSection t={t} />
+ </TabsContent>
+
+ <TabsContent value="templates"className="space-y-5 mt-4">
+ <TemplatesSection t={t} />
+ </TabsContent>
+
+ <TabsContent value="notifications"className="space-y-5 mt-4">
+ <NotificationsSection t={t} />
+ </TabsContent>
+
+ <TabsContent value="usage"className="space-y-5 mt-4">
+ <UsageSection t={t} />
  </TabsContent>
 
  </ScrollArea>

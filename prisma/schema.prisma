@@ -31,6 +31,9 @@ model AuthUser {
   webhooks           Webhook[]
   outputPresets      OutputPreset[]
   ocrSettings        OcrSetting[]
+  jobTemplates       OcrJobTemplate[]
+  watchedS3Sources   WatchedS3Source[]
+  pushSubscriptions  PushSubscription[]
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 }
@@ -66,8 +69,24 @@ model Webhook {
   lastFiredAt DateTime?
   failureCount Int      @default(0)
   createdAt  DateTime  @default(now())
+  deliveries WebhookDelivery[]
 
   @@index([userId, createdAt(sort: Desc)])
+}
+
+model WebhookDelivery {
+  id           String   @id @default(cuid())
+  webhookId    String
+  webhook      Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event        String
+  url          String
+  statusCode   Int?
+  ok           Boolean  @default(false)
+  durationMs   Int?
+  errorMessage String?
+  attemptedAt  DateTime @default(now())
+
+  @@index([webhookId, attemptedAt(sort: Desc)])
 }
 
 model OutputPreset {
@@ -101,6 +120,7 @@ model OcrSetting {
   preferTextLayer        Boolean      @default(true)
   documentPreset         String       @default("generic")
   pageConcurrency        Int          @default(0)
+  autoRetryMaxAttempts   Int          @default(1)
   jobs                   OcrJob[]
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt
@@ -137,6 +157,12 @@ model OcrJob {
   errorMessage           String?
   stopRequestedAt        DateTime?
   batchId                String?
+  comparisonId           String?
+  attemptCount           Int          @default(1)
+  maxAttempts            Int          @default(1)
+  nextRetryAt            DateTime?
+  userEdited             Boolean      @default(false)
+  editedAt               DateTime?
   startedAt              DateTime     @default(now())
   completedAt            DateTime?
   processingMs           Int?
@@ -149,4 +175,77 @@ model OcrJob {
   @@index([settingsId])
   @@index([userId, createdAt(sort: Desc)])
   @@index([batchId])
+  @@index([comparisonId])
+  @@index([status, nextRetryAt])
+}
+
+model OcrJobTemplate {
+  id              String   @id @default(cuid())
+  userId          String
+  user            AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  model           String
+  provider        String
+  preset          String   @default("generic")
+  language        String   @default("auto")
+  customPrompt    String   @default("")
+  postProcessing  Json?
+  autoExports     Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId, updatedAt(sort: Desc)])
+}
+
+model WatchedS3Source {
+  id                    String              @id @default(cuid())
+  userId                String
+  user                  AuthUser            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                  String
+  prefix                String              @default("")
+  intervalSeconds       Int                 @default(60)
+  active                Boolean             @default(true)
+  model                 String
+  templateId            String?
+  autoKbExport          Boolean             @default(false)
+  autoS3Export          Boolean             @default(false)
+  lastPolledAt          DateTime?
+  lastError             String?
+  consecutiveFailures   Int                 @default(0)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  objects               WatchedS3Object[]
+
+  @@unique([userId, name])
+  @@index([userId, active])
+}
+
+model WatchedS3Object {
+  id           String          @id @default(cuid())
+  sourceId     String
+  source       WatchedS3Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  bucket       String
+  key          String
+  etag         String?
+  jobId        String?
+  ingestedAt   DateTime        @default(now())
+
+  @@unique([sourceId, key])
+  @@index([sourceId, ingestedAt(sort: Desc)])
+}
+
+model PushSubscription {
+  id          String   @id @default(cuid())
+  userId      String
+  user        AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint    String   @unique
+  p256dh      String
+  auth        String
+  userAgent   String?
+  failureCount Int     @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
 }

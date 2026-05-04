@@ -17,7 +17,12 @@ export interface AdvancedSettings {
   preferTextLayer: boolean;
   documentPreset: DocumentPresetKind;
   pageConcurrency: number;
+  autoRetryMaxAttempts: number;
 }
+
+export const AUTO_RETRY_MIN = 1;
+export const AUTO_RETRY_MAX = 8;
+export const AUTO_RETRY_DEFAULT = 1;
 
 export type DocumentPresetKind = "generic" | "academic" | "invoice" | "contract" | "form";
 
@@ -36,6 +41,7 @@ export const DEFAULT_SETTINGS: AdvancedSettings = {
   preferTextLayer: true,
   documentPreset: "generic",
   pageConcurrency: PAGE_CONCURRENCY_DEFAULT,
+  autoRetryMaxAttempts: AUTO_RETRY_DEFAULT,
 };
 
 const VALID_PRESETS: ReadonlySet<DocumentPresetKind> = new Set([
@@ -85,6 +91,13 @@ export function normalizeAdvancedSettings(input: unknown): AdvancedSettings {
     pageConcurrency = t <= 0 ? PAGE_CONCURRENCY_AUTO : Math.min(PAGE_CONCURRENCY_MAX, Math.max(PAGE_CONCURRENCY_MIN, t));
   }
 
+  const rawRetry = c?.autoRetryMaxAttempts;
+  let autoRetryMaxAttempts = DEFAULT_SETTINGS.autoRetryMaxAttempts;
+  if (typeof rawRetry === "number" && Number.isFinite(rawRetry)) {
+    const t = Math.trunc(rawRetry);
+    autoRetryMaxAttempts = Math.max(AUTO_RETRY_MIN, Math.min(AUTO_RETRY_MAX, t));
+  }
+
   return {
     language: getString(c, "language", DEFAULT_SETTINGS.language),
     tableDetection: getBool(c, "tableDetection", DEFAULT_SETTINGS.tableDetection),
@@ -95,6 +108,7 @@ export function normalizeAdvancedSettings(input: unknown): AdvancedSettings {
     preferTextLayer: getBool(c, "preferTextLayer", DEFAULT_SETTINGS.preferTextLayer),
     documentPreset: getPreset(c, DEFAULT_SETTINGS.documentPreset),
     pageConcurrency,
+    autoRetryMaxAttempts,
   };
 }
 

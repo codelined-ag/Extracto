@@ -46,6 +46,7 @@ const baseInput = {
     preferTextLayer: true,
     documentPreset: "generic" as const,
     pageConcurrency: 1,
+    autoRetryMaxAttempts: 1,
   },
   postProcessingPayload: {
     enabled: false,

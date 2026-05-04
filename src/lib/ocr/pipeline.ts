@@ -3,6 +3,7 @@ import { OcrJobStatus, Prisma } from "@prisma/client";
 import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import type { ApiProviderSettings, ProviderKind } from "@/lib/api-types";
 import { dispatchJobWebhooks } from "@/lib/background/webhooks";
+import { dispatchPushForJob } from "@/lib/push/dispatch";
 import { db } from "@/lib/db";
 import {
   clearOcrJobRunning,
@@ -117,6 +118,12 @@ async function persistCompletedJob(
     },
   });
   void dispatchJobWebhooks(input.jobId, "job.completed").catch(() => undefined);
+  void dispatchPushForJob(input.jobId, {
+    title: "OCR completed",
+    body: input.fileName,
+    url: "/",
+    tag: `job-${input.jobId}`,
+  }).catch(() => undefined);
   await finalizeOcrJob(input.jobId, input.settings.apiEndpoint, usedOllamaModels);
 }
 
@@ -138,6 +145,12 @@ async function persistFailedJob(
     },
   });
   void dispatchJobWebhooks(input.jobId, "job.failed").catch(() => undefined);
+  void dispatchPushForJob(input.jobId, {
+    title: "OCR failed",
+    body: `${input.fileName} could not be processed. Open Extracto for details.`,
+    url: "/",
+    tag: `job-${input.jobId}`,
+  }).catch(() => undefined);
   await finalizeOcrJob(input.jobId, input.settings.apiEndpoint, usedOllamaModels);
 }
 
@@ -243,6 +256,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
         input.settingsPayload.documentPreset === "invoice" ||
         input.settingsPayload.documentPreset === "form",
       pageConcurrency: input.settingsPayload.pageConcurrency,
+      autoRetryMaxAttempts: input.settingsPayload.autoRetryMaxAttempts,
       startIndex,
       snapshot: snapshotMetadata,
       ocrPct,

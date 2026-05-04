@@ -19,6 +19,7 @@ const settings = {
   preferTextLayer: true,
   documentPreset: "generic",
   pageConcurrency: 1,
+  autoRetryMaxAttempts: 1,
 } as const;
 
 const page: ProcessedPageOutput = {

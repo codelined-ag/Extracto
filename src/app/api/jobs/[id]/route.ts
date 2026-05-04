@@ -1,4 +1,4 @@
-import { ApiRouteError } from "@/lib/api-error";
+import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
 import { NextRequest, NextResponse } from "next/server";
 
 import { withAuth, withMutationAuth } from "@/lib/auth/request";
@@ -78,5 +78,32 @@ export const DELETE = withMutationAuth<{ id: string }>(
     }
 
     return NextResponse.json({ deleted: deleteResult.count });
+  },
+);
+
+interface PatchJobBody extends Record<string, unknown> {
+  priority?: unknown;
+}
+
+export const PATCH = withMutationAuth<{ id: string }>(
+  "ocr:control",
+  async (request: NextRequest, { params, auth }) => {
+    const { id } = await params;
+    const body = await parseJsonBody<PatchJobBody>(request);
+    const data: Record<string, unknown> = {};
+    if (body.priority !== undefined) {
+      const p = Number(body.priority);
+      if (!Number.isFinite(p)) throw new ApiRouteError("priority must be a number", 400);
+      data.priority = Math.max(-10, Math.min(10, Math.trunc(p)));
+    }
+    if (Object.keys(data).length === 0) {
+      throw new ApiRouteError("No mutable fields supplied", 400);
+    }
+    const result = await db.ocrJob.updateMany({
+      where: { id, userId: auth.userId },
+      data,
+    });
+    if (result.count === 0) throw new ApiRouteError("Job not found", 404);
+    return NextResponse.json({ ok: true });
   },
 );

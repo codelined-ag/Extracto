@@ -5,6 +5,7 @@ vi.mock("@/lib/db", () => ({
   db: {
     ocrJob: { findUnique: vi.fn() },
     webhook: { findMany: vi.fn(), update: vi.fn() },
+    webhookDelivery: { create: vi.fn().mockResolvedValue({}) },
   },
 }));
 

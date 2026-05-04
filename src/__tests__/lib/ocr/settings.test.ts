@@ -18,6 +18,7 @@ function validSettings(overrides: Partial<AdvancedSettings> = {}): AdvancedSetti
     preferTextLayer: true,
     documentPreset: "generic",
     pageConcurrency: 0,
+    autoRetryMaxAttempts: 1,
     ...overrides,
   };
 }
@@ -298,6 +299,7 @@ describe("DEFAULT_SETTINGS", () => {
       preferTextLayer: true,
       documentPreset: "generic",
       pageConcurrency: 0,
+      autoRetryMaxAttempts: 1,
     });
   });
 });
