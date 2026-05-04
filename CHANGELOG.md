@@ -6,6 +6,17 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-05-04
+
+### Added
+- Newly-uploaded PDFs preprocess in the background (page rendering) so the heavy work is finished by the time the user clicks Run OCR; rows show "Preparing..." while in flight.
+- List-view rows in the page picker now toggle selection on click anywhere in the row (not just the checkbox), with hold-and-drag to bulk-select multiple pages.
+- A small "Open" button on each list-view row jumps to that page in gallery view.
+
+### Changed
+- "Pages in parallel" moved from the main-view Advanced Options into Settings dialog → Model tab (with an "auto" badge when value is 0).
+- "Prefer PDF text layer" toggle removed from the UI; the auto-detector decides per-page based on text-layer quality. CLI/MCP `--no-text-layer` flag stays as a power-user override.
+
 ## [0.5.1] - 2026-05-04
 
 ### Added
