@@ -28,7 +28,7 @@ import { HistoryIcon } from "@/components/ui/history";
 import { LoaderCircleIcon } from "@/components/ui/loader-circle";
 import { SearchIcon } from "@/components/ui/search";
 
-import { deriveHistoryStatus, formatTimestamp, summarizeDetectedLanguages } from "@/app/page-components/page-utils";
+import { deriveHistoryStatus, formatTimestamp, getDocumentMetadata, summarizeDetectedLanguages } from "@/app/page-components/page-utils";
 import { TagPicker } from "@/app/page-components/tag-picker";
 import { tagChipClass, tagSwatchClass } from "@/app/page-components/tag-utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -690,6 +690,46 @@ export function HistoryDialog({
                         );
                       })()}
                     </div>
+                    {(() => {
+                      const doc = getDocumentMetadata(selectedJobDetail.metadata);
+                      if (!doc) return null;
+                      return (
+                        <div className="surface-soft rounded-xl px-3 py-2 mt-2 space-y-1 text-xs">
+                          {doc.title ? (
+                            <div className="flex gap-2">
+                              <span className="text-muted-foreground/80 min-w-[5rem]">
+                                {t("Titolo", "Title", "Titre", "Título", "Titel")}
+                              </span>
+                              <span className="font-medium truncate">{doc.title}</span>
+                            </div>
+                          ) : null}
+                          {doc.date ? (
+                            <div className="flex gap-2">
+                              <span className="text-muted-foreground/80 min-w-[5rem]">
+                                {t("Data", "Date", "Date", "Fecha", "Datum")}
+                              </span>
+                              <span className="tabular">{doc.date}</span>
+                            </div>
+                          ) : null}
+                          {doc.authors && doc.authors.length > 0 ? (
+                            <div className="flex gap-2">
+                              <span className="text-muted-foreground/80 min-w-[5rem]">
+                                {t("Autori", "Authors", "Auteurs", "Autores", "Autoren")}
+                              </span>
+                              <span>{doc.authors.join(", ")}</span>
+                            </div>
+                          ) : null}
+                          {doc.keywords && doc.keywords.length > 0 ? (
+                            <div className="flex gap-2">
+                              <span className="text-muted-foreground/80 min-w-[5rem]">
+                                {t("Parole chiave", "Keywords", "Mots-clés", "Palabras clave", "Schlüsselwörter")}
+                              </span>
+                              <span className="text-muted-foreground">{doc.keywords.join(", ")}</span>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
                     <div className="pt-1">
                       <TagPicker
                         t={t}

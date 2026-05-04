@@ -158,7 +158,7 @@ Endpoint is server-side validated against SSRF (cloud-metadata IPs and link-loca
 - The OCR job result includes:
   - `extractedText`: the final markdown.
   - `result`: structured JSON. `result.structured.pages[]` is the per-page array; each entry has `pageNumber`, `durationMs`, `markdown`, and (when detection succeeds) `language` (ISO 639-3, e.g. `eng`/`ita`) plus `languageName` (English name).
-  - `metadata`: provider, model, timing, post-processing info, and `pageResults[]` mirroring the per-page fields above.
+  - `metadata`: provider, model, timing, post-processing info, `pageResults[]` mirroring the per-page fields above, and (when first-page heuristics succeed) a `document` sub-object with `title`, `date`, `authors[]`, and `keywords[]`.
 
 ## Lifecycle commands (no token required)
 

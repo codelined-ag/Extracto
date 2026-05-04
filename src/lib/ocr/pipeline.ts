@@ -15,6 +15,7 @@ import {
   seedPostProcessingMeta,
   seedUsedOllamaModels,
 } from "@/lib/ocr/job-seed";
+import { extractDocumentMetadata } from "@/lib/ocr/document-metadata";
 import { getOllamaCandidatesForOcr } from "@/lib/ocr/ollama-dispatch";
 import { extractAnchorsForPages } from "@/lib/ocr/pdf-anchoring-helper";
 import { runOcrPages, type OrchestratorState } from "@/lib/ocr/pipeline-page-loop";
@@ -278,11 +279,20 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
     }
 
     const pageScopedText = formatPageScopedText(state.pageOutputs);
+    const firstPageRecord = state.pageRecords.find((p) => p.pageNumber === 1) ?? state.pageRecords[0];
+    const firstPageLanguage =
+      typeof firstPageRecord?.metadata?.language === "string"
+        ? (firstPageRecord.metadata.language as string)
+        : undefined;
+    const documentMeta = firstPageRecord
+      ? extractDocumentMetadata(firstPageRecord.text, firstPageLanguage)
+      : {};
     const extractedMetadata: Record<string, unknown> = {
       ocrModel: input.ocrModel,
       inferenceModel: input.model,
       pageCount: input.inputPreviews.length,
       pageResults: state.partialPageResults,
+      ...(Object.keys(documentMeta).length > 0 ? { document: documentMeta } : {}),
     };
 
     const postProcessing = await runPostProcessingStage(state, {

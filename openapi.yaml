@@ -45,7 +45,12 @@ components:
         createdAt: { type: string, format: date-time }
         completedAt: { type: string, format: date-time, nullable: true }
         processingMs: { type: integer, nullable: true }
-        metadata: { type: object, additionalProperties: true }
+        metadata:
+          type: object
+          additionalProperties: true
+          description: |
+            Job metadata. Since v0.9.0 includes a `document` sub-object when first-page
+            heuristics detect any of: `title`, `date`, `authors[]`, `keywords[]`.
         errorMessage: { type: string, nullable: true }
         extractedText: { type: string, nullable: true }
         result:

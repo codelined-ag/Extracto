@@ -185,6 +185,32 @@ export function deriveHistoryStatus(
   return "queued";
 }
 
+export interface ExtractedDocumentMetadata {
+  title?: string;
+  date?: string;
+  authors?: string[];
+  keywords?: string[];
+}
+
+export function getDocumentMetadata(metadata: unknown): ExtractedDocumentMetadata | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const doc = (metadata as Record<string, unknown>).document;
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) return null;
+  const out: ExtractedDocumentMetadata = {};
+  const d = doc as Record<string, unknown>;
+  if (typeof d.title === "string" && d.title.trim()) out.title = d.title.trim();
+  if (typeof d.date === "string" && d.date.trim()) out.date = d.date.trim();
+  if (Array.isArray(d.authors)) {
+    const authors = d.authors.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+    if (authors.length > 0) out.authors = authors;
+  }
+  if (Array.isArray(d.keywords)) {
+    const keywords = d.keywords.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+    if (keywords.length > 0) out.keywords = keywords;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 export interface DetectedLanguagesSummary {
   codes: string[];
   names: string[];
