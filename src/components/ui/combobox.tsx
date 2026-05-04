@@ -121,17 +121,19 @@ export function Combobox({
             </CommandPrimitive.Empty>
             {options.map((option) => {
               const isSelected = option.value === value
+              const commit = () => {
+                onValueChange(option.value)
+                setOpen(false)
+                setSearch("")
+              }
               return (
                 <CommandPrimitive.Item
                   key={option.value}
                   value={`${option.label} ${option.value}`}
-                  onSelect={() => {
-                    onValueChange(option.value)
-                    setOpen(false)
-                    setSearch("")
-                  }}
+                  onSelect={commit}
+                  onMouseDown={(e) => { e.preventDefault(); commit() }}
                   className={cn(
-                    "relative flex cursor-default items-start gap-2 rounded-lg px-2.5 py-2 text-sm",
+                    "relative flex cursor-pointer items-start gap-2 rounded-lg px-2.5 py-2 text-sm",
                     "outline-hidden select-none transition-colors duration-150",
                     "data-[selected=true]:bg-[color-mix(in_oklab,var(--secondary),var(--primary)_18%)] data-[selected=true]:text-foreground",
                     "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
