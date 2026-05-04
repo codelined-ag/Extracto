@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Extracto v1 API
-  version: 0.8.0
+  version: 0.9.0
   description: |
     Stable bearer-auth HTTP surface for Extracto. Mint a key with
     `extracto api-key create <user-email> <name>` (or `POST /api/v1/keys`

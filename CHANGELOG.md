@@ -6,6 +6,19 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-05
+
+### Added
+- Per-page language detection surfaces ISO 639-3 codes and English names in metadata and the History detail bar.
+- First-page heuristics auto-extract title, date, authors, and keywords into `metadata.document`.
+- Document-type classifier identifies invoice, receipt, contract, academic, form, ID, or generic on the first page.
+- Auto re-OCR retries pages with degenerate output (long char runs, no-whitespace blocks, dominant token loops, provider artifacts) once without anchoring; budgeted per job.
+- Inline page editor with version history at PATCH /api/v1/jobs/:id/pages/:n; the History dialog gains a Pages tab.
+- Page-pip bar above the Markdown view jumps to the matching tile in the Pages tab with a flash highlight.
+
+### Fixed
+- Hydration and a11y errors in the workspace shell: footer no longer wraps an icon `div` inside a `p`, theme toggle uses the standard mounted gate, and the History dialog now declares `DialogTitle` and `DialogDescription`.
+
 ## [0.8.0] - 2026-05-04
 
 ### Added

@@ -30,7 +30,7 @@
   </picture>
 </p>
 
-> **v0.8.0**: tags for OCR jobs, smart History filters (file name, model, date range, tags), bulk-tag selection action, and saved searches that persist a filter set under a name. Each capability ships on REST, MCP, CLI, and the History dialog. See the [changelog](./CHANGELOG.md).
+> **v0.9.0**: per-page language detection, first-page document metadata (title, date, authors, keywords), document-type classification, auto re-OCR on degenerate output, inline page editing with version history, and page-pip jumping in the History dialog. See the [changelog](./CHANGELOG.md).
 
 ---
 
