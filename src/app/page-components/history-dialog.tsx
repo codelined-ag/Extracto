@@ -28,7 +28,7 @@ import { HistoryIcon } from "@/components/ui/history";
 import { LoaderCircleIcon } from "@/components/ui/loader-circle";
 import { SearchIcon } from "@/components/ui/search";
 
-import { deriveHistoryStatus, formatTimestamp, getDocumentMetadata, summarizeDetectedLanguages } from "@/app/page-components/page-utils";
+import { deriveHistoryStatus, formatTimestamp, getDocumentMetadata, getDocumentType, summarizeDetectedLanguages } from "@/app/page-components/page-utils";
 import { TagPicker } from "@/app/page-components/tag-picker";
 import { tagChipClass, tagSwatchClass } from "@/app/page-components/tag-utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -685,6 +685,30 @@ export function HistoryDialog({
                               title={t("Lingue rilevate", "Detected languages", "Langues détectées", "Idiomas detectados", "Erkannte Sprachen")}
                             >
                               {label}
+                            </span>
+                          </>
+                        );
+                      })()}
+                      {(() => {
+                        const dt = getDocumentType(selectedJobDetail.metadata);
+                        if (!dt) return null;
+                        const labels: Record<typeof dt.kind, string> = {
+                          invoice: t("Fattura", "Invoice", "Facture", "Factura", "Rechnung"),
+                          receipt: t("Ricevuta", "Receipt", "Reçu", "Recibo", "Beleg"),
+                          contract: t("Contratto", "Contract", "Contrat", "Contrato", "Vertrag"),
+                          academic: t("Articolo accademico", "Academic paper", "Article académique", "Artículo académico", "Wissenschaftliche Arbeit"),
+                          form: t("Modulo", "Form", "Formulaire", "Formulario", "Formular"),
+                          id: t("Documento d'identità", "ID document", "Pièce d'identité", "Documento de identidad", "Ausweis"),
+                          generic: "",
+                        };
+                        return (
+                          <>
+                            <span className="text-muted-foreground">·</span>
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-accent text-accent-foreground font-medium"
+                              title={t("Tipo di documento rilevato", "Detected document type", "Type de document détecté", "Tipo de documento detectado", "Erkannter Dokumenttyp")}
+                            >
+                              {labels[dt.kind]}
                             </span>
                           </>
                         );

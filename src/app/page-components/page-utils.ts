@@ -185,6 +185,25 @@ export function deriveHistoryStatus(
   return "queued";
 }
 
+export interface DetectedDocumentType {
+  kind: "invoice" | "receipt" | "contract" | "academic" | "form" | "id" | "generic";
+  confidence: number;
+}
+
+export function getDocumentType(metadata: unknown): DetectedDocumentType | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const dt = (metadata as Record<string, unknown>).documentType;
+  if (!dt || typeof dt !== "object" || Array.isArray(dt)) return null;
+  const obj = dt as Record<string, unknown>;
+  const kind = obj.kind;
+  const confidence = obj.confidence;
+  const validKinds = new Set(["invoice", "receipt", "contract", "academic", "form", "id", "generic"]);
+  if (typeof kind !== "string" || !validKinds.has(kind)) return null;
+  if (typeof confidence !== "number" || !Number.isFinite(confidence)) return null;
+  if (kind === "generic" || confidence <= 0) return null;
+  return { kind: kind as DetectedDocumentType["kind"], confidence };
+}
+
 export interface ExtractedDocumentMetadata {
   title?: string;
   date?: string;

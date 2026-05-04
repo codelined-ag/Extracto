@@ -50,7 +50,10 @@ components:
           additionalProperties: true
           description: |
             Job metadata. Since v0.9.0 includes a `document` sub-object when first-page
-            heuristics detect any of: `title`, `date`, `authors[]`, `keywords[]`.
+            heuristics detect any of: `title`, `date`, `authors[]`, `keywords[]`. May
+            also include a `documentType` sub-object `{ kind, confidence }` where `kind`
+            is one of `invoice`, `receipt`, `contract`, `academic`, `form`, `id`, or
+            `generic`. Only emitted when the heuristic confidence exceeds the gate.
         errorMessage: { type: string, nullable: true }
         extractedText: { type: string, nullable: true }
         result:
