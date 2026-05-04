@@ -36,7 +36,7 @@
   </picture>
 </p>
 
-> **v0.5.4**: any S3-compatible storage (AWS, R2, Backblaze, MinIO, Garage, Ceph, SeaweedFS, ...) with hardened SSRF policy and rate limits, Typesense vector store, history GFM rendering with stopped-job state, and a curl|sh / iwr|iex one-liner installer pinned to the release tag. See the [changelog](./CHANGELOG.md).
+> **v0.6.0**: settings dialog regrouped into 4 task-oriented tabs (OCR, Knowledge base, Storage, Templates) with single-open collapsible sections, account-personal preferences split into a dedicated dialog, real-time per-page OCR progress, Markdown results that render with proper typographic hierarchy in workspace and history, plus broad auth/rate-limit/security hardening. See the [changelog](./CHANGELOG.md).
 
 ---
 
@@ -73,13 +73,13 @@ You need Docker. That's it.
 ### One-liner (Linux / macOS)
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/codelined-ag/Extracto/v0.5.5/scripts/install.sh | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/codelined-ag/Extracto/v0.6.0/scripts/install.sh | bash
 ```
 
 ### One-liner (Windows)
 
 ```powershell
-iwr -UseBasicParsing https://raw.githubusercontent.com/codelined-ag/Extracto/v0.5.5/scripts/install.ps1 | iex
+iwr -UseBasicParsing https://raw.githubusercontent.com/codelined-ag/Extracto/v0.6.0/scripts/install.ps1 | iex
 ```
 
 The installer clones the repo at the pinned tag to `~/.local/share/extracto` (or `%LOCALAPPDATA%\Extracto`), sets up Docker + Ollama if missing, writes localhost-safe overrides to `.extracto.env`, drops an `extracto` launcher on PATH, and starts the stack. Open <http://localhost:3000> and sign up.
@@ -88,7 +88,7 @@ The installer clones the repo at the pinned tag to `~/.local/share/extracto` (or
 
 ### S3-compatible storage (any provider)
 
-Settings → S3 takes any S3-compatible endpoint: AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, Wasabi, Linode Object Storage, GCS, MinIO, Garage, Ceph RGW, SeaweedFS, on-prem appliances, etc. The endpoint URL is validated for SSRF (cloud-metadata IPs and link-local always blocked); private/loopback hosts (RFC1918, 127.0.0.1, host.docker.internal) require either `S3_ALLOW_LOOPBACK=1` for global opt-in or `S3_ALLOWED_HOSTS=minio.internal.corp,*.objects.internal` for granular access.
+Settings → Storage takes any S3-compatible endpoint: AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, Wasabi, Linode Object Storage, GCS, MinIO, Garage, Ceph RGW, SeaweedFS, on-prem appliances, etc. The endpoint URL is validated for SSRF (cloud-metadata IPs and link-local always blocked); private/loopback hosts (RFC1918, 127.0.0.1, host.docker.internal) require either `S3_ALLOW_LOOPBACK=1` for global opt-in or `S3_ALLOWED_HOSTS=minio.internal.corp,*.objects.internal` for granular access.
 
 The launcher wraps the full API: `extracto ocr ./invoice.pdf`, `extracto jobs list`, `extracto kb export`, `extracto api-key create ...`. Full reference at [extracto.help/cli/overview](https://extracto.help/cli/overview).
 
@@ -106,7 +106,7 @@ extracto on
 
 **Single `docker run` (no launcher):**
 ```bash
-docker run -d --name extracto -p 3000:3000 -v extracto-data:/app/data -e AUTH_SECRET="$(openssl rand -hex 32)" -e COOKIE_SECURE=false -e ALLOW_SIGNUP=1 ghcr.io/codelined-ag/extracto:v0.5.5
+docker run -d --name extracto -p 3000:3000 -v extracto-data:/app/data -e AUTH_SECRET="$(openssl rand -hex 32)" -e COOKIE_SECURE=false -e ALLOW_SIGNUP=1 ghcr.io/codelined-ag/extracto:v0.6.0
 ```
 
 Multi-arch (`linux/amd64` + `linux/arm64`); pin a release tag instead of `:latest`. The checked-in compose defaults are production-biased (`COOKIE_SECURE=true`, bridge networking, signup disabled); the installer writes `.extracto.env` overrides for localhost onboarding.
