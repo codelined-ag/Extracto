@@ -2131,11 +2131,11 @@ export default function ExtractoPage() {
  <TabsContent value="kb"className="space-y-5 mt-4">
  <p className="text-xs text-muted-foreground">
  {t(
-"Configura embedding, chunking e vector store. Imposta KB_EXPORT_ENABLED=1 nel container per abilitare l'esportazione.",
-"Configure embedding, chunking, and vector store. Set KB_EXPORT_ENABLED=1 on the container to enable export.",
-"Configurez embedding, découpage et vector store. Activez KB_EXPORT_ENABLED=1 sur le conteneur pour activer l'export.",
-"Configura embedding, chunking y vector store. Activa KB_EXPORT_ENABLED=1 en el contenedor para habilitar la exportación.",
-"Konfigurieren Sie Embedding, Chunking und Vektor-Store. KB_EXPORT_ENABLED=1 setzen, um Export zu aktivieren.",
+"Configura embedding, chunking e vector store.",
+"Configure embedding, chunking, and vector store.",
+"Configurez embedding, découpage et vector store.",
+"Configura embedding, chunking y vector store.",
+"Konfigurieren Sie Embedding, Chunking und Vektor-Store.",
  )}
  </p>
 

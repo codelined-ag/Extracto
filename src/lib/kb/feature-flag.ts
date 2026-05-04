@@ -4,6 +4,7 @@
  * docker-entrypoint flow that exports vars after Node has loaded.
  */
 export function isKbExportEnabled(): boolean {
-  const raw = (process.env.KB_EXPORT_ENABLED || "").toLowerCase().trim();
+  const raw = process.env.KB_EXPORT_ENABLED?.toLowerCase().trim();
+  if (raw === undefined || raw === "") return true;
   return raw === "1" || raw === "true";
 }

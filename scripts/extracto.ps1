@@ -686,7 +686,6 @@ function Cmd-Help {
     Write-Host "  extracto settings get"
     Write-Host "  extracto kb export <job-id> --collection N --store-url URL --embed-model M"
     Write-Host "                                     export an OCR job's text to a vector store"
-    Write-Host "                                     (requires KB_EXPORT_ENABLED=1 on the server)"
     Write-Host "  extracto kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]"
     Write-Host "                                     probe a vector store for reachability + auth"
     Write-Host ""
