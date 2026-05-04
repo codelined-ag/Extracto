@@ -19,7 +19,11 @@ import { classifyDocumentType } from "@/lib/ocr/document-classifier";
 import { extractDocumentMetadata } from "@/lib/ocr/document-metadata";
 import { getOllamaCandidatesForOcr } from "@/lib/ocr/ollama-dispatch";
 import { extractAnchorsForPages } from "@/lib/ocr/pdf-anchoring-helper";
-import { runOcrPages, type OrchestratorState } from "@/lib/ocr/pipeline-page-loop";
+import {
+  computeDegenerateRetryBudget,
+  runOcrPages,
+  type OrchestratorState,
+} from "@/lib/ocr/pipeline-page-loop";
 import {
   formatPageScopedText,
 } from "@/lib/ocr/pipeline-post-processing";
@@ -181,6 +185,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
     latestMetadata: {} as OcrProgressMetadata,
     postProcessingMeta: seedPostProcessingMeta(input.postProcessingPayload, selectedPostProcessModel),
     usedOllamaModels: seedUsedOllamaModels(input.provider, input.ocrModel),
+    degenerateRetryBudget: computeDegenerateRetryBudget(input.inputPreviews.length),
   };
 
   state.progressEvents = appendProgressEvent(

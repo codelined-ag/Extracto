@@ -20,6 +20,7 @@ import {
   toStructuredPagePayload,
   type ProcessedPageOutput,
 } from "@/lib/ocr/pipeline-result-builder";
+import { detectDegenerate } from "@/lib/ocr/degenerate-detection";
 import { detectPageLanguage } from "@/lib/ocr/language-detection";
 import { runProviderOcr } from "@/lib/ocr/provider-dispatch";
 import { OcrStopRequestedError } from "@/lib/ocr/providers/shared";
@@ -45,7 +46,11 @@ export interface OrchestratorState {
   latestMetadata: OcrProgressMetadata;
   postProcessingMeta: OcrProgressMetadata["postProcessing"];
   usedOllamaModels: Set<string>;
+  degenerateRetryBudget: number;
 }
+
+export const computeDegenerateRetryBudget = (pageCount: number): number =>
+  Math.min(10, Math.max(1, Math.ceil(pageCount / 4)));
 
 export interface PageLoopDeps {
   jobId: string;
@@ -146,6 +151,61 @@ async function runOnePage(
       ));
       if (anchored.usedAnchoring) {
         pageMetadata = { ...pageMetadata, anchored: true };
+      }
+      const degenerate = detectDegenerate(pageText);
+      if (degenerate && state.degenerateRetryBudget > 0 && anchored.usedAnchoring) {
+        state.degenerateRetryBudget -= 1;
+        try {
+          const retried = await withProviderRetry(
+            () =>
+              runProviderOcr(
+                deps.provider,
+                deps.settings,
+                deps.ocrModel,
+                deps.prompt,
+                pagePreview,
+                abortController.signal,
+              ),
+            {
+              maxAttempts: 1,
+              abortSignal: abortController.signal,
+            },
+          );
+          const retriedDegenerate = detectDegenerate(retried.text);
+          if (!retriedDegenerate && retried.text.length >= pageText.length / 2) {
+            pageText = retried.text;
+            pageStructured = retried.structured;
+            pageMetadata = {
+              ...retried.metadata,
+              degenerateRetry: { reason: degenerate.reason, succeeded: true },
+            };
+          } else {
+            pageMetadata = {
+              ...pageMetadata,
+              degenerateRetry: {
+                reason: degenerate.reason,
+                succeeded: false,
+                ...(retriedDegenerate ? { retriedReason: retriedDegenerate.reason } : {}),
+              },
+            };
+          }
+        } catch (err) {
+          if (err instanceof OcrStopRequestedError) throw err;
+          pageMetadata = {
+            ...pageMetadata,
+            degenerateRetry: { reason: degenerate.reason, succeeded: false },
+          };
+        }
+      } else if (degenerate) {
+        pageMetadata = {
+          ...pageMetadata,
+          degenerateRetry: {
+            reason: degenerate.reason,
+            succeeded: false,
+            ...(state.degenerateRetryBudget <= 0 ? { capped: true } : {}),
+            ...(!anchored.usedAnchoring ? { skipped: "no-anchoring" } : {}),
+          },
+        };
       }
     }
   } finally {

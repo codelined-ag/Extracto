@@ -158,7 +158,7 @@ Endpoint is server-side validated against SSRF (cloud-metadata IPs and link-loca
 - The OCR job result includes:
   - `extractedText`: the final markdown.
   - `result`: structured JSON. `result.structured.pages[]` is the per-page array; each entry has `pageNumber`, `durationMs`, `markdown`, and (when detection succeeds) `language` (ISO 639-3, e.g. `eng`/`ita`) plus `languageName` (English name).
-  - `metadata`: provider, model, timing, post-processing info, `pageResults[]` mirroring the per-page fields above, and (when first-page heuristics succeed) a `document` sub-object with `title`, `date`, `authors[]`, and `keywords[]`. May also include `documentType` `{ kind, confidence }` where `kind` is one of `invoice`, `receipt`, `contract`, `academic`, `form`, `id`, or `generic`.
+  - `metadata`: provider, model, timing, post-processing info, `pageResults[]` mirroring the per-page fields above, and (when first-page heuristics succeed) a `document` sub-object with `title`, `date`, `authors[]`, and `keywords[]`. May also include `documentType` `{ kind, confidence }` where `kind` is one of `invoice`, `receipt`, `contract`, `academic`, `form`, `id`, or `generic`. A page entry may include `degenerateRetry: { reason, succeeded }` when the server detected degenerate output (`char-run` / `no-whitespace` / `token-loop` / `provider-noise`) and re-OCR'd the page once without text-layer anchoring. The reason is the failure mode that triggered the retry. Retries are budgeted per job so a pathologically broken document cannot double the cost of an entire batch.
 
 ## Lifecycle commands (no token required)
 

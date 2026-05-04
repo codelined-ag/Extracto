@@ -45,6 +45,7 @@ function freshState(): OrchestratorState {
     latestMetadata: {} as OcrProgressMetadata,
     postProcessingMeta: { enabled: false },
     usedOllamaModels: new Set<string>(),
+    degenerateRetryBudget: 10,
   };
 }
 
