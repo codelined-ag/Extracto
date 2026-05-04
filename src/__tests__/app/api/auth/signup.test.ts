@@ -6,7 +6,7 @@ vi.mock("@/lib/request-security", () => ({
 }));
 
 vi.mock("@/lib/rate-limit", () => ({
-  consumeRateLimit: vi.fn().mockReturnValue({ allowed: true }),
+  consumeSharedRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
 }));
 
 vi.mock("@/lib/auth/credentials", () => ({

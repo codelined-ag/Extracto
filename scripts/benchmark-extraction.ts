@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { readFile, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import path from "node:path";
 
 import { extractPdfAnchoring, assessTextLayerQuality } from "@/lib/ocr/pdf-anchoring";
@@ -57,20 +58,23 @@ function parseArgs(): CliArgs {
 }
 
 async function renderPagePreviewImage(pdfPath: string, pageNumber: number): Promise<string> {
-  const { exec } = await import("node:child_process");
   const tmp = await import("node:fs/promises");
   const os = await import("node:os");
   const tmpDir = await tmp.mkdtemp(path.join(os.tmpdir(), "extracto-bench-"));
   const stem = path.join(tmpDir, "page");
-  await new Promise<void>((resolve, reject) => {
-    exec(
-      `pdftoppm -singlefile -f ${pageNumber} -l ${pageNumber} -jpeg -r 150 "${pdfPath}" "${stem}"`,
-      (error) => (error ? reject(error) : resolve()),
-    );
-  });
-  const jpg = await tmp.readFile(`${stem}.jpg`);
-  await tmp.rm(tmpDir, { recursive: true, force: true });
-  return `data:image/jpeg;base64,${jpg.toString("base64")}`;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        "pdftoppm",
+        ["-singlefile", "-f", String(pageNumber), "-l", String(pageNumber), "-jpeg", "-r", "150", pdfPath, stem],
+        (error) => (error ? reject(error) : resolve()),
+      );
+    });
+    const jpg = await tmp.readFile(`${stem}.jpg`);
+    return `data:image/jpeg;base64,${jpg.toString("base64")}`;
+  } finally {
+    await tmp.rm(tmpDir, { recursive: true, force: true });
+  }
 }
 
 const BASE_PROMPT = `You are an OCR system. Extract all visible text from the page image as clean markdown.

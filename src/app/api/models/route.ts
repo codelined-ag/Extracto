@@ -28,7 +28,7 @@ export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) =
   // candidate hosts (via the runtime endpoint), cache, and degraded
   // empty-list returns when discovery fails. We just adapt to the
   // {id,name,provider} shape this route has historically returned.
-  const catalog = await getModelCatalog(settings);
+  const catalog = await getModelCatalog(settings, { provider: providerHint });
   const models: NormalizedModel[] = catalog[providerHint].map((id) => ({
     id,
     name: id,

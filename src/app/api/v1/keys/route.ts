@@ -9,6 +9,7 @@ import {
   normalizeRequestedScopes,
   parseScopeList,
   serializeScopeList,
+  ScopeValidationError,
 } from "@/lib/auth/scopes";
 import { db } from "@/lib/db";
 
@@ -57,7 +58,15 @@ export const POST = withSessionAuth("mutation", "API keys", async (request: Next
     throw new ApiRouteError(`Key name must be at most ${MAX_KEY_NAME_LENGTH} characters`, 400);
   }
 
-  const scopes = normalizeRequestedScopes(body.scopes);
+  let scopes: string[];
+  try {
+    scopes = normalizeRequestedScopes(body.scopes);
+  } catch (error) {
+    if (error instanceof ScopeValidationError) {
+      throw new ApiRouteError(error.message, 400);
+    }
+    throw error;
+  }
 
   let rateLimitPerMinute: number | null = null;
   if (body.rateLimitPerMinute !== undefined && body.rateLimitPerMinute !== null) {

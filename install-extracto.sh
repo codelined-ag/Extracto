@@ -4,6 +4,9 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 USER_BIN_DIR="${HOME}/.local/bin"
 EXTRACTO_BIN="${USER_BIN_DIR}/extracto"
+RUNTIME_ENV_FILE="${PROJECT_DIR}/.extracto.env"
+INSTALL_DOCKER="${EXTRACTO_INSTALL_DOCKER:-1}"
+INSTALL_OLLAMA="${EXTRACTO_INSTALL_OLLAMA:-1}"
 LOG_DIR="${EXTRACTO_LOG_DIR:-$HOME/.local/state/extracto/logs}"
 if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
   LOG_DIR="/tmp/extracto/logs"
@@ -41,6 +44,18 @@ ok() {
 
 warn() {
   printf "%s!%s %s\n" "$C_YELLOW" "$C_RESET" "$*"
+}
+
+env_flag_enabled() {
+  local name="$1"
+  local value="$2"
+  local normalized
+  normalized="$(printf "%s" "$value" | tr '[:upper:]' '[:lower:]')"
+  case "$normalized" in
+    1|true|yes|on) return 0 ;;
+    0|false|no|off) return 1 ;;
+    *) die "${name} must be 1/0, true/false, yes/no, or on/off (got '${value}')" ;;
+  esac
 }
 
 slugify() {
@@ -115,6 +130,37 @@ require_command() {
   command -v "$cmd" >/dev/null 2>&1 || die "Missing required command: ${cmd}"
 }
 
+env_key_exists() {
+  local env_file="$1"
+  local key="$2"
+  [ -f "$env_file" ] || return 1
+  awk -F= -v key="$key" '
+    /^[[:space:]]*#/ { next }
+    $1 ~ "^[[:space:]]*" key "[[:space:]]*$" { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "$env_file"
+}
+
+set_runtime_env_default() {
+  local key="$1"
+  local value="$2"
+  if printenv "$key" >/dev/null 2>&1 || env_key_exists "$RUNTIME_ENV_FILE" "$key"; then
+    return 0
+  fi
+  umask 077
+  [ -f "$RUNTIME_ENV_FILE" ] || : > "$RUNTIME_ENV_FILE"
+  chmod 600 "$RUNTIME_ENV_FILE" 2>/dev/null || true
+  printf "%s=%s\n" "$key" "$value" >> "$RUNTIME_ENV_FILE"
+}
+
+prepare_local_runtime_env() {
+  set_runtime_env_default COOKIE_SECURE false
+  set_runtime_env_default ALLOW_SIGNUP 1
+  set_runtime_env_default APP_NETWORK_MODE bridge
+  set_runtime_env_default OLLAMA_HOST http://host.docker.internal:11434
+  ok "Prepared localhost runtime defaults in ${RUNTIME_ENV_FILE}"
+}
+
 append_extracto_block() {
   local rc_file="$1"
   [ -f "$rc_file" ] || touch "$rc_file"
@@ -131,6 +177,12 @@ EOF
 }
 
 install_docker_linux() {
+  if ! env_flag_enabled EXTRACTO_INSTALL_DOCKER "$INSTALL_DOCKER"; then
+    command -v docker >/dev/null 2>&1 || die "Docker is required, but EXTRACTO_INSTALL_DOCKER=0 and docker was not found"
+    info "Skipping Docker install because EXTRACTO_INSTALL_DOCKER=0"
+    return
+  fi
+
   if command -v docker >/dev/null 2>&1; then
     info "Docker already installed"
     return
@@ -141,6 +193,12 @@ install_docker_linux() {
 }
 
 install_docker_macos() {
+  if ! env_flag_enabled EXTRACTO_INSTALL_DOCKER "$INSTALL_DOCKER"; then
+    command -v docker >/dev/null 2>&1 || die "Docker is required, but EXTRACTO_INSTALL_DOCKER=0 and docker was not found"
+    info "Skipping Docker install because EXTRACTO_INSTALL_DOCKER=0"
+    return
+  fi
+
   if command -v docker >/dev/null 2>&1; then
     info "Docker already installed"
     return
@@ -160,6 +218,10 @@ ensure_docker_compose() {
     return
   fi
 
+  if ! env_flag_enabled EXTRACTO_INSTALL_DOCKER "$INSTALL_DOCKER"; then
+    die "Docker Compose plugin missing, and EXTRACTO_INSTALL_DOCKER=0 disables installer provisioning"
+  fi
+
   if [[ "$(uname -s)" == "Linux" ]]; then
     run_step "Installing Docker Compose plugin..." run_root bash -lc "apt-get update && apt-get install -y docker-compose-plugin"
   else
@@ -168,6 +230,11 @@ ensure_docker_compose() {
 }
 
 install_ollama_linux() {
+  if ! env_flag_enabled EXTRACTO_INSTALL_OLLAMA "$INSTALL_OLLAMA"; then
+    info "Skipping Ollama install because EXTRACTO_INSTALL_OLLAMA=0"
+    return
+  fi
+
   if command -v ollama >/dev/null 2>&1; then
     info "Ollama already installed"
     return
@@ -177,6 +244,11 @@ install_ollama_linux() {
 }
 
 install_ollama_macos() {
+  if ! env_flag_enabled EXTRACTO_INSTALL_OLLAMA "$INSTALL_OLLAMA"; then
+    info "Skipping Ollama install because EXTRACTO_INSTALL_OLLAMA=0"
+    return
+  fi
+
   if command -v ollama >/dev/null 2>&1; then
     info "Ollama already installed"
     return
@@ -190,6 +262,11 @@ install_ollama_macos() {
 }
 
 start_ollama_if_needed() {
+  if ! env_flag_enabled EXTRACTO_INSTALL_OLLAMA "$INSTALL_OLLAMA"; then
+    info "Skipping Ollama startup because EXTRACTO_INSTALL_OLLAMA=0"
+    return
+  fi
+
   if curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
     ok "Ollama is already running"
     return
@@ -240,7 +317,9 @@ install_extracto_command() {
 }
 
 main() {
-  require_command curl
+  if env_flag_enabled EXTRACTO_INSTALL_DOCKER "$INSTALL_DOCKER" || env_flag_enabled EXTRACTO_INSTALL_OLLAMA "$INSTALL_OLLAMA"; then
+    require_command curl
+  fi
 
   case "$(uname -s)" in
     Linux)
@@ -268,6 +347,7 @@ main() {
 
   start_ollama_if_needed
   install_extracto_command
+  prepare_local_runtime_env
 
   info "Turning up Extracto..."
   "${EXTRACTO_BIN}" on

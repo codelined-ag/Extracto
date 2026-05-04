@@ -112,7 +112,12 @@ export async function deletePagePreviews(fileId: string): Promise<void> {
 }
 
 function strip(file: ProcessingFile): SerializableProcessingFile {
-  const { file: rawFile, ...rest } = file;
+  const {
+    file: rawFile,
+    result: _result,
+    pagePreviews: _pagePreviews,
+    ...rest
+  } = file;
   return { ...rest, _hadFile: Boolean(rawFile) };
 }
 

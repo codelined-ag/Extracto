@@ -16,6 +16,7 @@ import {
   seedUsedOllamaModels,
 } from "@/lib/ocr/job-seed";
 import { getOllamaCandidatesForOcr } from "@/lib/ocr/ollama-dispatch";
+import { extractAnchorsForPages } from "@/lib/ocr/pdf-anchoring-helper";
 import { runOcrPages, type OrchestratorState } from "@/lib/ocr/pipeline-page-loop";
 import {
   formatPageScopedText,
@@ -60,6 +61,7 @@ export interface ProcessOcrJobInput {
   inputPreviews: string[];
   pageNumbers?: number[];
   pageAnchors?: import("@/lib/ocr/pdf-anchoring").AnchorPage[];
+  sourcePdf?: string;
   prompt: string;
   initialPageOutputs?: ProcessedPageOutput[];
   startIndex?: number;
@@ -242,6 +244,12 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       await warmupOllamaModel(getOllamaCandidatesForOcr(input.settings.apiEndpoint), input.ocrModel);
     }
 
+    const pageAnchors = input.pageAnchors ?? await extractAnchorsForPages(
+      input.sourcePdf,
+      input.pageNumbers,
+      input.inputPreviews.length,
+    );
+
     const loop = await runOcrPages(state, {
       jobId: input.jobId,
       provider: input.provider,
@@ -250,7 +258,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       prompt: input.prompt,
       inputPreviews: input.inputPreviews,
       pageNumbers: input.pageNumbers,
-      pageAnchors: input.pageAnchors,
+      pageAnchors,
       preferTextLayer: input.settingsPayload.preferTextLayer,
       documentPresetExpectsJson:
         input.settingsPayload.documentPreset === "invoice" ||

@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 
 import { handleApiError } from "@/lib/api-error";
 import { createUser, findUserByEmail, toSafeUser } from "@/lib/auth/credentials";
-import { consumeRateLimit } from "@/lib/rate-limit";
+import { consumeSharedRateLimit } from "@/lib/rate-limit";
 import { getClientIpAddress, isTrustedMutationRequest } from "@/lib/request-security";
 import {
   createSessionToken,
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     const clientIp = getClientIpAddress(request);
-    const ipLimit = consumeRateLimit({
+    const ipLimit = await consumeSharedRateLimit({
       key: `auth:signup:ip:${clientIp}`,
       max: SIGNUP_IP_LIMIT_MAX,
       windowMs: SIGNUP_WINDOW_MS,
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     const password = typeof body.password === "string" ? body.password : "";
     const name = typeof body.name === "string" ? body.name : "";
 
-    const emailLimit = consumeRateLimit({
+    const emailLimit = await consumeSharedRateLimit({
       key: `auth:signup:email:${email || "unknown"}`,
       max: SIGNUP_EMAIL_LIMIT_MAX,
       windowMs: SIGNUP_WINDOW_MS,

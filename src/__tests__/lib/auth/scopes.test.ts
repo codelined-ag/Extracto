@@ -6,6 +6,7 @@ import {
   serializeScopeList,
   normalizeRequestedScopes,
   scopeListGrants,
+  ScopeValidationError,
 } from "@/lib/auth/scopes";
 
 describe("parseScopeList", () => {
@@ -95,26 +96,28 @@ describe("normalizeRequestedScopes", () => {
     expect(result).toEqual(["ocr:submit", "ocr:read"]);
   });
 
-  it("filters out invalid/unknown scopes", () => {
-    const result = normalizeRequestedScopes(["ocr:submit", "not:a:scope", "invalid"]);
-    expect(result).toEqual(["ocr:submit"]);
+  it("rejects invalid/unknown scopes", () => {
+    expect(() => normalizeRequestedScopes(["ocr:submit", "not:a:scope", "invalid"])).toThrow(ScopeValidationError);
   });
 
-  it("returns ALL_SCOPES for empty array input", () => {
-    expect(normalizeRequestedScopes([])).toEqual([...ALL_SCOPES]);
+  it("defaults to ALL_SCOPES only when scopes are omitted", () => {
+    expect(normalizeRequestedScopes(undefined)).toEqual([...ALL_SCOPES]);
   });
 
-  it("returns ALL_SCOPES for empty JSON string array", () => {
-    expect(normalizeRequestedScopes("[]")).toEqual([...ALL_SCOPES]);
+  it("rejects empty array input", () => {
+    expect(() => normalizeRequestedScopes([])).toThrow(ScopeValidationError);
   });
 
-  it("returns ALL_SCOPES when all entries are invalid", () => {
-    expect(normalizeRequestedScopes(["bogus", "not-real"])).toEqual([...ALL_SCOPES]);
+  it("rejects empty JSON string array", () => {
+    expect(() => normalizeRequestedScopes("[]")).toThrow(ScopeValidationError);
   });
 
-  it("returns only valid scopes from mixed valid+invalid input", () => {
-    const result = normalizeRequestedScopes(["ocr:submit", "bogus", "settings:read"]);
-    expect(result).toEqual(["ocr:submit", "settings:read"]);
+  it("rejects all-invalid input", () => {
+    expect(() => normalizeRequestedScopes(["bogus", "not-real"])).toThrow(ScopeValidationError);
+  });
+
+  it("rejects mixed valid+invalid input", () => {
+    expect(() => normalizeRequestedScopes(["ocr:submit", "bogus", "settings:read"])).toThrow(ScopeValidationError);
   });
 
   it("accepts a JSON string array as input", () => {
@@ -132,9 +135,8 @@ describe("normalizeRequestedScopes", () => {
     expect(result).toEqual(["ocr:submit", "ocr:read"]);
   });
 
-  it("skips blank/whitespace-only entries", () => {
-    const result = normalizeRequestedScopes(["ocr:submit", "   ", ""]);
-    expect(result).toEqual(["ocr:submit"]);
+  it("rejects blank/whitespace-only entries", () => {
+    expect(() => normalizeRequestedScopes(["ocr:submit", "   ", ""])).toThrow(ScopeValidationError);
   });
 });
 

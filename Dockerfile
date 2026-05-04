@@ -1,18 +1,27 @@
-FROM oven/bun:1 AS deps
+ARG BUN_IMAGE=oven/bun:1.3.5@sha256:e90cdbaf9ccdb3d4bd693aa335c3310a6004286a880f62f79b18f9b1312a8ec3
+
+FROM ${BUN_IMAGE} AS deps
 WORKDIR /app
 
 COPY package.json bun.lock prisma ./
 RUN bun install --frozen-lockfile
 RUN bun run db:generate
 
-FROM oven/bun:1 AS builder
+FROM ${BUN_IMAGE} AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json bun.lock prisma ./
 COPY . .
 RUN bun run build
 
-FROM oven/bun:1 AS runtime
+FROM ${BUN_IMAGE} AS runtime-deps
+WORKDIR /app
+
+COPY package.json bun.lock prisma ./
+RUN bun install --frozen-lockfile --production
+RUN bun run db:generate
+
+FROM ${BUN_IMAGE} AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -20,7 +29,7 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV DATABASE_URL=file:/app/data/custom.db
 
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=runtime-deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public

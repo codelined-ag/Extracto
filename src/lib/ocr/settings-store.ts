@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { type ApiProviderSettings, type ClientApiSettings, type ProviderKind, normalizeProvider } from "@/lib/api-types";
@@ -89,6 +89,8 @@ function getDefaultApiSettings(): ApiProviderSettings {
 
 function getSettingsDir(): string { return path.join(getDataRoot(), "api-settings"); }
 const settingsCache = new Map<string, ApiProviderSettings>();
+const PRIVATE_DIR_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
 
 const normalizeSettings = (settings: Partial<ApiProviderSettings>): ApiProviderSettings => {
   const provider = normalizeProvider(settings.provider);
@@ -181,11 +183,17 @@ export async function saveApiSettings(
   });
   const settingsPath = getSettingsPath(safeUserId);
   await ensureSettingsDirectory();
-  await writeFile(settingsPath, JSON.stringify(normalized, null, 2), "utf8");
+  await writeFile(settingsPath, JSON.stringify(normalized, null, 2), {
+    encoding: "utf8",
+    mode: PRIVATE_FILE_MODE,
+  });
+  await chmod(settingsPath, PRIVATE_FILE_MODE);
   settingsCache.set(safeUserId, normalized);
   return { ...normalized };
 }
 
 async function ensureSettingsDirectory() {
-  await mkdir(getSettingsDir(), { recursive: true });
+  const dir = getSettingsDir();
+  await mkdir(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
+  await chmod(dir, PRIVATE_DIR_MODE);
 }

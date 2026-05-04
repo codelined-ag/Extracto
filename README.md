@@ -73,18 +73,18 @@ You need Docker. That's it.
 ### One-liner (Linux / macOS)
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/codelined-ag/Extracto/v0.5.4/scripts/install.sh | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/codelined-ag/Extracto/v0.5.5/scripts/install.sh | bash
 ```
 
 ### One-liner (Windows)
 
 ```powershell
-iwr -UseBasicParsing https://raw.githubusercontent.com/codelined-ag/Extracto/v0.5.4/scripts/install.ps1 | iex
+iwr -UseBasicParsing https://raw.githubusercontent.com/codelined-ag/Extracto/v0.5.5/scripts/install.ps1 | iex
 ```
 
-The installer clones the repo at the pinned tag to `~/.local/share/extracto` (or `%LOCALAPPDATA%\Extracto`), sets up Docker + Ollama if missing, drops an `extracto` launcher on PATH, and starts the stack. Open <http://localhost:3000> and sign up.
+The installer clones the repo at the pinned tag to `~/.local/share/extracto` (or `%LOCALAPPDATA%\Extracto`), sets up Docker + Ollama if missing, writes localhost-safe overrides to `.extracto.env`, drops an `extracto` launcher on PATH, and starts the stack. Open <http://localhost:3000> and sign up.
 
-> The installer wraps `install-extracto.sh`, which on a fresh machine runs vendor scripts from `https://get.docker.com` and `https://ollama.com/install.sh` as **root** to provision Docker + Ollama. Skip those steps with `EXTRACTO_INSTALL_DOCKER=0 EXTRACTO_INSTALL_OLLAMA=0` if Docker is already installed and you don't want Ollama. Set `EXTRACTO_REPO_REF=main` to track the bleeding edge instead of the pinned tag.
+> The installer wraps `install-extracto.sh`, which on a fresh machine runs vendor scripts from `https://get.docker.com` and `https://ollama.com/install.sh` as **root** to provision Docker + Ollama. Skip Docker provisioning with `EXTRACTO_INSTALL_DOCKER=0` when Docker + Compose are already installed; skip Ollama install/startup with `EXTRACTO_INSTALL_OLLAMA=0` if you use hosted models or manage Ollama yourself. Set `EXTRACTO_REPO_REF=main` to track the bleeding edge instead of the pinned tag.
 
 ### S3-compatible storage (any provider)
 
@@ -106,10 +106,10 @@ extracto on
 
 **Single `docker run` (no launcher):**
 ```bash
-docker run -d --name extracto -p 3000:3000 -v extracto-data:/app/data -e AUTH_SECRET="$(openssl rand -hex 32)" ghcr.io/codelined-ag/extracto:latest
+docker run -d --name extracto -p 3000:3000 -v extracto-data:/app/data -e AUTH_SECRET="$(openssl rand -hex 32)" -e COOKIE_SECURE=false -e ALLOW_SIGNUP=1 ghcr.io/codelined-ag/extracto:v0.5.5
 ```
 
-Multi-arch (`linux/amd64` + `linux/arm64`); pin a release with `:v0.5.4` instead of `:latest`.
+Multi-arch (`linux/amd64` + `linux/arm64`); pin a release tag instead of `:latest`. The checked-in compose defaults are production-biased (`COOKIE_SECURE=true`, bridge networking, signup disabled); the installer writes `.extracto.env` overrides for localhost onboarding.
 
 </details>
 

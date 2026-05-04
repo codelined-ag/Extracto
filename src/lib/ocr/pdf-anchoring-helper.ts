@@ -8,21 +8,18 @@ export async function extractAnchorsForPages(
   if (!sourcePdf) return undefined;
   const isPdfDataUrl = /^data:application\/(?:x-)?pdf/u.test(sourcePdf);
   if (!isPdfDataUrl) return undefined;
-  const requestedPages = pageNumbers && pageNumbers.length === expectedLength ? pageNumbers : undefined;
+  if (!pageNumbers || pageNumbers.length !== expectedLength) return undefined;
   let result;
   try {
-    result = await extractPdfAnchoring(sourcePdf, { pageNumbers: requestedPages });
+    result = await extractPdfAnchoring(sourcePdf, { pageNumbers });
   } catch (error) {
     console.warn(`extractPdfAnchoring failed: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
   }
   if (!result) return undefined;
 
-  const indices = pageNumbers && pageNumbers.length === expectedLength
-    ? pageNumbers
-    : Array.from({ length: expectedLength }, (_, i) => i + 1);
   const aligned: AnchorPage[] = [];
-  for (const pageNumber of indices) {
+  for (const pageNumber of pageNumbers) {
     const match = result.pages.find((p) => p.pageNumber === pageNumber);
     if (!match) {
       aligned.push({

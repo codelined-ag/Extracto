@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // ---------------------------------------------------------------------------
 
 vi.mock("node:fs/promises", () => ({
+  chmod: vi.fn(),
   readFile: vi.fn(),
   writeFile: vi.fn(),
   mkdir: vi.fn(),
@@ -33,7 +34,7 @@ vi.mock("@/lib/ocr/host-normalization", async (importOriginal) => {
 // Imports — after mocks are registered
 // ---------------------------------------------------------------------------
 
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { chmod, readFile, writeFile, mkdir } from "node:fs/promises";
 import {
   normalizeMistralEndpointForStorage,
   getApiSettings,
@@ -45,6 +46,7 @@ import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 const mockedReadFile = readFile as ReturnType<typeof vi.fn>;
 const mockedWriteFile = writeFile as ReturnType<typeof vi.fn>;
 const mockedMkdir = mkdir as ReturnType<typeof vi.fn>;
+const mockedChmod = chmod as ReturnType<typeof vi.fn>;
 const _mockedEnforcePolicy = enforceProviderEndpointPolicy as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------
@@ -203,6 +205,7 @@ describe("saveApiSettings", () => {
     vi.clearAllMocks();
     mockedMkdir.mockResolvedValue(undefined);
     mockedWriteFile.mockResolvedValue(undefined);
+    mockedChmod.mockResolvedValue(undefined);
   });
 
   it("saves to disk and returns normalized settings", async () => {
@@ -293,7 +296,29 @@ describe("saveApiSettings", () => {
   it("ensures the settings directory exists (mkdir recursive) on every save", async () => {
     mockedReadFile.mockRejectedValueOnce(makeEnoentError());
     await saveApiSettings("user-mkdir-test-1", { provider: "ollama" });
-    expect(mockedMkdir).toHaveBeenCalledWith(expect.any(String), { recursive: true });
+    expect(mockedMkdir).toHaveBeenCalledWith(expect.any(String), { recursive: true, mode: 0o700 });
+  });
+
+  it("writes stored credentials with private file and directory modes", async () => {
+    mockedReadFile.mockRejectedValueOnce(makeEnoentError());
+
+    await saveApiSettings("user-private-mode-test-1", {
+      provider: "mistral",
+      apiEndpoint: "https://api.mistral.ai/v1/ocr",
+      apiKey: "sk-secret",
+      replaceApiKey: true,
+    });
+
+    expect(mockedWriteFile).toHaveBeenCalledWith(
+      expect.stringMatching(/api-settings[/\\]user-private-mode-test-1\.json$/),
+      expect.stringContaining("sk-secret"),
+      { encoding: "utf8", mode: 0o600 },
+    );
+    expect(mockedChmod).toHaveBeenCalledWith(expect.stringMatching(/api-settings$/), 0o700);
+    expect(mockedChmod).toHaveBeenCalledWith(
+      expect.stringMatching(/api-settings[/\\]user-private-mode-test-1\.json$/),
+      0o600,
+    );
   });
 });
 

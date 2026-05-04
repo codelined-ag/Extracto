@@ -1,4 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import type { lookup as dnsLookup } from "node:dns";
 
 import { db } from "@/lib/db";
 import { parseAllowlist, resolveAndCheckExternalUrl } from "@/lib/url-safety";
@@ -15,6 +18,7 @@ export const ALL_WEBHOOK_EVENTS: readonly WebhookEvent[] = SUPPORTED_EVENTS;
 
 const WEBHOOK_TIMEOUT_MS = 5_000;
 const WEBHOOK_USER_AGENT = "Extracto-Webhook/1.0";
+const WEBHOOK_MAX_REDIRECTS = 5;
 export const WEBHOOK_SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
 
 export function isSupportedWebhookEvent(value: string): value is WebhookEvent {
@@ -45,6 +49,141 @@ function signPayload(secret: string, body: string, timestamp: number): string {
   return createHmac("sha256", secret)
     .update(`${timestamp}.${body}`, "utf8")
     .digest("hex");
+}
+
+function isRedirectStatus(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+function resolveRedirectLocation(currentUrl: string, location: string): string {
+  try {
+    return new URL(location, currentUrl).toString();
+  } catch {
+    throw new Error(`Webhook redirect from ${currentUrl} returned an invalid Location header`);
+  }
+}
+
+function abortError(): Error {
+  const error = new Error("The operation was aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function headersToObject(headers: HeadersInit | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!headers) return out;
+  new Headers(headers).forEach((value, key) => {
+    out[key] = value;
+  });
+  return out;
+}
+
+function responseHeaders(rawHeaders: import("node:http").IncomingHttpHeaders): Headers {
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(rawHeaders)) {
+    if (Array.isArray(value)) {
+      for (const item of value) headers.append(key, item);
+    } else if (typeof value === "string") {
+      headers.set(key, value);
+    }
+  }
+  return headers;
+}
+
+async function fetchWithBoundLookup(
+  rawUrl: string,
+  init: RequestInit,
+  lookup: typeof dnsLookup,
+): Promise<Response> {
+  const url = new URL(rawUrl);
+  const requestImpl = url.protocol === "https:" ? httpsRequest : httpRequest;
+  const signal = init.signal;
+  if (signal?.aborted) {
+    throw abortError();
+  }
+
+  return await new Promise<Response>((resolve, reject) => {
+    let settled = false;
+    const finishError = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      if (signal) signal.removeEventListener("abort", onAbort);
+      reject(error);
+    };
+    const finishResponse = (response: Response) => {
+      if (settled) return;
+      settled = true;
+      if (signal) signal.removeEventListener("abort", onAbort);
+      resolve(response);
+    };
+    const onAbort = () => {
+      req.destroy(abortError());
+    };
+
+    const req = requestImpl(url, {
+      method: init.method ?? "GET",
+      headers: headersToObject(init.headers),
+      lookup,
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      res.on("error", finishError);
+      res.on("end", () => {
+        finishResponse(new Response(Buffer.concat(chunks), {
+          status: res.statusCode ?? 500,
+          statusText: res.statusMessage,
+          headers: responseHeaders(res.headers),
+        }));
+      });
+    });
+
+    req.on("error", finishError);
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
+    if (typeof init.body === "string" || Buffer.isBuffer(init.body)) {
+      req.write(init.body);
+    } else if (init.body != null) {
+      req.write(String(init.body));
+    }
+    req.end();
+  });
+}
+
+async function fetchWebhookWithValidatedRedirects(
+  initialUrl: string,
+  init: RequestInit,
+  allowlist: string[],
+): Promise<Response> {
+  let currentUrl = initialUrl;
+
+  for (let redirects = 0; redirects <= WEBHOOK_MAX_REDIRECTS; redirects += 1) {
+    const safety = await resolveAndCheckExternalUrl(currentUrl, allowlist);
+    if (!safety.ok) {
+      throw new Error(`Refusing delivery to ${currentUrl}: ${safety.reason}`);
+    }
+
+    const response = safety.lookup
+      ? await fetchWithBoundLookup(currentUrl, init, safety.lookup)
+      : await fetch(currentUrl, {
+          ...init,
+          redirect: "manual",
+        });
+    if (!isRedirectStatus(response.status)) {
+      return response;
+    }
+
+    const location = response.headers.get("location");
+    if (!location) {
+      return response;
+    }
+    if (redirects === WEBHOOK_MAX_REDIRECTS) {
+      throw new Error(`Webhook redirect limit exceeded for ${initialUrl}`);
+    }
+    currentUrl = resolveRedirectLocation(currentUrl, location);
+  }
+
+  throw new Error(`Webhook redirect limit exceeded for ${initialUrl}`);
 }
 
 export function verifyWebhookSignature(
@@ -154,11 +293,7 @@ export async function dispatchJobWebhooks(
       let ok = false;
       let errorMessage: string | null = null;
       try {
-        const safety = await resolveAndCheckExternalUrl(webhook.url, parseAllowlist(process.env.WEBHOOK_ALLOWED_HOSTS));
-        if (!safety.ok) {
-          throw new Error(`Refusing delivery to ${webhook.url}: ${safety.reason}`);
-        }
-        const response = await fetch(webhook.url, {
+        const response = await fetchWebhookWithValidatedRedirects(webhook.url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -168,7 +303,7 @@ export async function dispatchJobWebhooks(
           },
           body,
           signal: controller.signal,
-        });
+        }, parseAllowlist(process.env.WEBHOOK_ALLOWED_HOSTS));
         statusCode = response.status;
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -239,9 +374,7 @@ export async function dispatchUserWebhooks(
       let ok = false;
       let errorMessage: string | null = null;
       try {
-        const safety = await resolveAndCheckExternalUrl(webhook.url, parseAllowlist(process.env.WEBHOOK_ALLOWED_HOSTS));
-        if (!safety.ok) throw new Error(`Refusing delivery to ${webhook.url}: ${safety.reason}`);
-        const response = await fetch(webhook.url, {
+        const response = await fetchWebhookWithValidatedRedirects(webhook.url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -251,7 +384,7 @@ export async function dispatchUserWebhooks(
           },
           body,
           signal: controller.signal,
-        });
+        }, parseAllowlist(process.env.WEBHOOK_ALLOWED_HOSTS));
         statusCode = response.status;
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         ok = true;

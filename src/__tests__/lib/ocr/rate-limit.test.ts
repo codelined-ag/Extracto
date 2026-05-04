@@ -30,43 +30,43 @@ describe("enforceOcrSubmitRateLimit", () => {
     // of the random apiKeyId / unique ip
   });
 
-  it("returns null while within the per-user-IP limit", () => {
+  it("returns null while within the per-user-IP limit", async () => {
     const auth = authSession({ userId: `u-${Math.random()}` });
     for (let i = 0; i < OCR_RATE_LIMIT_MAX; i++) {
-      expect(enforceOcrSubmitRateLimit(auth, "1.2.3.4")).toBeNull();
+      await expect(enforceOcrSubmitRateLimit(auth, "1.2.3.4")).resolves.toBeNull();
     }
   });
 
-  it("returns 429 once the per-user-IP limit is exhausted", () => {
+  it("returns 429 once the per-user-IP limit is exhausted", async () => {
     const auth = authSession({ userId: `u-${Math.random()}` });
-    for (let i = 0; i < OCR_RATE_LIMIT_MAX; i++) enforceOcrSubmitRateLimit(auth, "1.2.3.5");
-    const res = enforceOcrSubmitRateLimit(auth, "1.2.3.5");
+    for (let i = 0; i < OCR_RATE_LIMIT_MAX; i++) await enforceOcrSubmitRateLimit(auth, "1.2.3.5");
+    const res = await enforceOcrSubmitRateLimit(auth, "1.2.3.5");
     expect(res).not.toBeNull();
     expect(res!.status).toBe(429);
     expect(res!.headers.get("Retry-After")).toMatch(/^\d+$/);
   });
 
-  it("uses per-key bucket when method=api-key", () => {
+  it("uses per-key bucket when method=api-key", async () => {
     const auth = authBearer();
     for (let i = 0; i < OCR_RATE_LIMIT_MAX; i++) {
-      expect(enforceOcrSubmitRateLimit(auth, "ignored")).toBeNull();
+      await expect(enforceOcrSubmitRateLimit(auth, "ignored")).resolves.toBeNull();
     }
-    expect(enforceOcrSubmitRateLimit(auth, "ignored")!.status).toBe(429);
+    expect((await enforceOcrSubmitRateLimit(auth, "ignored"))!.status).toBe(429);
   });
 
-  it("honors per-key rateLimitPerMinute override", () => {
+  it("honors per-key rateLimitPerMinute override", async () => {
     const auth = authBearer({ rateLimitPerMinute: 2 });
-    expect(enforceOcrSubmitRateLimit(auth, "x")).toBeNull();
-    expect(enforceOcrSubmitRateLimit(auth, "x")).toBeNull();
-    expect(enforceOcrSubmitRateLimit(auth, "x")!.status).toBe(429);
+    await expect(enforceOcrSubmitRateLimit(auth, "x")).resolves.toBeNull();
+    await expect(enforceOcrSubmitRateLimit(auth, "x")).resolves.toBeNull();
+    expect((await enforceOcrSubmitRateLimit(auth, "x"))!.status).toBe(429);
   });
 
-  it("ignores rateLimitPerMinute when it is null/zero/negative", () => {
+  it("ignores rateLimitPerMinute when it is null/zero/negative", async () => {
     const auth = authBearer({ rateLimitPerMinute: 0 });
     for (let i = 0; i < OCR_RATE_LIMIT_MAX; i++) {
-      expect(enforceOcrSubmitRateLimit(auth, "x")).toBeNull();
+      await expect(enforceOcrSubmitRateLimit(auth, "x")).resolves.toBeNull();
     }
-    expect(enforceOcrSubmitRateLimit(auth, "x")!.status).toBe(429);
+    expect((await enforceOcrSubmitRateLimit(auth, "x"))!.status).toBe(429);
   });
 
   it("constants expose the default window + max", () => {

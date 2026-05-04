@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { isTrustedMutationRequest, getClientIpAddress } from "@/lib/request-security";
 
@@ -8,6 +8,10 @@ function makeRequest(url: string, headers: Record<string, string> = {}): NextReq
 
 describe("isTrustedMutationRequest", () => {
   const base = "http://localhost:3000/api/test";
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   it("trusts a same-origin request with matching Origin header", () => {
     const req = makeRequest(base, { origin: "http://localhost:3000" });
@@ -56,7 +60,17 @@ describe("isTrustedMutationRequest", () => {
     expect(isTrustedMutationRequest(req)).toBe(true);
   });
 
-  it("trusts x-forwarded-host matching the Origin header", () => {
+  it("ignores x-forwarded-host by default", () => {
+    const req = makeRequest(base, {
+      origin: "http://app.example.com",
+      "x-forwarded-host": "app.example.com",
+      "x-forwarded-proto": "http",
+    });
+    expect(isTrustedMutationRequest(req)).toBe(false);
+  });
+
+  it("trusts x-forwarded-host only when trusted proxy headers are enabled", () => {
+    vi.stubEnv("TRUSTED_PROXY_HEADERS", "1");
     const req = makeRequest(base, {
       origin: "http://app.example.com",
       "x-forwarded-host": "app.example.com",
@@ -77,18 +91,22 @@ describe("isTrustedMutationRequest", () => {
 });
 
 describe("getClientIpAddress", () => {
-  it("returns the first IP from x-forwarded-for", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("ignores x-forwarded-for by default", () => {
     const req = makeRequest("http://localhost:3000/", {
       "x-forwarded-for": "1.2.3.4, 5.6.7.8",
     });
-    expect(getClientIpAddress(req)).toBe("1.2.3.4");
+    expect(getClientIpAddress(req)).toBe("unknown");
   });
 
-  it("returns x-real-ip when x-forwarded-for is absent", () => {
+  it("ignores x-real-ip by default", () => {
     const req = makeRequest("http://localhost:3000/", {
       "x-real-ip": "9.9.9.9",
     });
-    expect(getClientIpAddress(req)).toBe("9.9.9.9");
+    expect(getClientIpAddress(req)).toBe("unknown");
   });
 
   it("returns 'unknown' when no IP headers present", () => {
@@ -96,7 +114,16 @@ describe("getClientIpAddress", () => {
     expect(getClientIpAddress(req)).toBe("unknown");
   });
 
-  it("trims whitespace from x-real-ip", () => {
+  it("uses x-forwarded-for when trusted proxy headers are explicitly enabled", () => {
+    vi.stubEnv("TRUSTED_PROXY_HEADERS", "1");
+    const req = makeRequest("http://localhost:3000/", {
+      "x-forwarded-for": "1.2.3.4, 5.6.7.8",
+    });
+    expect(getClientIpAddress(req)).toBe("1.2.3.4");
+  });
+
+  it("trims x-real-ip when trusted proxy headers are explicitly enabled", () => {
+    vi.stubEnv("TRUSTED_PROXY_HEADERS", "1");
     const req = makeRequest("http://localhost:3000/", {
       "x-real-ip": "  10.0.0.1  ",
     });

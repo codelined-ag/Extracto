@@ -241,6 +241,19 @@ export function ApiKeysSection({ t }: ApiKeysSectionProps) {
       });
       return;
     }
+    if (selectedScopes.size === 0) {
+      toast({
+        title: t(
+          "Seleziona almeno un permesso",
+          "Select at least one scope",
+          "Sélectionnez au moins une permission",
+          "Selecciona al menos un permiso",
+          "Mindestens eine Berechtigung auswählen",
+        ),
+        variant: "destructive",
+      });
+      return;
+    }
     setIsCreating(true);
     try {
       const body: Record<string, unknown> = {
@@ -491,11 +504,11 @@ export function ApiKeysSection({ t }: ApiKeysSectionProps) {
                         "Nur die ausgewählten Berechtigungen werden gewährt.",
                       )
                     : t(
-                        "Selezione vuota: il backend assegna ogni permesso.",
-                        "Empty selection: the backend grants every scope.",
-                        "Sélection vide : le backend accorde toutes les permissions.",
-                        "Selección vacía: el backend otorga todos los permisos.",
-                        "Leere Auswahl: das Backend vergibt alle Berechtigungen.",
+                        "Seleziona almeno un permesso.",
+                        "Select at least one scope.",
+                        "Sélectionnez au moins une permission.",
+                        "Selecciona al menos un permiso.",
+                        "Mindestens eine Berechtigung auswählen.",
                       )}
               </p>
             </div>
@@ -520,7 +533,7 @@ export function ApiKeysSection({ t }: ApiKeysSectionProps) {
                 )}
               />
             </div>
-            <Button type="submit" disabled={isCreating}>
+            <Button type="submit" disabled={isCreating || selectedScopes.size === 0}>
               {isCreating ? <LoaderCircleIcon size={14} className="animate-spin mr-1.5" /> : null}
               {t("Crea chiave", "Create key", "Créer la clé", "Crear clave", "Schlüssel erstellen")}
             </Button>

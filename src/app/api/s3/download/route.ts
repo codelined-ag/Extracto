@@ -9,7 +9,7 @@ import { getClientIpAddress } from "@/lib/request-security";
 const MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024;
 
 export const GET = withAuth("s3:read", async (request: NextRequest, { auth }) => {
-  const limited = enforceS3RateLimit(auth, getClientIpAddress(request), "read");
+  const limited = await enforceS3RateLimit(auth, getClientIpAddress(request), "read");
   if (limited) return limited;
 
   const { searchParams } = new URL(request.url);

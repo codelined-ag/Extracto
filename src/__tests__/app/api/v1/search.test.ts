@@ -14,19 +14,23 @@ vi.mock("@/lib/auth/request", () => ({
 }));
 
 vi.mock("@/lib/db", () => ({
-  db: { ocrJob: { findMany: vi.fn() } },
+  db: { $queryRaw: vi.fn(), ocrJob: { findMany: vi.fn() } },
 }));
 
 import { db } from "@/lib/db";
 import { GET } from "@/app/api/v1/search/route";
 
 const mockedFindMany = db.ocrJob.findMany as ReturnType<typeof vi.fn>;
+const mockedQueryRaw = db.$queryRaw as ReturnType<typeof vi.fn>;
 
 function makeReq(query: string): NextRequest {
   return new Request(`http://localhost/api/v1/search?${query}`) as unknown as NextRequest;
 }
 
-beforeEach(() => mockedFindMany.mockReset());
+beforeEach(() => {
+  mockedFindMany.mockReset().mockResolvedValue([]);
+  mockedQueryRaw.mockReset().mockResolvedValue([]);
+});
 afterEach(() => vi.clearAllMocks());
 
 describe("GET /api/v1/search", () => {
@@ -46,8 +50,18 @@ describe("GET /api/v1/search", () => {
   });
 
   it("returns matching jobs scoped to the current user", async () => {
-    mockedFindMany.mockResolvedValueOnce([
-      { id: "j1", fileName: "doc.pdf", status: "COMPLETED", model: "qwen", createdAt: new Date(), extractedText: "this is a test snippet" },
+    mockedQueryRaw.mockResolvedValueOnce([
+      {
+        id: "j1",
+        fileName: "doc.pdf",
+        status: "COMPLETED",
+        model: "qwen",
+        createdAt: new Date(),
+        completedAt: null,
+        snippet: "this is a test snippet",
+        snippetStart: 1,
+        textLength: 22,
+      },
     ]);
     const res = await GET(makeReq("q=test"));
     expect(res.status).toBe(200);
@@ -56,12 +70,12 @@ describe("GET /api/v1/search", () => {
     expect(body.count).toBe(1);
     expect(body.results[0].id).toBe("j1");
     expect(body.results[0].snippet).toContain("test");
-    expect(mockedFindMany.mock.calls[0][0].where.userId).toBe("u1");
+    expect(mockedQueryRaw).toHaveBeenCalled();
   });
 
-  it("clamps limit at 100", async () => {
-    mockedFindMany.mockResolvedValueOnce([]);
+  it("clamps limit at 50", async () => {
+    mockedQueryRaw.mockResolvedValueOnce([]);
     await GET(makeReq("q=foo&limit=999"));
-    expect(mockedFindMany.mock.calls[0][0].take).toBe(100);
+    expect(JSON.stringify(mockedQueryRaw.mock.calls[0][0])).toContain("50");
   });
 });

@@ -14,6 +14,7 @@ import { getAuthCookieName } from "@/lib/auth/token";
 import { verifyActiveSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { isTrustedMutationRequest } from "@/lib/request-security";
+import { consumeSharedRateLimit } from "@/lib/rate-limit";
 
 export type AuthMethod = "session" | "api-key";
 
@@ -24,6 +25,10 @@ export interface AuthContext {
   scopes: ScopeEntry[];
   rateLimitPerMinute: number | null;
 }
+
+const API_KEY_RATE_LIMIT_WINDOW_MS = 60_000;
+const STREAM_RATE_LIMIT_WINDOW_MS = 60_000;
+const STREAM_RATE_LIMIT_MAX = 30;
 
 interface ApiKeyVerifyResult {
   userId: string;
@@ -149,6 +154,41 @@ export function requireScope(auth: AuthContext, scope: Scope): NextResponse | nu
   );
 }
 
+export async function enforceApiKeyRequestRateLimit(auth: AuthContext): Promise<NextResponse | null> {
+  if (auth.method !== "api-key" || !auth.apiKeyId || !auth.rateLimitPerMinute || auth.rateLimitPerMinute <= 0) {
+    return null;
+  }
+  const rateLimit = await consumeSharedRateLimit({
+    key: `api:key:${auth.apiKeyId}`,
+    max: auth.rateLimitPerMinute,
+    windowMs: API_KEY_RATE_LIMIT_WINDOW_MS,
+  });
+  if (rateLimit.allowed) return null;
+  return NextResponse.json(
+    { error: "API key rate limit exceeded. Retry shortly." },
+    { status: 429, headers: { "Retry-After": `${rateLimit.retryAfterSeconds}` } },
+  );
+}
+
+export async function enforceStreamConnectionRateLimit(
+  auth: AuthContext,
+  streamName: string,
+): Promise<NextResponse | null> {
+  const principal = auth.method === "api-key" && auth.apiKeyId
+    ? `key:${auth.apiKeyId}`
+    : `user:${auth.userId}`;
+  const rateLimit = await consumeSharedRateLimit({
+    key: `stream:${streamName}:${principal}`,
+    max: STREAM_RATE_LIMIT_MAX,
+    windowMs: STREAM_RATE_LIMIT_WINDOW_MS,
+  });
+  if (rateLimit.allowed) return null;
+  return NextResponse.json(
+    { error: "Too many stream connections. Retry shortly." },
+    { status: 429, headers: { "Retry-After": `${rateLimit.retryAfterSeconds}` } },
+  );
+}
+
 export type MutationAuthFailure =
   | { ok: false; status: 401; error: "Unauthorized" }
   | { ok: false; status: 403; error: "Invalid request origin" };
@@ -187,6 +227,11 @@ export type AuthenticatedHandler<P = unknown> = (
   ctx: RouteHandlerContext<P> & { auth: AuthContext },
 ) => Promise<Response | NextResponse> | Response | NextResponse;
 
+type WrappedRouteHandler<P = unknown> = {
+  (request: NextRequest): Promise<Response>;
+  (request: NextRequest, ctx: RouteHandlerContext<P>): Promise<Response>;
+};
+
 /**
  * Wrap a GET-style handler with auth + scope check + handleApiError.
  * Uses authenticateRequest (cookie or bearer); does NOT enforce the
@@ -196,23 +241,28 @@ export type AuthenticatedHandler<P = unknown> = (
 export function withAuth<P = unknown>(
   scope: Scope,
   handler: AuthenticatedHandler<P>,
-) {
-  return async (
+): WrappedRouteHandler<P> {
+  const wrapped = async (
     request: NextRequest,
-    ctx: RouteHandlerContext<P> = { params: Promise.resolve({} as P) },
+    ctx?: RouteHandlerContext<P>,
   ): Promise<Response> => {
     try {
+      const routeCtx = ctx ?? { params: Promise.resolve({} as P) };
       const auth = await authenticateRequest(request);
       if (!auth) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
       const scopeError = requireScope(auth, scope);
       if (scopeError) return scopeError;
-      return await handler(request, { ...ctx, auth });
+      const rateLimitError = await enforceApiKeyRequestRateLimit(auth);
+      if (rateLimitError) return rateLimitError;
+      return await handler(request, { ...routeCtx, auth });
     } catch (error) {
       return handleApiError(error);
     }
   };
+
+  return wrapped as WrappedRouteHandler<P>;
 }
 
 /**
@@ -222,23 +272,28 @@ export function withAuth<P = unknown>(
 export function withMutationAuth<P = unknown>(
   scope: Scope,
   handler: AuthenticatedHandler<P>,
-) {
-  return async (
+): WrappedRouteHandler<P> {
+  const wrapped = async (
     request: NextRequest,
-    ctx: RouteHandlerContext<P> = { params: Promise.resolve({} as P) },
+    ctx?: RouteHandlerContext<P>,
   ): Promise<Response> => {
     try {
+      const routeCtx = ctx ?? { params: Promise.resolve({} as P) };
       const result = await authenticateMutation(request);
       if (!result.ok) {
         return NextResponse.json({ error: result.error }, { status: result.status });
       }
       const scopeError = requireScope(result.auth, scope);
       if (scopeError) return scopeError;
-      return await handler(request, { ...ctx, auth: result.auth });
+      const rateLimitError = await enforceApiKeyRequestRateLimit(result.auth);
+      if (rateLimitError) return rateLimitError;
+      return await handler(request, { ...routeCtx, auth: result.auth });
     } catch (error) {
       return handleApiError(error);
     }
   };
+
+  return wrapped as WrappedRouteHandler<P>;
 }
 
 /**
@@ -255,12 +310,13 @@ export function withSessionAuth<P = unknown>(
   methodKind: "read" | "mutation",
   resourceLabel: string,
   handler: AuthenticatedHandler<P>,
-) {
-  return async (
+): WrappedRouteHandler<P> {
+  const wrapped = async (
     request: NextRequest,
-    ctx: RouteHandlerContext<P> = { params: Promise.resolve({} as P) },
+    ctx?: RouteHandlerContext<P>,
   ): Promise<Response> => {
     try {
+      const routeCtx = ctx ?? { params: Promise.resolve({} as P) };
       let auth: AuthContext | null;
       if (methodKind === "mutation") {
         const result = await authenticateMutation(request);
@@ -283,9 +339,11 @@ export function withSessionAuth<P = unknown>(
         );
       }
 
-      return await handler(request, { ...ctx, auth });
+      return await handler(request, { ...routeCtx, auth });
     } catch (error) {
       return handleApiError(error);
     }
   };
+
+  return wrapped as WrappedRouteHandler<P>;
 }

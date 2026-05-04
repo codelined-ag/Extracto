@@ -39,6 +39,7 @@ import type {
   VectorStoreAdapter,
 } from "@/lib/kb/types";
 import { enforceProviderEndpointPolicy, enforceVectorStoreEndpointPolicy } from "@/lib/ocr/endpoint-policy";
+import { readResultText } from "@/lib/ocr/result-store";
 import {
   getDefaultOpenAICompatApiUrl,
   getDefaultOpenRouterApiUrl,
@@ -93,6 +94,7 @@ export const POST = withMutationAuth("kb:write", async (request: NextRequest, { 
       id: true,
       fileName: true,
       extractedText: true,
+      extractedTextLocation: true,
       model: true,
       completedAt: true,
       createdAt: true,
@@ -102,7 +104,8 @@ export const POST = withMutationAuth("kb:write", async (request: NextRequest, { 
   if (!job) {
     throw new ApiRouteError("Job not found", 404);
   }
-  if (!job.extractedText || !job.extractedText.trim()) {
+  const extractedText = await readResultText(job.extractedTextLocation, job.extractedText);
+  if (!extractedText || !extractedText.trim()) {
     throw new ApiRouteError("Job has no extracted text to export", 400);
   }
 
@@ -110,7 +113,7 @@ export const POST = withMutationAuth("kb:write", async (request: NextRequest, { 
   const result = await runKbExport({
     jobId: job.id,
     fileName: job.fileName,
-    extractedText: job.extractedText,
+    extractedText,
     extractedAt: (job.completedAt ?? job.createdAt).toISOString(),
     sourceModel: job.model ?? undefined,
     language,

@@ -4,10 +4,11 @@ import type { NextRequest } from "next/server";
 vi.mock("@/lib/auth/request", () => ({
   authenticateMutation: vi.fn(),
   authHasScope: vi.fn(),
+  enforceApiKeyRequestRateLimit: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@/lib/ocr/rate-limit", () => ({
-  enforceOcrSubmitRateLimit: vi.fn().mockReturnValue(null),
+  enforceOcrSubmitRateLimit: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@/lib/request-security", () => ({
@@ -28,6 +29,7 @@ vi.mock("@/lib/ocr/settings-store", () => ({
 
 vi.mock("@/lib/ocr/job-input-helpers", () => ({
   buildPrompt: vi.fn().mockReturnValue("PROMPT"),
+  normalizeOcrInputPreviews: vi.fn().mockImplementation((_pages, preview) => preview ? [preview] : []),
   sanitizePostProcessing: vi.fn().mockImplementation((v) => ({
     enabled: !!v,
     outputFormat: "markdown",
@@ -74,7 +76,7 @@ function makeRequest(body: unknown): NextRequest {
 beforeEach(() => {
   mockedAuth.mockReset().mockResolvedValue({ ok: true, auth: fakeAuth });
   mockedScope.mockReset().mockReturnValue(true);
-  mockedRateLimit.mockReset().mockReturnValue(null);
+  mockedRateLimit.mockReset().mockResolvedValue(null);
   mockedWait.mockReset();
   mockedSubmit.mockReset().mockResolvedValue({ jobId: "job-stub", pageCount: 1 });
 });
@@ -100,7 +102,7 @@ describe("POST /api/v1/openai/chat/completions", () => {
   });
 
   it("returns rate_limit_error when the rate limiter trips", async () => {
-    mockedRateLimit.mockReturnValueOnce(
+    mockedRateLimit.mockResolvedValueOnce(
       new Response(null, { status: 429 }),
     );
     const res = await POST(makeRequest({ model: "x", messages: [] }));

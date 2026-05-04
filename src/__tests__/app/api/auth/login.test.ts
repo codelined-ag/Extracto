@@ -14,7 +14,7 @@ vi.mock("@/lib/request-security", () => ({
 }));
 
 vi.mock("@/lib/rate-limit", () => ({
-  consumeRateLimit: vi.fn().mockReturnValue({ allowed: true }),
+  consumeSharedRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
 }));
 
 vi.mock("@/lib/auth/credentials", () => ({
@@ -32,13 +32,13 @@ vi.mock("@/lib/auth/token", () => ({
 }));
 
 import { findUserByEmail, verifyPassword } from "@/lib/auth/credentials";
-import { consumeRateLimit } from "@/lib/rate-limit";
+import { consumeSharedRateLimit } from "@/lib/rate-limit";
 import { isTrustedMutationRequest } from "@/lib/request-security";
 import { POST } from "@/app/api/auth/login/route";
 
 const mockedFind = findUserByEmail as ReturnType<typeof vi.fn>;
 const mockedVerify = verifyPassword as ReturnType<typeof vi.fn>;
-const mockedRate = consumeRateLimit as ReturnType<typeof vi.fn>;
+const mockedRate = consumeSharedRateLimit as ReturnType<typeof vi.fn>;
 const mockedTrust = isTrustedMutationRequest as ReturnType<typeof vi.fn>;
 
 function makeReq(body: unknown): Request {
@@ -52,7 +52,7 @@ function makeReq(body: unknown): Request {
 beforeEach(() => {
   mockedFind.mockReset();
   mockedVerify.mockReset();
-  mockedRate.mockReset().mockReturnValue({ allowed: true });
+  mockedRate.mockReset().mockResolvedValue({ allowed: true });
   mockedTrust.mockReset().mockReturnValue(true);
 });
 afterEach(() => vi.clearAllMocks());
@@ -65,7 +65,7 @@ describe("POST /api/auth/login", () => {
   });
 
   it("returns 429 when IP rate-limit is exceeded", async () => {
-    mockedRate.mockReturnValueOnce({ allowed: false, retryAfterSeconds: 60 });
+    mockedRate.mockResolvedValueOnce({ allowed: false, retryAfterSeconds: 60 });
     const res = await POST(makeReq({}) as never);
     expect(res.status).toBe(429);
   });

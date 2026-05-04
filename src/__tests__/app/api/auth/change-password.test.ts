@@ -16,7 +16,7 @@ vi.mock("@/lib/request-security", () => ({
 }));
 
 vi.mock("@/lib/rate-limit", () => ({
-  consumeRateLimit: vi.fn().mockReturnValue({ allowed: true }),
+  consumeSharedRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
 }));
 
 vi.mock("@/lib/auth/credentials", () => ({
@@ -52,7 +52,7 @@ vi.mock("@/lib/db", () => ({
 import { NextRequest } from "next/server";
 
 import { findUserById, updateUserPassword, verifyPassword } from "@/lib/auth/credentials";
-import { consumeRateLimit } from "@/lib/rate-limit";
+import { consumeSharedRateLimit } from "@/lib/rate-limit";
 import { isTrustedMutationRequest } from "@/lib/request-security";
 import { createSessionToken, verifySessionToken } from "@/lib/auth/token";
 import { extractBearerToken } from "@/lib/auth/api-key";
@@ -61,7 +61,7 @@ import { POST } from "@/app/api/auth/change-password/route";
 const mockedFind = findUserById as ReturnType<typeof vi.fn>;
 const mockedUpdate = updateUserPassword as ReturnType<typeof vi.fn>;
 const mockedVerify = verifyPassword as ReturnType<typeof vi.fn>;
-const mockedRate = consumeRateLimit as ReturnType<typeof vi.fn>;
+const mockedRate = consumeSharedRateLimit as ReturnType<typeof vi.fn>;
 const mockedTrust = isTrustedMutationRequest as ReturnType<typeof vi.fn>;
 const mockedSession = verifySessionToken as ReturnType<typeof vi.fn>;
 const mockedBearer = extractBearerToken as ReturnType<typeof vi.fn>;
@@ -94,7 +94,7 @@ beforeEach(() => {
   mockedFind.mockReset();
   mockedUpdate.mockReset().mockResolvedValue(new Date());
   mockedVerify.mockReset();
-  mockedRate.mockReset().mockReturnValue({ allowed: true });
+  mockedRate.mockReset().mockResolvedValue({ allowed: true });
   mockedTrust.mockReset().mockReturnValue(true);
   mockedSession.mockReset().mockResolvedValue(VALID_SESSION);
   mockedBearer.mockReset().mockReturnValue(null);
@@ -120,7 +120,7 @@ describe("POST /api/auth/change-password", () => {
   });
 
   it("returns 429 when IP rate-limit is exceeded", async () => {
-    mockedRate.mockReturnValueOnce({ allowed: false, retryAfterSeconds: 60 });
+    mockedRate.mockResolvedValueOnce({ allowed: false, retryAfterSeconds: 60 });
     const res = await POST(
       makeReq({ currentPassword: "longpasswordhere", newPassword: "newpasswordhere1" }) as never,
     );
@@ -129,8 +129,8 @@ describe("POST /api/auth/change-password", () => {
 
   it("returns 429 when per-user rate-limit is exceeded", async () => {
     mockedRate
-      .mockReturnValueOnce({ allowed: true })
-      .mockReturnValueOnce({ allowed: false, retryAfterSeconds: 60 });
+      .mockResolvedValueOnce({ allowed: true })
+      .mockResolvedValueOnce({ allowed: false, retryAfterSeconds: 60 });
     const res = await POST(
       makeReq({ currentPassword: "longpasswordhere", newPassword: "newpasswordhere1" }) as never,
     );

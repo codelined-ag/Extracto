@@ -1,0 +1,5 @@
+export const MAX_OCR_SUBMIT_PAGES = 500;
+export const MAX_BATCH_OCR_SUBMIT_PAGES = 1_000;
+export const MAX_SOURCE_PDF_BYTES = 32 * 1024 * 1024;
+export const MAX_OCR_PAGE_IMAGE_CHARS = 20_000_000;
+export const MAX_OCR_JOB_IMAGE_CHARS = 180_000_000;

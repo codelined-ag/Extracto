@@ -103,6 +103,16 @@ env_file_auth_secret() {
   ' "$env_file"
 }
 
+append_runtime_env_var() {
+  local key="$1"
+  local value="$2"
+  mkdir -p "$(dirname "$RUNTIME_ENV_FILE")"
+  umask 077
+  [ -f "$RUNTIME_ENV_FILE" ] || : > "$RUNTIME_ENV_FILE"
+  chmod 600 "$RUNTIME_ENV_FILE" 2>/dev/null || true
+  printf "%s=%s\n" "$key" "$value" >> "$RUNTIME_ENV_FILE"
+}
+
 ensure_auth_secret() {
   local current="${AUTH_SECRET:-}"
   if [ -n "$current" ]; then
@@ -124,8 +134,7 @@ ensure_auth_secret() {
   local generated
   generated="$(generate_auth_secret)"
   [ -n "$generated" ] || die "Generated AUTH_SECRET is empty"
-  umask 077
-  printf "AUTH_SECRET=%s\n" "$generated" > "$RUNTIME_ENV_FILE"
+  append_runtime_env_var "AUTH_SECRET" "$generated"
   ok "Generated local AUTH_SECRET in ${RUNTIME_ENV_FILE}"
 }
 
@@ -276,6 +285,23 @@ cmd_api_key() {
 
 EXTRACTO_URL_DEFAULT="${EXTRACTO_URL:-http://127.0.0.1:3000}"
 
+write_curl_config() {
+  local config_file="$1"
+  shift
+  : > "$config_file"
+  chmod 600 "$config_file" 2>/dev/null || true
+
+  local header escaped
+  for header in "$@"; do
+    case "$header" in
+      *$'\n'*|*$'\r'*) die "invalid curl header" ;;
+    esac
+    escaped="${header//\\/\\\\}"
+    escaped="${escaped//\"/\\\"}"
+    printf 'header = "%s"\n' "$escaped" >> "$config_file"
+  done
+}
+
 resolve_token() {
   if [ -n "${EXTRACTO_TOKEN:-}" ]; then
     printf "%s" "$EXTRACTO_TOKEN"
@@ -293,6 +319,9 @@ require_token() {
   if [ -z "$tok" ]; then
     die "no API token found. Set EXTRACTO_TOKEN, or run 'extracto api-key create <email> <name>' and store the result in ~/.extracto/config as EXTRACTO_TOKEN=<key>."
   fi
+  case "$tok" in
+    *$'\n'*|*$'\r'*) die "API token must not contain newlines" ;;
+  esac
   printf "%s" "$tok"
 }
 
@@ -301,10 +330,16 @@ api_get() {
   local path="$1"
   local token
   token="$(require_token)"
-  curl -fsS \
-    -H "Authorization: Bearer ${token}" \
-    -H "Accept: application/json" \
-    "${EXTRACTO_URL_DEFAULT}${path}"
+  local config_file rc
+  config_file="$(mktemp)"
+  write_curl_config "$config_file" "Authorization: Bearer ${token}" "Accept: application/json"
+  if curl -fsS --config "$config_file" "${EXTRACTO_URL_DEFAULT}${path}"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  rm -f "$config_file"
+  return "$rc"
 }
 
 api_get_raw() {
@@ -313,10 +348,16 @@ api_get_raw() {
   local out="$2"
   local token
   token="$(require_token)"
-  curl -fsS \
-    -H "Authorization: Bearer ${token}" \
-    -o "$out" \
-    "${EXTRACTO_URL_DEFAULT}${path}"
+  local config_file rc
+  config_file="$(mktemp)"
+  write_curl_config "$config_file" "Authorization: Bearer ${token}"
+  if curl -fsS --config "$config_file" -o "$out" "${EXTRACTO_URL_DEFAULT}${path}"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  rm -f "$config_file"
+  return "$rc"
 }
 
 api_post_json() {
@@ -325,21 +366,32 @@ api_post_json() {
   local body="$2"
   local token
   token="$(require_token)"
-  curl -fsS -X POST \
-    -H "Authorization: Bearer ${token}" \
-    -H "Content-Type: application/json" \
-    -H "Accept: application/json" \
-    -d "$body" \
-    "${EXTRACTO_URL_DEFAULT}${path}"
+  local config_file rc
+  config_file="$(mktemp)"
+  write_curl_config "$config_file" "Authorization: Bearer ${token}" "Content-Type: application/json" "Accept: application/json"
+  if printf "%s" "$body" | curl -fsS -X POST --config "$config_file" --data-binary @- "${EXTRACTO_URL_DEFAULT}${path}"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  rm -f "$config_file"
+  return "$rc"
 }
 
 api_delete() {
   local path="$1"
   local token
   token="$(require_token)"
-  curl -fsS -X DELETE \
-    -H "Authorization: Bearer ${token}" \
-    "${EXTRACTO_URL_DEFAULT}${path}"
+  local config_file rc
+  config_file="$(mktemp)"
+  write_curl_config "$config_file" "Authorization: Bearer ${token}"
+  if curl -fsS -X DELETE --config "$config_file" "${EXTRACTO_URL_DEFAULT}${path}"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  rm -f "$config_file"
+  return "$rc"
 }
 
 # ----------------------------------------------------------------------

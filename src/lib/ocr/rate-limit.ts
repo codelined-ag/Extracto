@@ -1,6 +1,6 @@
 import { handleApiError, ApiRouteError } from "@/lib/api-error";
 import type { AuthContext } from "@/lib/auth/request";
-import { consumeRateLimit } from "@/lib/rate-limit";
+import { consumeSharedRateLimit } from "@/lib/rate-limit";
 import type { NextResponse } from "next/server";
 
 export const OCR_RATE_LIMIT_WINDOW_MS = 60_000;
@@ -8,7 +8,7 @@ export const OCR_RATE_LIMIT_MAX = 6;
 export const S3_READ_RATE_LIMIT_MAX = 60;
 export const S3_WRITE_RATE_LIMIT_MAX = 12;
 
-export function enforceOcrSubmitRateLimit(auth: AuthContext, clientIp: string): NextResponse | null {
+export async function enforceOcrSubmitRateLimit(auth: AuthContext, clientIp: string): Promise<NextResponse | null> {
   const rateLimitKey =
     auth.method === "api-key" && auth.apiKeyId
       ? `ocr:job:key:${auth.apiKeyId}`
@@ -17,7 +17,7 @@ export function enforceOcrSubmitRateLimit(auth: AuthContext, clientIp: string): 
     auth.method === "api-key" && auth.rateLimitPerMinute && auth.rateLimitPerMinute > 0
       ? auth.rateLimitPerMinute
       : OCR_RATE_LIMIT_MAX;
-  const rateLimit = consumeRateLimit({
+  const rateLimit = await consumeSharedRateLimit({
     key: rateLimitKey,
     max: rateLimitMax,
     windowMs: OCR_RATE_LIMIT_WINDOW_MS,
@@ -29,17 +29,17 @@ export function enforceOcrSubmitRateLimit(auth: AuthContext, clientIp: string): 
   );
 }
 
-export function enforceS3RateLimit(
+export async function enforceS3RateLimit(
   auth: AuthContext,
   clientIp: string,
   kind: "read" | "write",
-): NextResponse | null {
+): Promise<NextResponse | null> {
   const max = kind === "read" ? S3_READ_RATE_LIMIT_MAX : S3_WRITE_RATE_LIMIT_MAX;
   const rateLimitKey =
     auth.method === "api-key" && auth.apiKeyId
       ? `s3:${kind}:key:${auth.apiKeyId}`
       : `s3:${kind}:${auth.userId}:${clientIp}`;
-  const rateLimit = consumeRateLimit({ key: rateLimitKey, max, windowMs: OCR_RATE_LIMIT_WINDOW_MS });
+  const rateLimit = await consumeSharedRateLimit({ key: rateLimitKey, max, windowMs: OCR_RATE_LIMIT_WINDOW_MS });
   if (rateLimit.allowed) return null;
   return handleApiError(
     new ApiRouteError(`Too many S3 ${kind} requests. Retry shortly.`, 429),

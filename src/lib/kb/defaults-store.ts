@@ -5,7 +5,7 @@
 // because the embedding/store credentials can differ from the OCR
 // provider credentials.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type {
@@ -107,6 +107,8 @@ const DEFAULTS: KbDefaults = {
 };
 
 const cache = new Map<string, KbDefaults>();
+const PRIVATE_DIR_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
 
 function getDataRoot(): string {
   const envDatabaseUrl = process.env.DATABASE_URL?.trim();
@@ -267,10 +269,21 @@ export async function saveKbDefaults(
   };
 
   const normalized = normalize(merged);
-  await mkdir(getDefaultsDir(), { recursive: true });
-  await writeFile(getDefaultsPath(safe), JSON.stringify(normalized, null, 2), "utf8");
+  await ensureDefaultsDirectory();
+  const defaultsPath = getDefaultsPath(safe);
+  await writeFile(defaultsPath, JSON.stringify(normalized, null, 2), {
+    encoding: "utf8",
+    mode: PRIVATE_FILE_MODE,
+  });
+  await chmod(defaultsPath, PRIVATE_FILE_MODE);
   cache.set(safe, normalized);
   return structuredClone(normalized);
+}
+
+async function ensureDefaultsDirectory(): Promise<void> {
+  const dir = getDefaultsDir();
+  await mkdir(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
+  await chmod(dir, PRIVATE_DIR_MODE);
 }
 
 export function toClientKbDefaults(d: KbDefaults): ClientKbDefaults {

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { shouldTrustForwardedProxyHeaders } from "@/lib/request-security";
+
 export { normalizeEmail } from "@/lib/auth/credentials";
 
 export function badRequest(message: string, status = 400) {
@@ -7,7 +9,7 @@ export function badRequest(message: string, status = 400) {
 }
 
 export function isRequestSecure(request: NextRequest): boolean {
-  const forwardedProto = request.headers.get("x-forwarded-proto");
+  const forwardedProto = shouldTrustForwardedProxyHeaders() ? request.headers.get("x-forwarded-proto") : null;
   const protocol = (forwardedProto ? forwardedProto.split(",")[0].trim() : request.nextUrl.protocol)
     .replace(":", "");
   return protocol === "https";

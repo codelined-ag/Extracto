@@ -2,12 +2,13 @@ import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { ApiRouteError, errorMessage } from "@/lib/api-error";
-import { authenticateMutation, authHasScope } from "@/lib/auth/request";
+import { authenticateMutation, authHasScope, enforceApiKeyRequestRateLimit } from "@/lib/auth/request";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
 import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
 import { waitForOcrJobCompletion } from "@/lib/ocr/job-wait";
 import { submitOcrJob } from "@/lib/ocr/job-submit";
+import { normalizeOcrInputPreviews } from "@/lib/ocr/job-input-helpers";
 
 interface OpenAIChatRequest {
   model?: unknown;
@@ -79,7 +80,17 @@ export async function POST(request: NextRequest) {
   if (!authHasScope(result.auth, "ocr:submit")) {
     return openAiError("Missing required scope: ocr:submit", "permission_error", 403);
   }
-  const limited = enforceOcrSubmitRateLimit(result.auth, getClientIpAddress(request));
+  const apiKeyLimited = await enforceApiKeyRequestRateLimit(result.auth);
+  if (apiKeyLimited) {
+    const retryAfter = apiKeyLimited.headers.get("Retry-After");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (retryAfter) headers["Retry-After"] = retryAfter;
+    return new NextResponse(
+      JSON.stringify({ error: { message: "API key rate limit exceeded. Retry shortly.", type: "rate_limit_error" } }),
+      { status: 429, headers },
+    );
+  }
+  const limited = await enforceOcrSubmitRateLimit(result.auth, getClientIpAddress(request));
   if (limited) {
     const retryAfter = limited.headers.get("Retry-After");
     const body = JSON.stringify({
@@ -108,6 +119,7 @@ export async function POST(request: NextRequest) {
       400,
     );
   }
+  const inputPreviews = normalizeOcrInputPreviews(undefined, preview);
 
   // Submit directly via the pipeline helper (no HTTP-loopback to /api/ocr).
   const inputs = await resolveOcrJobInputs({
@@ -126,7 +138,7 @@ export async function POST(request: NextRequest) {
       apiKeyId: result.auth.method === "api-key" ? result.auth.apiKeyId ?? null : null,
       fileName: "openai-adapter",
       model,
-      inputPreviews: [preview],
+      inputPreviews,
       sourcePreview: null,
     });
     jobId = created.jobId;

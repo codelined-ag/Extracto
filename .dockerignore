@@ -3,6 +3,8 @@ Dockerfile
 .git
 .gitignore
 .github
+.desloppify
+.venv-desloppify
 
 node_modules
 .next
@@ -21,6 +23,8 @@ data
 .env.local
 .env.development
 .env.production
+docker.env
+docker.env.*
 .extracto.env
 
 scorecard.png

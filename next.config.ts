@@ -12,7 +12,6 @@ const SECURITY_HEADERS = [
 const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
-  serverExternalPackages: ["pdfjs-dist"],
   async headers() {
     return [
       {

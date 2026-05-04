@@ -67,6 +67,8 @@ Older minor versions are best-effort.
   generates one if missing, but bring-your-own is preferred.
 - Run behind TLS in production; set `COOKIE_SECURE=true` (default)
   so the session cookie is `Secure`.
+- Pin `EXTRACTO_TAG` to a release tag; do not run production from `latest`.
+- Keep the default bridge networking unless you explicitly need host mode.
 - Configure `OLLAMA_ALLOWED_HOSTS`, `MISTRAL_ALLOWED_HOSTS`,
   `OPENROUTER_ALLOWED_HOSTS`, `OPENAI_COMPAT_ALLOWED_HOSTS` to the
   exact endpoints you use. Don't run with the defaults open in a

@@ -25,6 +25,12 @@ vi.mock("@/lib/kb/export", () => ({
   runKbExport: vi.fn(),
 }));
 
+vi.mock("@/lib/ocr/result-store", () => ({
+  readResultText: vi.fn((_location: string | null | undefined, inline: string | null | undefined) =>
+    Promise.resolve(inline ?? null)
+  ),
+}));
+
 vi.mock("@/lib/kb/stores/chroma", () => ({ ChromaAdapter: vi.fn() }));
 vi.mock("@/lib/kb/stores/qdrant", () => ({ QdrantAdapter: vi.fn() }));
 vi.mock("@/lib/kb/stores/weaviate", () => ({ WeaviateAdapter: vi.fn() }));
@@ -37,11 +43,13 @@ vi.mock("@/lib/ocr/endpoint-policy", () => ({
 import { db } from "@/lib/db";
 import { isKbExportEnabled } from "@/lib/kb/feature-flag";
 import { runKbExport } from "@/lib/kb/export";
+import { readResultText } from "@/lib/ocr/result-store";
 import { POST } from "@/app/api/v1/export/kb/route";
 
 const mockedFindFirst = db.ocrJob.findFirst as ReturnType<typeof vi.fn>;
 const mockedFlag = isKbExportEnabled as ReturnType<typeof vi.fn>;
 const mockedExport = runKbExport as ReturnType<typeof vi.fn>;
+const mockedReadResultText = readResultText as ReturnType<typeof vi.fn>;
 
 function makeReq(body: unknown): NextRequest {
   return new Request("http://localhost/api/v1/export/kb", {
@@ -63,6 +71,9 @@ beforeEach(() => {
   mockedFindFirst.mockReset();
   mockedFlag.mockReset().mockReturnValue(true);
   mockedExport.mockReset();
+  mockedReadResultText.mockReset().mockImplementation((_location: string | null | undefined, inline: string | null | undefined) =>
+    Promise.resolve(inline ?? null)
+  );
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -103,6 +114,7 @@ describe("POST /api/v1/export/kb", () => {
   it("dispatches to runKbExport on the happy path", async () => {
     mockedFindFirst.mockResolvedValueOnce({
       id: "j1", fileName: "doc.pdf", extractedText: "hello world",
+      extractedTextLocation: null,
       model: "qwen", completedAt: new Date(), createdAt: new Date(), metadata: {},
     });
     mockedExport.mockResolvedValueOnce({ jobId: "j1", collectionName: "docs", chunkCount: 3, embeddingDimensions: 1536 });
@@ -111,9 +123,25 @@ describe("POST /api/v1/export/kb", () => {
     expect(mockedExport).toHaveBeenCalled();
   });
 
+  it("uses offloaded extracted text when inline text is empty", async () => {
+    mockedFindFirst.mockResolvedValueOnce({
+      id: "j1", fileName: "doc.pdf", extractedText: null, extractedTextLocation: "s3://bucket/jobs/j1/extracted-text.txt",
+      model: "qwen", completedAt: new Date(), createdAt: new Date(), metadata: {},
+    });
+    mockedReadResultText.mockResolvedValueOnce("offloaded text");
+    mockedExport.mockResolvedValueOnce({ jobId: "j1", collectionName: "docs", chunkCount: 1, embeddingDimensions: 1536 });
+
+    const res = await POST(makeReq(validBody));
+
+    expect(res.status).toBe(200);
+    expect(mockedReadResultText).toHaveBeenCalledWith("s3://bucket/jobs/j1/extracted-text.txt", null);
+    expect(mockedExport.mock.calls[0][0].extractedText).toBe("offloaded text");
+  });
+
   it("accepts strategy=hierarchical with maxHeadingDepth", async () => {
     mockedFindFirst.mockResolvedValueOnce({
       id: "j1", fileName: "doc.pdf", extractedText: "# H\n\nbody",
+      extractedTextLocation: null,
       model: "qwen", completedAt: new Date(), createdAt: new Date(), metadata: {},
     });
     mockedExport.mockResolvedValueOnce({ jobId: "j1", collectionName: "docs", chunkCount: 1, embeddingDimensions: 768 });
@@ -130,6 +158,7 @@ describe("POST /api/v1/export/kb", () => {
   it("accepts strategy=semantic with breakpointPercentile", async () => {
     mockedFindFirst.mockResolvedValueOnce({
       id: "j1", fileName: "doc.pdf", extractedText: "A. B. C.",
+      extractedTextLocation: null,
       model: "qwen", completedAt: new Date(), createdAt: new Date(), metadata: {},
     });
     mockedExport.mockResolvedValueOnce({ jobId: "j1", collectionName: "docs", chunkCount: 2, embeddingDimensions: 768 });

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { handleApiError } from "@/lib/api-error";
 import { findUserByEmail, toSafeUser, verifyPassword } from "@/lib/auth/credentials";
-import { consumeRateLimit } from "@/lib/rate-limit";
+import { consumeSharedRateLimit } from "@/lib/rate-limit";
 import { getClientIpAddress, isTrustedMutationRequest } from "@/lib/request-security";
 import {
   createSessionToken,
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const clientIp = getClientIpAddress(request);
-    const ipLimit = consumeRateLimit({
+    const ipLimit = await consumeSharedRateLimit({
       key: `auth:login:ip:${clientIp}`,
       max: LOGIN_IP_LIMIT_MAX,
       windowMs: LOGIN_WINDOW_MS,
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
     const password = typeof body.password === "string" ? body.password : "";
 
-    const emailLimit = consumeRateLimit({
+    const emailLimit = await consumeSharedRateLimit({
       key: `auth:login:email:${email || "unknown"}`,
       max: LOGIN_EMAIL_LIMIT_MAX,
       windowMs: LOGIN_WINDOW_MS,

@@ -2,7 +2,12 @@ import { NextRequest } from "next/server";
 
 import { OcrJobStatus } from "@prisma/client";
 
-import { authenticateRequest, requireScope } from "@/lib/auth/request";
+import {
+  authenticateRequest,
+  enforceApiKeyRequestRateLimit,
+  enforceStreamConnectionRateLimit,
+  requireScope,
+} from "@/lib/auth/request";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +30,10 @@ export async function GET(
   }
   const scopeError = requireScope(auth, "ocr:read");
   if (scopeError) return scopeError;
+  const apiKeyLimitError = await enforceApiKeyRequestRateLimit(auth);
+  if (apiKeyLimitError) return apiKeyLimitError;
+  const streamLimitError = await enforceStreamConnectionRateLimit(auth, "jobs");
+  if (streamLimitError) return streamLimitError;
 
   const { id } = await context.params;
   if (!id) {

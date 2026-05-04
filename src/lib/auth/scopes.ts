@@ -22,6 +22,13 @@ export type ScopeEntry = Scope | typeof WILDCARD_SCOPE;
 
 const VALID_SCOPE_ENTRIES: ReadonlySet<string> = new Set([...ALL_SCOPES, WILDCARD_SCOPE]);
 
+export class ScopeValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ScopeValidationError";
+  }
+}
+
 function isScopeEntryString(value: unknown): value is string {
   return typeof value === "string";
 }
@@ -60,11 +67,62 @@ export function serializeScopeList(scopes: string[]): string {
   return JSON.stringify(scopes);
 }
 
+function parseRequestedScopeCandidates(input: unknown): string[] {
+  if (typeof input === "string") {
+    try {
+      const parsed = JSON.parse(input);
+      if (!Array.isArray(parsed)) {
+        throw new ScopeValidationError("scopes must be an array of scope strings");
+      }
+      return parsed.map((entry) => {
+        if (typeof entry !== "string") {
+          throw new ScopeValidationError("scopes must contain only strings");
+        }
+        return entry;
+      });
+    } catch (error) {
+      if (error instanceof ScopeValidationError) throw error;
+      throw new ScopeValidationError("scopes must be a JSON array of scope strings");
+    }
+  }
+
+  if (!Array.isArray(input)) {
+    throw new ScopeValidationError("scopes must be an array of scope strings");
+  }
+
+  return input.map((entry) => {
+    if (typeof entry !== "string") {
+      throw new ScopeValidationError("scopes must contain only strings");
+    }
+    return entry;
+  });
+}
+
 export function normalizeRequestedScopes(input: unknown): string[] {
-  const list = parseScopeList(input);
+  if (input === undefined) return [...ALL_SCOPES];
+
+  const candidates = parseRequestedScopeCandidates(input);
+  if (candidates.length === 0) {
+    throw new ScopeValidationError("At least one scope is required");
+  }
+
+  const invalidScopes: string[] = [];
+  for (const candidate of candidates) {
+    const trimmed = candidate.trim().toLowerCase();
+    if (!trimmed || !VALID_SCOPE_ENTRIES.has(trimmed)) {
+      invalidScopes.push(candidate);
+    }
+  }
+  if (invalidScopes.length > 0) {
+    throw new ScopeValidationError(`Invalid scope: ${invalidScopes[0]}`);
+  }
+
+  const list = parseScopeList(candidates);
   if (list.includes(WILDCARD_SCOPE)) return [WILDCARD_SCOPE];
   const filtered = Array.from(new Set(list.filter((s): s is Scope => s !== WILDCARD_SCOPE)));
-  if (filtered.length === 0) return [...ALL_SCOPES];
+  if (filtered.length === 0) {
+    throw new ScopeValidationError("At least one scope is required");
+  }
   return filtered;
 }
 

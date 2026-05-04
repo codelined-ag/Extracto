@@ -1,3 +1,5 @@
+import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from "node:dns";
+
 const PRIVATE_IPV4_RANGES: Array<[number, number]> = [
   [0x00000000, 0x00FFFFFF],
   [0x0A000000, 0x0AFFFFFF],
@@ -82,6 +84,7 @@ export function isPrivateOrLoopbackHost(host: string): boolean {
 export interface UrlSafetyResult {
   ok: boolean;
   reason?: string;
+  lookup?: typeof dnsLookup;
 }
 
 export function isAllowedExternalUrl(rawUrl: string, allowlist: string[]): UrlSafetyResult {
@@ -116,6 +119,73 @@ export function parseAllowlist(raw: string | undefined | null): string[] {
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+type LookupCallback = (
+  err: NodeJS.ErrnoException | null,
+  address: string | LookupAddress[],
+  family?: number,
+) => void;
+
+function normalizeLookupOptions(options: unknown): LookupOptions & { all?: boolean } {
+  if (typeof options === "number") {
+    return { family: options };
+  }
+  if (options && typeof options === "object") {
+    return options as LookupOptions & { all?: boolean };
+  }
+  return {};
+}
+
+function createLookupError(message: string): NodeJS.ErrnoException {
+  const error = new Error(message) as NodeJS.ErrnoException;
+  error.code = "EHOSTUNREACH";
+  return error;
+}
+
+function validateExternalResolvedAddresses(hostname: string, records: LookupAddress[]): NodeJS.ErrnoException | null {
+  if (records.length === 0) {
+    return createLookupError(`${hostname} did not resolve to any address`);
+  }
+  for (const record of records) {
+    if (isPrivateOrLoopbackHost(record.address)) {
+      return createLookupError(`${hostname} resolves to a private address (${record.address})`);
+    }
+  }
+  return null;
+}
+
+function createExternalUrlLookup(): typeof dnsLookup {
+  const guardedLookup = (
+    hostname: string,
+    optionsOrCallback: LookupOptions | number | LookupCallback,
+    maybeCallback?: LookupCallback,
+  ): void => {
+    const callback = typeof optionsOrCallback === "function" ? optionsOrCallback : maybeCallback;
+    if (!callback) {
+      throw new TypeError("callback is required");
+    }
+    const requestedOptions = typeof optionsOrCallback === "function" ? {} : normalizeLookupOptions(optionsOrCallback);
+    const wantsAll = requestedOptions.all === true;
+    dnsLookup(hostname, { ...requestedOptions, all: true, verbatim: true }, (err, records) => {
+      if (err) {
+        callback(err, "", 0);
+        return;
+      }
+      const validationError = validateExternalResolvedAddresses(hostname, records);
+      if (validationError) {
+        callback(validationError, "", 0);
+        return;
+      }
+      if (wantsAll) {
+        callback(null, records);
+        return;
+      }
+      const first = records[0];
+      callback(null, first.address, first.family);
+    });
+  };
+  return guardedLookup as typeof dnsLookup;
+}
+
 export async function resolveAndCheckExternalUrl(rawUrl: string, allowlist: string[]): Promise<UrlSafetyResult> {
   const surface = isAllowedExternalUrl(rawUrl, allowlist);
   if (!surface.ok) return surface;
@@ -130,12 +200,11 @@ export async function resolveAndCheckExternalUrl(rawUrl: string, allowlist: stri
     if (!records.length) {
       return { ok: false, reason: `${hostname} did not resolve to any address` };
     }
-    for (const r of records) {
-      if (isPrivateOrLoopbackHost(r.address)) {
-        return { ok: false, reason: `${hostname} resolves to a private address (${r.address})` };
-      }
+    const validationError = validateExternalResolvedAddresses(hostname, records);
+    if (validationError) {
+      return { ok: false, reason: validationError.message };
     }
-    return { ok: true };
+    return { ok: true, lookup: createExternalUrlLookup() };
   } catch (err) {
     return { ok: false, reason: `DNS lookup failed for ${hostname}: ${err instanceof Error ? err.message : String(err)}` };
   }

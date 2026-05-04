@@ -345,8 +345,6 @@ function writeProviderModelSelections(
 
 const PDF_RENDER_SCALE = 1.5;
 const PDF_MAX_DIMENSION = 1600;
-const PDFJS_MODULE_URL ="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
-const PDFJS_WORKER_URL ="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
 
 let pdfJsLibPromise: Promise<Record<string, unknown>> | null = null;
 const pdfBytesCache = new WeakMap<File, Promise<Uint8Array>>();
@@ -366,16 +364,13 @@ function readImageAsDataUrl(file: File): Promise<string> {
 
 async function loadPdfJsLib(): Promise<Record<string, unknown>> {
  if (!pdfJsLibPromise) {
- pdfJsLibPromise = import(
- /* webpackIgnore: true */
- PDFJS_MODULE_URL
- ) as Promise<Record<string, unknown>>;
+ pdfJsLibPromise = import("pdfjs-dist/legacy/build/pdf.mjs") as Promise<Record<string, unknown>>;
  }
 
  const pdfjsLib = await pdfJsLibPromise;
  const globalOptions = (pdfjsLib as { GlobalWorkerOptions?: { workerSrc?: string } }).GlobalWorkerOptions;
  if (globalOptions) {
- globalOptions.workerSrc = PDFJS_WORKER_URL;
+ globalOptions.workerSrc = "";
  }
 
  return pdfjsLib;
@@ -400,7 +395,7 @@ async function renderPdfPagesAsImages(
  options?: { pageLimit?: number; startPage?: number }
 ): Promise<string[]> {
  const pdfjsLib = await loadPdfJsLib();
- const getDocument = (pdfjsLib as { getDocument?: (input: { data: ArrayBuffer }) => {
+ const getDocument = (pdfjsLib as { getDocument?: (input: { data: ArrayBuffer; disableWorker?: boolean }) => {
  promise: Promise<{
  numPages: number;
  getPage: (index: number) => Promise<{
@@ -416,7 +411,7 @@ async function renderPdfPagesAsImages(
  throw new Error("PDF renderer unavailable");
  }
 
- const loadingTask = getDocument({ data: await getPdfArrayBuffer(file) });
+ const loadingTask = getDocument({ data: await getPdfArrayBuffer(file), disableWorker: true });
  const pdfDocument = await loadingTask.promise;
  const startPage =
  typeof options?.startPage ==="number"&& Number.isFinite(options.startPage) && options.startPage > 0
@@ -460,14 +455,14 @@ async function renderPdfPagesAsImages(
 
 async function getPdfPageCount(file: File): Promise<number> {
  const pdfjsLib = await loadPdfJsLib();
- const getDocument = (pdfjsLib as { getDocument?: (input: { data: ArrayBuffer }) => {
+ const getDocument = (pdfjsLib as { getDocument?: (input: { data: ArrayBuffer; disableWorker?: boolean }) => {
  promise: Promise<{ numPages: number }>;
  } }).getDocument;
  if (!getDocument) {
  throw new Error("PDF renderer unavailable");
  }
 
- const loadingTask = getDocument({ data: await getPdfArrayBuffer(file) });
+ const loadingTask = getDocument({ data: await getPdfArrayBuffer(file), disableWorker: true });
  const pdfDocument = await loadingTask.promise;
  return pdfDocument.numPages;
 }
@@ -1794,12 +1789,12 @@ export default function ExtractoPage() {
  }, [selectedFile?.id, selectedFile?.pageCount, selectedFile?.status]);
 
  const ensurePagePreviews = async (file: ProcessingFile): Promise<string[]> => {
- if (file.file && isPdfFile(file.file)) {
  const inMemoryPages = pdfPagePreviewCacheRef.current[file.id];
  if (Array.isArray(inMemoryPages) && inMemoryPages.length > 0) {
  return inMemoryPages;
  }
 
+ if (file.file && isPdfFile(file.file)) {
  const cachedPages = Array.isArray(file.pagePreviews) ? file.pagePreviews.filter(Boolean) : [];
  if (cachedPages.length > 1) {
  pdfPagePreviewCacheRef.current[file.id] = cachedPages;
@@ -1997,7 +1992,7 @@ export default function ExtractoPage() {
  ): Promise<{ jobId: string }> => {
  const SOURCE_PDF_MAX_BYTES = 32 * 1024 * 1024;
  let sourcePdf: string | undefined;
- if (file.file && isPdfFile(file.file) && file.file.size <= SOURCE_PDF_MAX_BYTES) {
+ if (pageNumbers && file.file && isPdfFile(file.file) && file.file.size <= SOURCE_PDF_MAX_BYTES) {
  try {
  const buffer = await getPdfArrayBuffer(file.file);
  const bytes = new Uint8Array(buffer);
@@ -2243,6 +2238,11 @@ export default function ExtractoPage() {
  throw new Error(`Sign out failed (${response.status})`);
  }
 
+ setFiles([]);
+ setSelectedFileId(null);
+ setBulkSelectedIds(new Set());
+ pdfPagePreviewCacheRef.current = {};
+ await clearQueue();
  router.replace("/auth");
  } catch (error) {
  toast({

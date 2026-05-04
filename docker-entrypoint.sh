@@ -71,11 +71,14 @@ fi
 
 if [ "$MIGRATE_ON_START" = "1" ] || [ "$MIGRATE_ON_START" = "true" ]; then
   if [ -d /app/prisma/migrations ] && [ "$(ls -A /app/prisma/migrations 2>/dev/null | grep -v migration_lock.toml | wc -l)" -gt 0 ]; then
+    set +e
     migrate_output="$(bunx prisma migrate deploy 2>&1)"
     migrate_status=$?
+    set -e
     printf "%s\n" "$migrate_output"
     if [ $migrate_status -ne 0 ] && printf "%s" "$migrate_output" | grep -q "P3005"; then
-      echo "INFO: Existing schema with no Prisma migration history detected, baselining."
+      echo "INFO: Existing schema with no Prisma migration history detected, syncing schema and baselining."
+      bunx prisma db push --skip-generate
       for migration_dir in /app/prisma/migrations/*/; do
         [ -d "$migration_dir" ] || continue
         bunx prisma migrate resolve --applied "$(basename "$migration_dir")"

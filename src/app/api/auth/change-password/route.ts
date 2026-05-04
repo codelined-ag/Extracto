@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { findUserById, updateUserPassword, verifyPassword } from "@/lib/auth/credentials";
 import { withSessionAuth } from "@/lib/auth/request";
-import { consumeRateLimit } from "@/lib/rate-limit";
+import { consumeSharedRateLimit } from "@/lib/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
 import {
   createSessionToken,
@@ -21,7 +21,7 @@ export const POST = withSessionAuth("mutation", "Password", async (request: Next
   const userId = ctx.auth.userId;
   const clientIp = getClientIpAddress(request);
 
-  const ipLimit = consumeRateLimit({
+  const ipLimit = await consumeSharedRateLimit({
     key: `auth:change-password:ip:${clientIp}`,
     max: RATE_LIMIT_IP_MAX,
     windowMs: RATE_LIMIT_WINDOW_MS,
@@ -30,7 +30,7 @@ export const POST = withSessionAuth("mutation", "Password", async (request: Next
     return tooManyRequests(ipLimit.retryAfterSeconds);
   }
 
-  const userLimit = consumeRateLimit({
+  const userLimit = await consumeSharedRateLimit({
     key: `auth:change-password:user:${userId}`,
     max: RATE_LIMIT_USER_MAX,
     windowMs: RATE_LIMIT_WINDOW_MS,

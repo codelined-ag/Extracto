@@ -1,5 +1,6 @@
-import { enforceS3EndpointPolicy } from "@/lib/ocr/endpoint-policy";
+import { resolveAndEnforceS3EndpointPolicy } from "@/lib/ocr/endpoint-policy";
 import type { S3Defaults } from "@/lib/s3/defaults-store";
+import { createS3EndpointRequestHandler } from "@/lib/s3/guarded-request-handler";
 
 export type S3ClientType = import("@aws-sdk/client-s3").S3Client;
 
@@ -52,12 +53,14 @@ export async function buildUserS3Client(defaults: S3Defaults): Promise<{
   validateRegion(defaults.region || "us-east-1");
   validatePrefix(defaults.prefix);
 
-  const endpoint = defaults.endpoint ? enforceS3EndpointPolicy(defaults.endpoint) : "";
+  const endpoint = defaults.endpoint ? await resolveAndEnforceS3EndpointPolicy(defaults.endpoint) : "";
+  const requestHandler = endpoint ? await createS3EndpointRequestHandler(endpoint) : undefined;
 
   const sdk = await loadSdk();
   const client = new sdk.S3Client({
     region: defaults.region || "us-east-1",
     ...(endpoint ? { endpoint } : {}),
+    ...(requestHandler ? { requestHandler } : {}),
     ...(defaults.forcePathStyle ? { forcePathStyle: true } : {}),
     ...(defaults.accessKeyId && defaults.secretAccessKey
       ? {

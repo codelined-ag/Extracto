@@ -25,9 +25,13 @@ import {
   getDefaultOpenAICompatApiUrl,
   getDefaultOpenRouterApiUrl,
 } from "@/lib/ocr/provider-config";
-import { normalizePreviewForHistory } from "@/lib/ocr/job-input-helpers";
+import {
+  normalizeOcrInputPreviews,
+  normalizeOcrPageNumbers,
+  normalizePreviewForHistory,
+  normalizeSourcePdfForAnchoring,
+} from "@/lib/ocr/job-input-helpers";
 import { resumeOcrJob, submitOcrJob } from "@/lib/ocr/job-submit";
-import { extractAnchorsForPages } from "@/lib/ocr/pdf-anchoring-helper";
 import { getModelCatalog } from "@/lib/ocr/model-catalog";
 
 interface OCRRequestBody {
@@ -86,7 +90,7 @@ export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) =
   const storedSettings = normalizeAndValidateApiSettings(await getApiSettings(auth.userId));
   const query = new URL(request.url).searchParams;
   const provider = normalizeProvider(query.get("provider") || undefined);
-  const catalog = await getModelCatalog(storedSettings);
+  const catalog = await getModelCatalog(storedSettings, { provider });
   return NextResponse.json({ models: catalog[provider] });
 });
 
@@ -95,7 +99,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
   try {
     const userId = auth.userId;
 
-    const limited = enforceOcrSubmitRateLimit(auth, getClientIpAddress(request));
+    const limited = await enforceOcrSubmitRateLimit(auth, getClientIpAddress(request));
     if (limited) return limited;
 
     const storedSettings = normalizeAndValidateApiSettings(await getApiSettings(userId));
@@ -109,42 +113,8 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
       ? body.fileName.trim()
       : "untitled";
     const model = typeof body.model === "string" ? body.model.trim() : "";
-    const preview = typeof body.preview === "string" ? body.preview.trim() : "";
-    const pagePreviews = Array.isArray(body.pages)
-      ? body.pages
-          .map((page) => (typeof page === "string" ? page.trim() : ""))
-          .filter(Boolean)
-      : [];
-    const inputPreviews = pagePreviews.length > 0
-      ? pagePreviews
-      : preview
-        ? [preview]
-        : [];
-
-    let pageNumbers: number[] | undefined;
-    if (Array.isArray(body.pageNumbers)) {
-      const cleaned = body.pageNumbers.filter(
-        (p): p is number => typeof p === "number" && Number.isInteger(p) && p >= 1 && p <= 10_000,
-      );
-      if (cleaned.length !== body.pageNumbers.length) {
-        throw new ApiRouteError("pageNumbers must be a list of positive integers (1-indexed)", 400);
-      }
-      if (cleaned.length !== inputPreviews.length) {
-        throw new ApiRouteError(
-          `pageNumbers length (${cleaned.length}) must equal inputPreviews length (${inputPreviews.length})`,
-          400,
-        );
-      }
-      if (new Set(cleaned).size !== cleaned.length) {
-        throw new ApiRouteError("pageNumbers must not contain duplicates", 400);
-      }
-      for (let i = 1; i < cleaned.length; i++) {
-        if (cleaned[i] <= cleaned[i - 1]) {
-          throw new ApiRouteError("pageNumbers must be strictly ascending", 400);
-        }
-      }
-      pageNumbers = cleaned;
-    }
+    const inputPreviews = normalizeOcrInputPreviews(body.pages, body.preview);
+    const pageNumbers = normalizeOcrPageNumbers(body.pageNumbers, inputPreviews.length);
 
     if (!model) {
       throw new ApiRouteError("Model is required", 400);
@@ -165,12 +135,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
       preloadedSettings: storedSettings,
     });
     const sourcePreview = normalizePreviewForHistory(inputPreviews[0] || "");
-    const sourcePdfRaw = typeof body.sourcePdf === "string" ? body.sourcePdf.trim() : "";
-    const pageAnchors = await extractAnchorsForPages(
-      sourcePdfRaw || undefined,
-      pageNumbers,
-      inputPreviews.length,
-    );
+    const sourcePdf = normalizeSourcePdfForAnchoring(body.sourcePdf, pageNumbers, inputPreviews.length);
 
     if (resumeRequested) {
       if (!resumeJobId) {
@@ -186,7 +151,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
         model,
         inputPreviews,
         pageNumbers,
-        pageAnchors,
+        sourcePdf,
         sourcePreview,
         startedAtMs,
       });
@@ -215,7 +180,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
       model,
       inputPreviews,
       pageNumbers,
-      pageAnchors,
+      sourcePdf,
       sourcePreview,
       priority: requestedPriority,
       batchId: requestedBatchId,

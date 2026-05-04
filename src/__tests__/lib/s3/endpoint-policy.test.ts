@@ -1,6 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { enforceS3EndpointPolicy } from "@/lib/ocr/endpoint-policy";
+vi.mock("node:dns/promises", () => ({
+  lookup: vi.fn(),
+}));
+
+import { lookup } from "node:dns/promises";
+import { enforceS3EndpointPolicy, resolveAndEnforceS3EndpointPolicy } from "@/lib/ocr/endpoint-policy";
+
+const mockedLookup = vi.mocked(lookup);
 
 describe("enforceS3EndpointPolicy", () => {
   const originalAllow = process.env.S3_ALLOW_LOOPBACK;
@@ -9,6 +16,7 @@ describe("enforceS3EndpointPolicy", () => {
   beforeEach(() => {
     delete process.env.S3_ALLOW_LOOPBACK;
     delete process.env.S3_ALLOWED_HOSTS;
+    mockedLookup.mockReset();
   });
   afterEach(() => {
     if (originalAllow !== undefined) process.env.S3_ALLOW_LOOPBACK = originalAllow;
@@ -107,6 +115,34 @@ describe("enforceS3EndpointPolicy", () => {
       expect(enforceS3EndpointPolicy("https://minio.internal.corp")).toBe("https://minio.internal.corp");
       // Other RFC1918 hosts NOT in the list still rejected
       expect(() => enforceS3EndpointPolicy("http://10.0.0.1:9000")).toThrow(/private\/loopback/);
+    });
+  });
+
+  describe("DNS resolution before AWS SDK use", () => {
+    it("rejects a public-looking hostname that resolves to loopback", async () => {
+      mockedLookup.mockResolvedValueOnce([{ address: "127.0.0.1", family: 4 }] as never);
+
+      await expect(resolveAndEnforceS3EndpointPolicy("https://minio.example.com:9000")).rejects.toThrow(
+        /resolves to private\/loopback address 127\.0\.0\.1/,
+      );
+    });
+
+    it("allows a private DNS result only when the hostname is explicitly allowed", async () => {
+      process.env.S3_ALLOWED_HOSTS = "minio.example.com";
+      mockedLookup.mockResolvedValueOnce([{ address: "10.0.0.5", family: 4 }] as never);
+
+      await expect(resolveAndEnforceS3EndpointPolicy("https://minio.example.com:9000")).resolves.toBe(
+        "https://minio.example.com:9000",
+      );
+    });
+
+    it("still rejects DNS results that point at link-local metadata addresses", async () => {
+      process.env.S3_ALLOWED_HOSTS = "minio.example.com";
+      mockedLookup.mockResolvedValueOnce([{ address: "169.254.169.254", family: 4 }] as never);
+
+      await expect(resolveAndEnforceS3EndpointPolicy("https://minio.example.com:9000")).rejects.toThrow(
+        /resolves to blocked address 169\.254\.169\.254/,
+      );
     });
   });
 });

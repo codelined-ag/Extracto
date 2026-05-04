@@ -1,3 +1,5 @@
+import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from "node:dns";
+
 import { ApiRouteError } from "@/lib/api-error";
 import { normalizeHostEndpoint } from "@/lib/ocr/host-normalization";
 import { type ProviderKind } from "@/lib/api-types";
@@ -342,3 +344,128 @@ export function enforceS3EndpointPolicy(rawEndpoint: string): string {
   return parsed.toString().replace(/\/+$/u, "");
 }
 
+function shouldResolveHostname(hostname: string): boolean {
+  return !parseIPv4(hostname) && !hostname.includes(":");
+}
+
+type LookupCallback = (
+  err: NodeJS.ErrnoException | null,
+  address: string | LookupAddress[],
+  family?: number,
+) => void;
+
+function normalizeLookupOptions(options: unknown): LookupOptions & { all?: boolean } {
+  if (typeof options === "number") {
+    return { family: options };
+  }
+  if (options && typeof options === "object") {
+    return options as LookupOptions & { all?: boolean };
+  }
+  return {};
+}
+
+function lookupError(message: string): NodeJS.ErrnoException {
+  const error = new Error(message) as NodeJS.ErrnoException;
+  error.code = "EHOSTUNREACH";
+  return error;
+}
+
+function s3PrivateResolutionAllowed(hostname: string, baseHostname?: string): boolean {
+  if (s3LoopbackOptedIn() || s3HostExplicitlyAllowed(hostname)) return true;
+  return Boolean(baseHostname && hostname.endsWith(`.${baseHostname}`) && s3HostExplicitlyAllowed(baseHostname));
+}
+
+function validateS3ResolvedAddresses(
+  hostname: string,
+  records: Array<{ address: string }>,
+  baseHostname?: string,
+): void {
+  if (records.length === 0) {
+    throw lookupError(`S3 endpoint host "${hostname}" did not resolve to any address`);
+  }
+
+  const privateResolutionAllowed = s3PrivateResolutionAllowed(hostname, baseHostname);
+  for (const record of records) {
+    const address = normalizeHostname(record.address);
+    if (isUnconditionallyBlockedHost(address)) {
+      throw lookupError(`S3 endpoint host "${hostname}" resolves to blocked address ${address}`);
+    }
+    if (isPrivateOrLoopbackHost(address) && !privateResolutionAllowed) {
+      throw lookupError(
+        `S3 endpoint host "${hostname}" resolves to private/loopback address ${address}. Set S3_ALLOW_LOOPBACK=1 to allow all private hosts, or list the hostname in S3_ALLOWED_HOSTS for granular access.`,
+      );
+    }
+  }
+}
+
+export function createS3EndpointLookup(rawEndpoint: string): typeof dnsLookup {
+  const endpoint = enforceS3EndpointPolicy(rawEndpoint);
+  const baseHostname = endpoint ? normalizeHostname(new URL(endpoint).hostname) : undefined;
+  const guardedLookup = (
+    hostname: string,
+    optionsOrCallback: LookupOptions | number | LookupCallback,
+    maybeCallback?: LookupCallback,
+  ): void => {
+    const callback = typeof optionsOrCallback === "function" ? optionsOrCallback : maybeCallback;
+    if (!callback) {
+      throw new TypeError("callback is required");
+    }
+    const requestedOptions = typeof optionsOrCallback === "function" ? {} : normalizeLookupOptions(optionsOrCallback);
+    const wantsAll = requestedOptions.all === true;
+    const normalizedHost = normalizeHostname(hostname);
+    dnsLookup(hostname, { ...requestedOptions, all: true, verbatim: true }, (err, records) => {
+      if (err) {
+        callback(err, "", 0);
+        return;
+      }
+      try {
+        validateS3ResolvedAddresses(normalizedHost, records, baseHostname);
+      } catch (error) {
+        callback(error as NodeJS.ErrnoException, "", 0);
+        return;
+      }
+      if (wantsAll) {
+        callback(null, records);
+        return;
+      }
+      const first = records[0];
+      callback(null, first.address, first.family);
+    });
+  };
+
+  return guardedLookup as typeof dnsLookup;
+}
+
+export async function resolveAndEnforceS3EndpointPolicy(rawEndpoint: string): Promise<string> {
+  const endpoint = enforceS3EndpointPolicy(rawEndpoint);
+  if (!endpoint) return "";
+
+  const parsed = new URL(endpoint);
+  const hostname = normalizeHostname(parsed.hostname);
+  if (!shouldResolveHostname(hostname)) {
+    return endpoint;
+  }
+
+  let records: Array<{ address: string }> = [];
+  try {
+    const dns = await import("node:dns/promises");
+    records = await dns.lookup(hostname, { all: true, verbatim: true });
+  } catch (err) {
+    throw new ApiRouteError(
+      `DNS lookup failed for S3 endpoint host "${hostname}": ${err instanceof Error ? err.message : String(err)}`,
+      400,
+    );
+  }
+
+  if (records.length === 0) {
+    throw new ApiRouteError(`S3 endpoint host "${hostname}" did not resolve to any address`, 400);
+  }
+
+  try {
+    validateS3ResolvedAddresses(hostname, records);
+  } catch (error) {
+    throw new ApiRouteError(error instanceof Error ? error.message : String(error), 400);
+  }
+
+  return endpoint;
+}

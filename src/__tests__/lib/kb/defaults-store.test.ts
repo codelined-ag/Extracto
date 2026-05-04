@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -86,6 +86,20 @@ describe("saveKbDefaults", () => {
       embedding: { dimensions: -5 as unknown as number },
     });
     expect(saved.embedding.dimensions).toBe(768);
+  });
+
+  it("stores credential defaults with private file and directory modes", async () => {
+    const m = await loadModule();
+
+    await m.saveKbDefaults("user1", {
+      embedding: { apiKey: "embed-secret", replaceApiKey: true },
+      vectorStore: { apiKey: "store-secret", replaceApiKey: true },
+    });
+
+    const dir = path.join(workdir, "kb-defaults");
+    const file = path.join(dir, "user1.json");
+    expect((await stat(dir)).mode & 0o777).toBe(0o700);
+    expect((await stat(file)).mode & 0o777).toBe(0o600);
   });
 });
 

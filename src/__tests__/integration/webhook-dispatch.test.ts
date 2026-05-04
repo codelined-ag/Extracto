@@ -104,6 +104,7 @@ describe("dispatchJobWebhooks integration", () => {
     const [url, init] = mockedFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://example.test/hook");
     expect(init.method).toBe("POST");
+    expect(init.redirect).toBe("manual");
     const headers = init.headers as Record<string, string>;
     expect(headers["Content-Type"]).toBe("application/json");
     expect(headers["X-Extracto-Event"]).toBe("job.completed");
@@ -122,6 +123,61 @@ describe("dispatchJobWebhooks integration", () => {
     expect(mUpdateWebhook).toHaveBeenCalledWith({
       where: { id: "wh-1" },
       data: { lastFiredAt: expect.any(Date), failureCount: 0 },
+    });
+  });
+
+  it("follows redirects only after validating the redirected destination", async () => {
+    mFindWebhooks.mockResolvedValueOnce([
+      {
+        id: "wh-redirect",
+        url: "https://example.test/hook",
+        secret: SECRET,
+        events: serializeEventList(["job.completed"]),
+      },
+    ]);
+    mockedFetch
+      .mockResolvedValueOnce(new Response(null, {
+        status: 307,
+        headers: { location: "https://hooks.example.test/final" },
+      }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await dispatchJobWebhooks("job-1", "job.completed");
+
+    expect(mResolveUrl).toHaveBeenNthCalledWith(1, "https://example.test/hook", []);
+    expect(mResolveUrl).toHaveBeenNthCalledWith(2, "https://hooks.example.test/final", []);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(mockedFetch.mock.calls[1][0]).toBe("https://hooks.example.test/final");
+    expect((mockedFetch.mock.calls[1][1] as RequestInit).redirect).toBe("manual");
+    expect(mUpdateWebhook).toHaveBeenCalledWith({
+      where: { id: "wh-redirect" },
+      data: { lastFiredAt: expect.any(Date), failureCount: 0 },
+    });
+  });
+
+  it("fails the delivery when a redirect target fails URL safety", async () => {
+    mFindWebhooks.mockResolvedValueOnce([
+      {
+        id: "wh-unsafe-redirect",
+        url: "https://example.test/hook",
+        secret: SECRET,
+        events: serializeEventList(["job.completed"]),
+      },
+    ]);
+    mockedFetch.mockResolvedValueOnce(new Response(null, {
+      status: 302,
+      headers: { location: "http://10.0.0.1/hook" },
+    }));
+    mResolveUrl
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: false, reason: "private address" });
+
+    await dispatchJobWebhooks("job-1", "job.completed");
+
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(mUpdateWebhook).toHaveBeenCalledWith({
+      where: { id: "wh-unsafe-redirect" },
+      data: { failureCount: { increment: 1 } },
     });
   });
 

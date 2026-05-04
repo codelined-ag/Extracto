@@ -7,8 +7,12 @@ import { withAuth, withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
 import { submitOcrJob } from "@/lib/ocr/job-submit";
-import { extractAnchorsForPages } from "@/lib/ocr/pdf-anchoring-helper";
-import { normalizePreviewForHistory } from "@/lib/ocr/job-input-helpers";
+import {
+  normalizeOcrInputPreviews,
+  normalizeOcrPageNumbers,
+  normalizePreviewForHistory,
+  normalizeSourcePdfForAnchoring,
+} from "@/lib/ocr/job-input-helpers";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
 
@@ -54,20 +58,14 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
 
   const ip = getClientIpAddress(request);
   for (let i = 0; i < models.length; i++) {
-    const limited = enforceOcrSubmitRateLimit(auth, ip);
+    const limited = await enforceOcrSubmitRateLimit(auth, ip);
     if (limited) return limited;
   }
 
-  const pages = Array.isArray(body.pages)
-    ? body.pages.filter((p): p is string => typeof p === "string")
-    : undefined;
-  const pageNumbers = Array.isArray(body.pageNumbers)
-    ? body.pageNumbers.filter((n): n is number => typeof n === "number" && Number.isInteger(n) && n >= 1)
-    : undefined;
-  const sourcePdf = typeof body.sourcePdf === "string" && body.sourcePdf.trim() ? body.sourcePdf.trim() : undefined;
-  const inputPreviews = pages && pages.length > 0 ? pages : [preview];
+  const inputPreviews = normalizeOcrInputPreviews(body.pages, preview);
+  const pageNumbers = normalizeOcrPageNumbers(body.pageNumbers, inputPreviews.length);
+  const sourcePdf = normalizeSourcePdfForAnchoring(body.sourcePdf, pageNumbers, inputPreviews.length);
   const sourcePreview = normalizePreviewForHistory(inputPreviews[0]);
-  const pageAnchors = await extractAnchorsForPages(sourcePdf, pageNumbers, inputPreviews.length);
 
   const comparisonId = `cmp_${randomBytes(8).toString("hex")}`;
   const apiKeyId = auth.method === "api-key" ? auth.apiKeyId ?? null : null;
@@ -85,7 +83,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
         model,
         inputPreviews,
         pageNumbers,
-        pageAnchors,
+        sourcePdf,
         sourcePreview,
         priority: 1,
       });

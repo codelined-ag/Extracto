@@ -89,6 +89,15 @@ model WebhookDelivery {
   @@index([webhookId, attemptedAt(sort: Desc)])
 }
 
+model RateLimitBucket {
+  key       String   @id
+  count     Int      @default(0)
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
+}
+
 model OutputPreset {
   id           String   @id @default(cuid())
   userId       String

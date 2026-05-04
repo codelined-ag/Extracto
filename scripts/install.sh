@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_URL="${EXTRACTO_REPO_URL:-https://github.com/codelined-ag/Extracto.git}"
-REPO_REF="${EXTRACTO_REPO_REF:-v0.5.4}"
+REPO_REF="${EXTRACTO_REPO_REF:-v0.5.5}"
 INSTALL_DIR="${EXTRACTO_INSTALL_DIR:-$HOME/.local/share/extracto}"
 AUTOSTART="${EXTRACTO_AUTOSTART:-1}"
 

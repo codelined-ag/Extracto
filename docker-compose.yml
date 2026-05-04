@@ -1,15 +1,18 @@
 services:
   app:
-    image: ghcr.io/codelined-ag/extracto:${EXTRACTO_TAG:-latest}
+    image: ghcr.io/codelined-ag/extracto:${EXTRACTO_TAG:-v0.5.5}
     build:
       context: .
       dockerfile: Dockerfile
     env_file:
       - docker.env
-    network_mode: ${APP_NETWORK_MODE:-host}
+    network_mode: ${APP_NETWORK_MODE:-bridge}
     environment:
-      APP_NETWORK_MODE: ${APP_NETWORK_MODE:-host}
+      APP_NETWORK_MODE: ${APP_NETWORK_MODE:-bridge}
       AUTH_SECRET: ${AUTH_SECRET:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-0}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
     extra_hosts:
       - "host.docker.internal:host-gateway"
       - "host-gateway:host-gateway"

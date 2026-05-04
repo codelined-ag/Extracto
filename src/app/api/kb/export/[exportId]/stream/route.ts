@@ -1,6 +1,11 @@
 import { NextRequest } from "next/server";
 
-import { authenticateRequest } from "@/lib/auth/request";
+import {
+  authenticateRequest,
+  enforceApiKeyRequestRateLimit,
+  enforceStreamConnectionRateLimit,
+  requireScope,
+} from "@/lib/auth/request";
 import { getKbExport, subscribeKbExport, type KbExportProgressEvent } from "@/lib/kb/export-progress";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +23,12 @@ export async function GET(
       headers: { "Content-Type": "application/json" },
     });
   }
+  const scopeError = requireScope(auth, "kb:write");
+  if (scopeError) return scopeError;
+  const apiKeyLimitError = await enforceApiKeyRequestRateLimit(auth);
+  if (apiKeyLimitError) return apiKeyLimitError;
+  const streamLimitError = await enforceStreamConnectionRateLimit(auth, "kb-export");
+  if (streamLimitError) return streamLimitError;
 
   const { exportId } = await context.params;
   const initial = getKbExport(exportId, auth.userId);

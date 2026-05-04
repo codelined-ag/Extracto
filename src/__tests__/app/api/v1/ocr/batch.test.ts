@@ -44,7 +44,21 @@ vi.mock("@/lib/ocr/settings-store", () => ({
 
 vi.mock("@/lib/ocr/job-input-helpers", () => ({
   buildPrompt: vi.fn().mockReturnValue("PROMPT"),
+  normalizeOcrInputPreviews: vi.fn((pages: unknown, preview: unknown) => {
+    const pageList = Array.isArray(pages)
+      ? pages.map((p) => (typeof p === "string" ? p.trim() : "")).filter(Boolean)
+      : [];
+    const fallback = typeof preview === "string" && preview.trim() ? [preview.trim()] : [];
+    return pageList.length > 0 ? pageList : fallback;
+  }),
+  normalizeOcrPageNumbers: vi.fn((pageNumbers: unknown, expectedLength: number) => {
+    if (!Array.isArray(pageNumbers)) return undefined;
+    const cleaned = pageNumbers.filter((p): p is number => typeof p === "number" && Number.isInteger(p) && p >= 1);
+    if (cleaned.length !== expectedLength) throw new Error("pageNumbers length mismatch");
+    return cleaned;
+  }),
   normalizePreviewForHistory: vi.fn().mockReturnValue("data:preview"),
+  normalizeSourcePdfForAnchoring: vi.fn(() => undefined),
   sanitizePostProcessing: vi.fn().mockReturnValue({
     enabled: false,
     outputFormat: "markdown",

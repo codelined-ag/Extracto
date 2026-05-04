@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 
 $RepoUrl    = if ($env:EXTRACTO_REPO_URL)    { $env:EXTRACTO_REPO_URL }    else { "https://github.com/codelined-ag/Extracto.git" }
-$RepoRef    = if ($env:EXTRACTO_REPO_REF)    { $env:EXTRACTO_REPO_REF }    else { "v0.5.4" }
+$RepoRef    = if ($env:EXTRACTO_REPO_REF)    { $env:EXTRACTO_REPO_REF }    else { "v0.5.5" }
 if ($RepoUrl -notmatch "^https://") {
   Write-Host "EXTRACTO_REPO_URL must be https:// (got $RepoUrl)" -ForegroundColor Red
   exit 1

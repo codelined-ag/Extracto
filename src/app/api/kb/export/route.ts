@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { runKbExport } from "@/lib/kb/export";
 import { isKbExportEnabled } from "@/lib/kb/feature-flag";
 import { registerKbExport, updateKbExport } from "@/lib/kb/export-progress";
+import { readResultText } from "@/lib/ocr/result-store";
 import {
   enforceProviderEndpointPolicy,
   enforceVectorStoreEndpointPolicy,
@@ -60,7 +61,7 @@ interface KbExportBrowserRequest extends Record<string, unknown> {
   overrides?: Partial<KbDefaults>;
 }
 
-export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { auth }) => {
+export const POST = withMutationAuth("kb:write", async (request: NextRequest, { auth }) => {
   if (!isKbExportEnabled()) {
     throw new ApiRouteError(
       "KB export is disabled on this instance.",
@@ -109,6 +110,7 @@ export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { 
       id: true,
       fileName: true,
       extractedText: true,
+      extractedTextLocation: true,
       model: true,
       completedAt: true,
       createdAt: true,
@@ -118,7 +120,8 @@ export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { 
   if (!job) {
     throw new ApiRouteError("Job not found", 404);
   }
-  if (!job.extractedText || !job.extractedText.trim()) {
+  const extractedText = await readResultText(job.extractedTextLocation, job.extractedText);
+  if (!extractedText || !extractedText.trim()) {
     throw new ApiRouteError("Job has no extracted text to export", 400);
   }
 
@@ -145,7 +148,7 @@ export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { 
   void runKbExport({
     jobId: job.id,
     fileName: job.fileName,
-    extractedText: job.extractedText,
+    extractedText,
     extractedAt: (job.completedAt ?? job.createdAt).toISOString(),
     sourceModel: job.model ?? undefined,
     language,

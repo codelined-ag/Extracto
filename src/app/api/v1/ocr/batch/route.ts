@@ -5,19 +5,24 @@ import { ApiRouteError, errorMessage } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
 import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { getClientIpAddress } from "@/lib/request-security";
-import { normalizePreviewForHistory } from "@/lib/ocr/job-input-helpers";
+import {
+  normalizeOcrInputPreviews,
+  normalizeOcrPageNumbers,
+  normalizePreviewForHistory,
+  normalizeSourcePdfForAnchoring,
+} from "@/lib/ocr/job-input-helpers";
 import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
 import { submitOcrJob } from "@/lib/ocr/job-submit";
-import { extractAnchorsForPages } from "@/lib/ocr/pdf-anchoring-helper";
 import type { AdvancedSettings, PostProcessingSettings } from "@/lib/ocr/settings";
 import { getApiSettings } from "@/lib/ocr/settings-store";
+import { MAX_BATCH_OCR_SUBMIT_PAGES } from "@/lib/ocr/input-limits";
 
 const MAX_BATCH_SIZE = 50;
 
 interface BatchFile {
   fileName: string;
   preview: string;
-  pages?: string[];
+  inputPreviews: string[];
   pageNumbers?: number[];
   sourcePdf?: string;
   model: string;
@@ -35,6 +40,7 @@ function parseBatchBody(raw: unknown): BatchFile[] | { error: string } {
     return { error: `Maximum of ${MAX_BATCH_SIZE} files per batch` };
   }
   const parsed: BatchFile[] = [];
+  let totalPages = 0;
   for (const entry of files) {
     if (!entry || typeof entry !== "object") {
       return { error: "Each file must be an object" };
@@ -46,40 +52,27 @@ function parseBatchBody(raw: unknown): BatchFile[] | { error: string } {
     if (!fileName || !preview || !model) {
       return { error: "Each file requires fileName, preview, and model" };
     }
-    const pages = Array.isArray(f.pages)
-      ? f.pages.filter((p): p is string => typeof p === "string")
-      : undefined;
+    let inputPreviews: string[];
     let pageNumbers: number[] | undefined;
-    if (Array.isArray(f.pageNumbers)) {
-      const cleaned = f.pageNumbers.filter(
-        (p): p is number => typeof p === "number" && Number.isInteger(p) && p >= 1 && p <= 10_000,
-      );
-      if (cleaned.length !== f.pageNumbers.length) {
-        return { error: "pageNumbers must be a list of positive integers (1-indexed)" };
-      }
-      const targetLength = pages?.length ?? 1;
-      if (cleaned.length !== targetLength) {
-        return { error: `pageNumbers length (${cleaned.length}) must equal pages length (${targetLength})` };
-      }
-      if (new Set(cleaned).size !== cleaned.length) {
-        return { error: "pageNumbers must not contain duplicates" };
-      }
-      for (let i = 1; i < cleaned.length; i++) {
-        if (cleaned[i] <= cleaned[i - 1]) {
-          return { error: "pageNumbers must be strictly ascending" };
-        }
-      }
-      pageNumbers = cleaned;
+    try {
+      inputPreviews = normalizeOcrInputPreviews(f.pages, preview);
+      pageNumbers = normalizeOcrPageNumbers(f.pageNumbers, inputPreviews.length);
+    } catch (error) {
+      return { error: errorMessage(error, "Invalid page input") };
+    }
+    totalPages += inputPreviews.length;
+    if (totalPages > MAX_BATCH_OCR_SUBMIT_PAGES) {
+      return { error: `Maximum of ${MAX_BATCH_OCR_SUBMIT_PAGES} page images per batch` };
     }
     const priority =
       typeof f.priority === "number" && Number.isFinite(f.priority)
         ? Math.max(-10, Math.min(10, Math.trunc(f.priority)))
         : 0;
-    const sourcePdf = typeof f.sourcePdf === "string" && f.sourcePdf.trim() ? f.sourcePdf.trim() : undefined;
+    const sourcePdf = normalizeSourcePdfForAnchoring(f.sourcePdf, pageNumbers, inputPreviews.length);
     parsed.push({
       fileName,
       preview,
-      pages,
+      inputPreviews,
       pageNumbers,
       sourcePdf,
       model,
@@ -92,7 +85,7 @@ function parseBatchBody(raw: unknown): BatchFile[] | { error: string } {
 }
 
 export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, { auth }) => {
-  const limited = enforceOcrSubmitRateLimit(auth, getClientIpAddress(request));
+  const limited = await enforceOcrSubmitRateLimit(auth, getClientIpAddress(request));
   if (limited) return limited;
 
   const raw = await request.json().catch(() => null);
@@ -115,13 +108,7 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
         perRequestPostProcessing: file.postProcessing,
         preloadedSettings,
       });
-      const inputPreviews = file.pages && file.pages.length > 0 ? file.pages : [file.preview];
-      const sourcePreview = normalizePreviewForHistory(inputPreviews[0] || "");
-      const pageAnchors = await extractAnchorsForPages(
-        file.sourcePdf,
-        file.pageNumbers,
-        inputPreviews.length,
-      );
+      const sourcePreview = normalizePreviewForHistory(file.inputPreviews[0] || "");
 
       const { jobId } = await submitOcrJob({
         ...inputs,
@@ -129,9 +116,9 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
         apiKeyId,
         fileName: file.fileName,
         model: file.model,
-        inputPreviews,
+        inputPreviews: file.inputPreviews,
         pageNumbers: file.pageNumbers,
-        pageAnchors,
+        sourcePdf: file.sourcePdf,
         sourcePreview,
         priority: file.priority,
         batchId,

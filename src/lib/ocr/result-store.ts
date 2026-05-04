@@ -1,5 +1,8 @@
 import { Prisma } from "@prisma/client";
 
+import { resolveAndEnforceS3EndpointPolicy } from "@/lib/ocr/endpoint-policy";
+import { createS3EndpointRequestHandler } from "@/lib/s3/guarded-request-handler";
+
 function getS3Config() {
   return {
     bucket: process.env.S3_BUCKET?.trim() || "",
@@ -22,9 +25,12 @@ async function getS3Client() {
   const cfg = getS3Config();
   try {
     const mod = await import("@aws-sdk/client-s3");
+    const endpoint = cfg.endpoint ? await resolveAndEnforceS3EndpointPolicy(cfg.endpoint) : "";
+    const requestHandler = endpoint ? await createS3EndpointRequestHandler(endpoint) : undefined;
     s3Client = new mod.S3Client({
       region: cfg.region,
-      ...(cfg.endpoint ? { endpoint: cfg.endpoint } : {}),
+      ...(endpoint ? { endpoint } : {}),
+      ...(requestHandler ? { requestHandler } : {}),
       ...(cfg.forcePathStyle ? { forcePathStyle: true } : {}),
       ...(cfg.accessKeyId && cfg.secretAccessKey
         ? {

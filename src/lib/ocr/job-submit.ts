@@ -34,6 +34,7 @@ export interface SubmitOcrJobInput {
   inputPreviews: string[];
   pageNumbers?: number[];
   pageAnchors?: import("@/lib/ocr/pdf-anchoring").AnchorPage[];
+  sourcePdf?: string;
   prompt: string;
   sourcePreview: string | null;
   priority?: number;
@@ -92,6 +93,7 @@ function kickoffProcessing(
       inputPreviews: input.inputPreviews,
       pageNumbers: input.pageNumbers,
       pageAnchors: input.pageAnchors,
+      sourcePdf: input.sourcePdf,
       prompt: input.prompt,
       ...resumeExtras,
     }),

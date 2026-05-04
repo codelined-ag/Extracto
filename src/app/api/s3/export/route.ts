@@ -15,7 +15,7 @@ interface S3ExportBrowserRequest extends Record<string, unknown> {
 }
 
 export const POST = withMutationAuth("s3:write", async (request: NextRequest, { auth }) => {
-  const limited = enforceS3RateLimit(auth, getClientIpAddress(request), "write");
+  const limited = await enforceS3RateLimit(auth, getClientIpAddress(request), "write");
   if (limited) return limited;
   const body = await parseJsonBody<S3ExportBrowserRequest>(request);
   const jobId = typeof body.jobId === "string" ? body.jobId.trim() : "";
