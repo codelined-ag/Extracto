@@ -6,6 +6,15 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-05-05
+
+### Fixed
+- KB export now rewrites localhost-flavored embedding and vector-store URLs to a docker-gateway-reachable host so naive defaults work out of the box from inside the bridged container.
+- OpenSearch adapter normalizes collection names to the lowercase shape it requires; mixed-case or punctuated names no longer crash export.
+- Milvus adapter sends the `max_length` schema param so collection creation stops failing with a cryptic `strconv.ParseInt` error on Milvus 2.4.
+- The KB test-connection route accepts `typesense`; the MCP `kb_test_connection` tool widened to all seven supported store kinds.
+- The `extracto kb export` CLI no longer crashes on a trailing-newline parsing bug when optional flags are omitted.
+
 ## [0.9.0] - 2026-05-05
 
 ### Added
