@@ -242,6 +242,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       documentPresetExpectsJson:
         input.settingsPayload.documentPreset === "invoice" ||
         input.settingsPayload.documentPreset === "form",
+      pageConcurrency: input.settingsPayload.pageConcurrency,
       startIndex,
       snapshot: snapshotMetadata,
       ocrPct,

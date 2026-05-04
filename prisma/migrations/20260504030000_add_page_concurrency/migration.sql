@@ -1,0 +1,1 @@
+ALTER TABLE "OcrSetting" ADD COLUMN "pageConcurrency" INTEGER NOT NULL DEFAULT 0;

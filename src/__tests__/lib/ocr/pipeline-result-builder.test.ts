@@ -18,6 +18,7 @@ const settings = {
   quality: 80,
   preferTextLayer: true,
   documentPreset: "generic",
+  pageConcurrency: 1,
 } as const;
 
 const page: ProcessedPageOutput = {

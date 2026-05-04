@@ -45,6 +45,7 @@ const baseInput = {
     quality: 80,
     preferTextLayer: true,
     documentPreset: "generic" as const,
+    pageConcurrency: 1,
   },
   postProcessingPayload: {
     enabled: false,

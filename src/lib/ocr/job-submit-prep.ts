@@ -6,6 +6,8 @@ import { getDocumentPreset } from "@/lib/ocr/document-presets";
 import {
   DEFAULT_SETTINGS,
   OCR_SETTINGS_KEY,
+  PAGE_CONCURRENCY_AUTO,
+  defaultPageConcurrencyForProvider,
   normalizeAdvancedSettings,
   type AdvancedSettings,
   type PostProcessingSettings,
@@ -62,7 +64,11 @@ export async function resolveOcrJobInputs(args: {
   const storedAdvanced = await loadStoredAdvancedSettings(args.userId);
   const merged = { ...storedAdvanced, ...(args.perRequestSettings ?? {}) };
   const normalized = normalizeAdvancedSettings(merged);
-  const settingsPayload = applyPresetForcedFlags(normalized);
+  const resolvedConcurrency =
+    normalized.pageConcurrency === PAGE_CONCURRENCY_AUTO
+      ? defaultPageConcurrencyForProvider(provider)
+      : normalized.pageConcurrency;
+  const settingsPayload = applyPresetForcedFlags({ ...normalized, pageConcurrency: resolvedConcurrency });
   const postProcessingPayload = sanitizePostProcessing(args.perRequestPostProcessing);
   const ocrModel = provider === "mistral" ? resolveMistralOcrModel(args.model) : args.model;
   const prompt = buildPrompt(settingsPayload);

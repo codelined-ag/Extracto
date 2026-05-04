@@ -16,9 +16,15 @@ export interface AdvancedSettings {
   quality: number;
   preferTextLayer: boolean;
   documentPreset: DocumentPresetKind;
+  pageConcurrency: number;
 }
 
 export type DocumentPresetKind = "generic" | "academic" | "invoice" | "contract" | "form";
+
+export const PAGE_CONCURRENCY_AUTO = 0;
+export const PAGE_CONCURRENCY_MIN = 1;
+export const PAGE_CONCURRENCY_MAX = 16;
+export const PAGE_CONCURRENCY_DEFAULT = PAGE_CONCURRENCY_AUTO;
 
 export const DEFAULT_SETTINGS: AdvancedSettings = {
   language: "auto",
@@ -29,6 +35,7 @@ export const DEFAULT_SETTINGS: AdvancedSettings = {
   quality: 80,
   preferTextLayer: true,
   documentPreset: "generic",
+  pageConcurrency: PAGE_CONCURRENCY_DEFAULT,
 };
 
 const VALID_PRESETS: ReadonlySet<DocumentPresetKind> = new Set([
@@ -71,6 +78,13 @@ export function normalizeAdvancedSettings(input: unknown): AdvancedSettings {
       ? Math.max(50, Math.min(100, Math.round(rawQuality / 10) * 10))
       : DEFAULT_SETTINGS.quality;
 
+  const rawConcurrency = c?.pageConcurrency;
+  let pageConcurrency = DEFAULT_SETTINGS.pageConcurrency;
+  if (typeof rawConcurrency === "number" && Number.isFinite(rawConcurrency)) {
+    const t = Math.trunc(rawConcurrency);
+    pageConcurrency = t <= 0 ? PAGE_CONCURRENCY_AUTO : Math.min(PAGE_CONCURRENCY_MAX, Math.max(PAGE_CONCURRENCY_MIN, t));
+  }
+
   return {
     language: getString(c, "language", DEFAULT_SETTINGS.language),
     tableDetection: getBool(c, "tableDetection", DEFAULT_SETTINGS.tableDetection),
@@ -80,5 +94,21 @@ export function normalizeAdvancedSettings(input: unknown): AdvancedSettings {
     quality,
     preferTextLayer: getBool(c, "preferTextLayer", DEFAULT_SETTINGS.preferTextLayer),
     documentPreset: getPreset(c, DEFAULT_SETTINGS.documentPreset),
+    pageConcurrency,
   };
+}
+
+export function defaultPageConcurrencyForProvider(provider: string): number {
+  switch (provider) {
+    case "ollama":
+      return 1;
+    case "mistral":
+      return 4;
+    case "openrouter":
+      return 4;
+    case "openai_compat":
+      return 2;
+    default:
+      return PAGE_CONCURRENCY_DEFAULT;
+  }
 }

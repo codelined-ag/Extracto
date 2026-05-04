@@ -536,6 +536,7 @@ export default function ExtractoPage() {
  quality: 80,
  preferTextLayer: true,
  documentPreset: "generic",
+ pageConcurrency: 0,
  });
  const [postProcessing, setPostProcessing] = React.useState<PostProcessingSettings>({
  enabled: false,

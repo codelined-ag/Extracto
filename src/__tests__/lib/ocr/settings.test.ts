@@ -17,6 +17,7 @@ function validSettings(overrides: Partial<AdvancedSettings> = {}): AdvancedSetti
     quality: 90,
     preferTextLayer: true,
     documentPreset: "generic",
+    pageConcurrency: 0,
     ...overrides,
   };
 }
@@ -296,6 +297,7 @@ describe("DEFAULT_SETTINGS", () => {
       quality: 80,
       preferTextLayer: true,
       documentPreset: "generic",
+      pageConcurrency: 0,
     });
   });
 });
