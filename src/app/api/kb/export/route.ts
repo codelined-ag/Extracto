@@ -13,6 +13,10 @@ import { db } from "@/lib/db";
 import { runKbExport } from "@/lib/kb/export";
 import { isKbExportEnabled } from "@/lib/kb/feature-flag";
 import { registerKbExport, updateKbExport } from "@/lib/kb/export-progress";
+import {
+  enforceProviderEndpointPolicy,
+  enforceVectorStoreEndpointPolicy,
+} from "@/lib/ocr/endpoint-policy";
 import { ChromaAdapter } from "@/lib/kb/stores/chroma";
 import { QdrantAdapter } from "@/lib/kb/stores/qdrant";
 import { WeaviateAdapter } from "@/lib/kb/stores/weaviate";
@@ -68,16 +72,28 @@ export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { 
   // Caller may override embedding/chunking/store on a per-call basis,
   // but apiKey overrides are forbidden — keys live on disk and are
   // injected here so the browser never has to round-trip them.
-  const embedding = {
+  const embeddingMerged = {
     ...defaults.embedding,
     ...(body.overrides?.embedding ?? {}),
     apiKey: defaults.embedding.apiKey,
   };
+  const embedding = {
+    ...embeddingMerged,
+    apiEndpoint: enforceProviderEndpointPolicy(
+      embeddingMerged.provider,
+      embeddingMerged.apiEndpoint,
+      embeddingMerged.apiEndpoint,
+    ),
+  };
   const chunking = { ...defaults.chunking, ...(body.overrides?.chunking ?? {}) };
-  const vectorStore = {
+  const vectorStoreMerged = {
     ...defaults.vectorStore,
     ...(body.overrides?.vectorStore ?? {}),
     apiKey: defaults.vectorStore.apiKey,
+  };
+  const vectorStore = {
+    ...vectorStoreMerged,
+    baseUrl: enforceVectorStoreEndpointPolicy(vectorStoreMerged.baseUrl),
   };
 
   const job = await db.ocrJob.findFirst({
