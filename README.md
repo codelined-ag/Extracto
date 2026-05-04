@@ -36,7 +36,7 @@
   </picture>
 </p>
 
-> **v0.6.0**: settings dialog regrouped into 4 task-oriented tabs (OCR, Knowledge base, Storage, Templates) with single-open collapsible sections, account-personal preferences split into a dedicated dialog, real-time per-page OCR progress, Markdown results that render with proper typographic hierarchy in workspace and history, plus broad auth/rate-limit/security hardening. See the [changelog](./CHANGELOG.md).
+> **v0.7.0**: first-run guided tour and setup wizard for new operators, OpenAPI spec served at `/api/v1/openapi.yaml` with a Scalar API reference at `/api/v1/docs`, single-command `quickstart.sh` install path that finishes inside the healthcheck window, and the last user-visible English-only strings translated end-to-end. See the [changelog](./CHANGELOG.md).
 
 ---
 
@@ -72,7 +72,7 @@ You need Docker. That's it.
 ### Fastest install (under a minute)
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/codelined-ag/Extracto/v0.6.0/scripts/quickstart.sh | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/codelined-ag/Extracto/v0.7.0/scripts/quickstart.sh | bash
 ```
 
 Pulls the prebuilt multi-arch image, runs a single container with an auto-generated `AUTH_SECRET` and a persistent SQLite volume, waits for the healthcheck, and prints the URL. No clone, no compose, no Ollama install. Open <http://localhost:3000>, sign up, and you're in.
@@ -80,11 +80,11 @@ Pulls the prebuilt multi-arch image, runs a single container with an auto-genera
 ### Full install (clone + compose stack + `extracto` CLI on PATH)
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/codelined-ag/Extracto/v0.6.0/scripts/install.sh | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/codelined-ag/Extracto/v0.7.0/scripts/install.sh | bash
 ```
 
 ```powershell
-iwr -UseBasicParsing https://raw.githubusercontent.com/codelined-ag/Extracto/v0.6.0/scripts/install.ps1 | iex
+iwr -UseBasicParsing https://raw.githubusercontent.com/codelined-ag/Extracto/v0.7.0/scripts/install.ps1 | iex
 ```
 
 The installer clones the repo at the pinned tag to `~/.local/share/extracto` (or `%LOCALAPPDATA%\Extracto`), sets up Docker + Ollama if missing, writes localhost-safe overrides to `.extracto.env`, drops an `extracto` launcher on PATH, and starts the stack.
@@ -111,7 +111,7 @@ extracto on
 
 **Single `docker run` (no launcher):**
 ```bash
-docker run -d --name extracto -p 3000:3000 -v extracto-data:/app/data -e AUTH_SECRET="$(openssl rand -hex 32)" -e COOKIE_SECURE=false -e ALLOW_SIGNUP=1 ghcr.io/codelined-ag/extracto:v0.6.0
+docker run -d --name extracto -p 3000:3000 -v extracto-data:/app/data -e AUTH_SECRET="$(openssl rand -hex 32)" -e COOKIE_SECURE=false -e ALLOW_SIGNUP=1 ghcr.io/codelined-ag/extracto:v0.7.0
 ```
 
 Multi-arch (`linux/amd64` + `linux/arm64`); pin a release tag instead of `:latest`. The checked-in compose defaults are production-biased (`COOKIE_SECURE=true`, bridge networking, signup disabled); the installer writes `.extracto.env` overrides for localhost onboarding.
