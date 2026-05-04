@@ -6,6 +6,17 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-05-04
+
+### Added
+- Settings → Model exposes a "Pages in parallel" numeric input (0 = auto picks the per-provider default, max 16).
+- Settings → Knowledge base exposes a "Parallelism" numeric input for embedding fan-out (1..16, persisted in KB defaults).
+- Queue bulk action bar gained a "Run OCR (N)" button so a multi-select runs only the chosen pending files.
+- Queue gained a horizontal gallery view alongside the list view, with a list/gallery toggle in the card header.
+
+### Fixed
+- OpenSearch bulk failures now surface up to three per-item reasons (`_id` + `error.reason`) instead of just a count.
+
 ## [0.5.0] - 2026-05-04
 
 ### Added
