@@ -8,7 +8,7 @@ import {
 } from "@/lib/kb/stores/test-connection";
 import { enforceVectorStoreEndpointPolicy } from "@/lib/ocr/endpoint-policy";
 
-const VALID_STORES = ["chroma", "qdrant", "weaviate"] as const;
+const VALID_STORES = ["chroma", "qdrant", "weaviate", "milvus", "opensearch", "pinecone"] as const;
 
 interface TestConnectionRequest extends Record<string, unknown> {
   kind?: unknown;

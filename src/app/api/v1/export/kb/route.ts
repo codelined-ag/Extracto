@@ -27,6 +27,9 @@ import { runKbExport } from "@/lib/kb/export";
 import { ChromaAdapter } from "@/lib/kb/stores/chroma";
 import { QdrantAdapter } from "@/lib/kb/stores/qdrant";
 import { WeaviateAdapter } from "@/lib/kb/stores/weaviate";
+import { MilvusAdapter } from "@/lib/kb/stores/milvus";
+import { OpenSearchAdapter } from "@/lib/kb/stores/opensearch";
+import { PineconeAdapter } from "@/lib/kb/stores/pinecone";
 import type {
   ChunkingOptions,
   ChunkingStrategy,
@@ -55,7 +58,7 @@ const VALID_STRATEGIES: readonly ChunkingStrategy[] = [
   "semantic",
 ];
 const VALID_PROVIDERS: readonly EmbeddingProviderKind[] = ["ollama", "openrouter", "openai_compat"];
-const VALID_STORES = ["chroma", "qdrant", "weaviate"] as const;
+const VALID_STORES = ["chroma", "qdrant", "weaviate", "milvus", "opensearch", "pinecone"] as const;
 type StoreKind = (typeof VALID_STORES)[number];
 
 interface KbExportRequest extends Record<string, unknown> {
@@ -237,6 +240,14 @@ function parseVectorStore(raw: unknown): VectorStoreAdapter {
   const k = kind as StoreKind;
   if (k === "qdrant") return new QdrantAdapter({ baseUrl, apiKey, dimensions });
   if (k === "weaviate") return new WeaviateAdapter({ baseUrl, apiKey, dimensions });
+  if (k === "milvus") return new MilvusAdapter({ baseUrl, apiKey, dimensions });
+  if (k === "opensearch") return new OpenSearchAdapter({ baseUrl, apiKey, dimensions });
+  if (k === "pinecone") {
+    if (!apiKey) {
+      throw new ApiRouteError("vectorStore.apiKey is required for Pinecone", 400);
+    }
+    return new PineconeAdapter({ baseUrl, apiKey, dimensions });
+  }
   return new ChromaAdapter({ baseUrl, apiKey, dimensions });
 }
 

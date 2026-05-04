@@ -77,7 +77,7 @@ describe.each([
   { label: "v1 route", post: v1Post },
 ])("$label", ({ post }) => {
   it("rejects unknown kind", async () => {
-    const resp = await post(makeRequest({ kind: "pinecone", baseUrl: "http://chroma.test" }));
+    const resp = await post(makeRequest({ kind: "totally-unknown", baseUrl: "http://chroma.test" }));
     expect(resp.status).toBe(400);
   });
 

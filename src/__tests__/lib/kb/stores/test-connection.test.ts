@@ -41,8 +41,7 @@ describe("testVectorStoreConnection: validation", () => {
 
   it("reports unknown store kind", async () => {
     const result = await testVectorStoreConnection(
-      // @ts-expect-error - intentional bad input
-      { kind: "pinecone", baseUrl: "http://example.com" },
+      { kind: "totally-unknown" as never, baseUrl: "http://example.com" },
       mockedFetch as unknown as typeof fetch,
     );
     expect(result.ok).toBe(false);

@@ -16,6 +16,9 @@ import { registerKbExport, updateKbExport } from "@/lib/kb/export-progress";
 import { ChromaAdapter } from "@/lib/kb/stores/chroma";
 import { QdrantAdapter } from "@/lib/kb/stores/qdrant";
 import { WeaviateAdapter } from "@/lib/kb/stores/weaviate";
+import { MilvusAdapter } from "@/lib/kb/stores/milvus";
+import { OpenSearchAdapter } from "@/lib/kb/stores/opensearch";
+import { PineconeAdapter } from "@/lib/kb/stores/pinecone";
 import type { VectorStoreAdapter } from "@/lib/kb/types";
 import {
   getKbDefaults,
@@ -27,6 +30,14 @@ import {
 function buildVectorStore(kind: VectorStoreKind, baseUrl: string, apiKey: string | undefined, dimensions?: number): VectorStoreAdapter {
   if (kind === "qdrant") return new QdrantAdapter({ baseUrl, apiKey, dimensions });
   if (kind === "weaviate") return new WeaviateAdapter({ baseUrl, apiKey, dimensions });
+  if (kind === "milvus") return new MilvusAdapter({ baseUrl, apiKey, dimensions });
+  if (kind === "opensearch") return new OpenSearchAdapter({ baseUrl, apiKey, dimensions });
+  if (kind === "pinecone") {
+    if (!apiKey) {
+      throw new ApiRouteError("Pinecone requires an api key", 400);
+    }
+    return new PineconeAdapter({ baseUrl, apiKey, dimensions });
+  }
   return new ChromaAdapter({ baseUrl, apiKey, dimensions });
 }
 
