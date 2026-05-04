@@ -45,7 +45,7 @@ export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) =
     );
   }
 
-  const jobs = await db.ocrJob.findMany({
+  const rows = await db.ocrJob.findMany({
     orderBy: { createdAt: "desc" },
     take: limit,
     where: {
@@ -63,8 +63,18 @@ export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) =
       processingMs: true,
       metadata: true,
       errorMessage: true,
+      jobTags: {
+        select: {
+          tag: { select: { id: true, name: true, color: true } },
+        },
+      },
     },
   });
+
+  const jobs = rows.map(({ jobTags, ...rest }) => ({
+    ...rest,
+    tags: jobTags.map((jt) => jt.tag),
+  }));
 
   return NextResponse.json({ jobs });
 });

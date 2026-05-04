@@ -34,6 +34,7 @@ model AuthUser {
   jobTemplates       OcrJobTemplate[]
   watchedS3Sources   WatchedS3Source[]
   pushSubscriptions  PushSubscription[]
+  tags               Tag[]
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 }
@@ -177,6 +178,7 @@ model OcrJob {
   processingMs           Int?
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt
+  jobTags                JobTag[]
 
   @@index([status, priority(sort: Desc), createdAt])
   @@index([status, createdAt(sort: Desc)])
@@ -257,4 +259,29 @@ model PushSubscription {
   createdAt   DateTime @default(now())
 
   @@index([userId])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  userId    String
+  user      AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String   @default("slate")
+  jobTags   JobTag[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model JobTag {
+  jobId     String
+  tagId     String
+  job       OcrJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([jobId, tagId])
+  @@index([tagId])
 }

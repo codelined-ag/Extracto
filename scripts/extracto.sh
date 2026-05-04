@@ -394,6 +394,42 @@ api_delete() {
   return "$rc"
 }
 
+api_put_json() {
+  # api_put_json <path> <json-body>
+  local path="$1"
+  local body="$2"
+  local token
+  token="$(require_token)"
+  local config_file rc
+  config_file="$(mktemp)"
+  write_curl_config "$config_file" "Authorization: Bearer ${token}" "Content-Type: application/json" "Accept: application/json"
+  if printf "%s" "$body" | curl -fsS -X PUT --config "$config_file" --data-binary @- "${EXTRACTO_URL_DEFAULT}${path}"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  rm -f "$config_file"
+  return "$rc"
+}
+
+api_patch_json() {
+  # api_patch_json <path> <json-body>
+  local path="$1"
+  local body="$2"
+  local token
+  token="$(require_token)"
+  local config_file rc
+  config_file="$(mktemp)"
+  write_curl_config "$config_file" "Authorization: Bearer ${token}" "Content-Type: application/json" "Accept: application/json"
+  if printf "%s" "$body" | curl -fsS -X PATCH --config "$config_file" --data-binary @- "${EXTRACTO_URL_DEFAULT}${path}"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  rm -f "$config_file"
+  return "$rc"
+}
+
 # ----------------------------------------------------------------------
 # New commands
 # ----------------------------------------------------------------------
@@ -441,8 +477,73 @@ cmd_jobs() {
       done
       printf "%s\n" "$body"
       ;;
+    set-tags)
+      [ -n "${1:-}" ] || die "usage: extracto jobs set-tags <job-id> [<tag-id> ...]"
+      local job_id="$1"
+      shift
+      local ids_json="["
+      local first=1
+      for tag_id in "$@"; do
+        if [ "$first" -eq 1 ]; then first=0; else ids_json="${ids_json},"; fi
+        ids_json="${ids_json}$(printf '%s' "$tag_id" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
+      done
+      ids_json="${ids_json}]"
+      api_put_json "/api/v1/jobs/${job_id}/tags" "$(printf '{"tagIds":%s}' "$ids_json")"
+      ;;
     *)
-      die "usage: extracto jobs <list|get|delete|cancel|wait> [args...]"
+      die "usage: extracto jobs <list|get|delete|cancel|wait|set-tags> [args...]"
+      ;;
+  esac
+}
+
+cmd_tags() {
+  local sub="${1:-list}"
+  shift || true
+  case "$sub" in
+    list)
+      api_get "/api/v1/tags"
+      ;;
+    create)
+      local name="${1:-}"
+      local color="${2:-slate}"
+      [ -n "$name" ] || die "usage: extracto tags create <name> [color]"
+      api_post_json "/api/v1/tags" \
+        "$(printf '{"name":%s,"color":%s}' \
+          "$(printf '%s' "$name" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" \
+          "$(printf '%s' "$color" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")"
+      ;;
+    update)
+      local id="${1:-}"
+      [ -n "$id" ] || die "usage: extracto tags update <id> [--name X] [--color C]"
+      shift
+      local name=""
+      local color=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --name) name="${2:-}"; shift 2 ;;
+          --color) color="${2:-}"; shift 2 ;;
+          *) die "unknown flag: $1" ;;
+        esac
+      done
+      local body="{"
+      local first=1
+      if [ -n "$name" ]; then
+        body="${body}\"name\":$(printf '%s' "$name" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
+        first=0
+      fi
+      if [ -n "$color" ]; then
+        if [ "$first" -eq 0 ]; then body="${body},"; fi
+        body="${body}\"color\":$(printf '%s' "$color" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
+      fi
+      body="${body}}"
+      api_patch_json "/api/v1/tags/${id}" "$body"
+      ;;
+    delete)
+      [ -n "${1:-}" ] || die "usage: extracto tags delete <id>"
+      api_delete "/api/v1/tags/${1}"
+      ;;
+    *)
+      die "usage: extracto tags <list|create|update|delete> [args...]"
       ;;
   esac
 }
@@ -950,6 +1051,11 @@ Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
   jobs delete <id>              Delete a job
   jobs cancel <id>              Request a job stop
   jobs wait <id>                Poll until the job leaves QUEUED/RUNNING
+  jobs set-tags <id> [tag-id...]  Replace the tags applied to a job
+  tags list                     List the caller's tags
+  tags create <name> [color]    Create or recolor a tag (slate|blue|green|yellow|orange|red|pink|purple)
+  tags update <id> [--name X] [--color C]
+  tags delete <id>              Delete a tag (cascades job associations)
   presets list                  List output presets
   presets create <name> <inst> [markdown|json]
   presets delete <id>
@@ -988,6 +1094,7 @@ main() {
     uninstall) cmd_uninstall ;;
     ocr)       shift; cmd_ocr "$@" ;;
     jobs)      shift; cmd_jobs "$@" ;;
+    tags)      shift; cmd_tags "$@" ;;
     presets)   shift; cmd_presets "$@" ;;
     settings)  shift; cmd_settings "$@" ;;
     kb)        shift; cmd_kb "$@" ;;

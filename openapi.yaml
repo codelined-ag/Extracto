@@ -49,6 +49,21 @@ components:
         errorMessage: { type: string, nullable: true }
         extractedText: { type: string, nullable: true }
         result: { type: object, additionalProperties: true, nullable: true }
+        tags:
+          type: array
+          items: { $ref: "#/components/schemas/Tag" }
+
+    Tag:
+      type: object
+      required: [id, name, color]
+      properties:
+        id: { type: string }
+        name: { type: string, maxLength: 32 }
+        color:
+          type: string
+          enum: [slate, blue, green, yellow, orange, red, pink, purple]
+        createdAt: { type: string, format: date-time }
+        jobCount: { type: integer, description: "Only present in tags list responses" }
 
     BatchSubmission:
       type: object
@@ -402,6 +417,129 @@ paths:
               schema:
                 type: object
                 properties: { deleted: { type: integer } }
+
+  /api/v1/jobs/{id}/tags:
+    put:
+      summary: Replace the set of tags applied to a job
+      operationId: setJobTags
+      tags: [Jobs, Tags]
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tagIds]
+              properties:
+                tagIds:
+                  type: array
+                  items: { type: string }
+                  description: Tag ids owned by the caller. Pass an empty array to clear all tags.
+      responses:
+        "200":
+          description: Tags applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items: { $ref: "#/components/schemas/Tag" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/tags:
+    get:
+      summary: List the caller's tags with per-tag job counts
+      operationId: listTags
+      tags: [Tags]
+      responses:
+        "200":
+          description: Tag list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items: { $ref: "#/components/schemas/Tag" }
+    post:
+      summary: Create or recolor a tag (idempotent on name)
+      operationId: createTag
+      tags: [Tags]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 32 }
+                color:
+                  type: string
+                  enum: [slate, blue, green, yellow, orange, red, pink, purple]
+      responses:
+        "200":
+          description: Tag created or updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tag: { $ref: "#/components/schemas/Tag" }
+
+  /api/v1/tags/{id}:
+    patch:
+      summary: Rename a tag and/or change its color
+      operationId: updateTag
+      tags: [Tags]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 32 }
+                color:
+                  type: string
+                  enum: [slate, blue, green, yellow, orange, red, pink, purple]
+      responses:
+        "200":
+          description: Tag updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tag: { $ref: "#/components/schemas/Tag" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Delete a tag (cascades job associations)
+      operationId: deleteTag
+      tags: [Tags]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { deleted: { type: integer } }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /api/jobs/{id}/control:
     post:

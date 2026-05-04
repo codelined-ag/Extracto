@@ -29,9 +29,13 @@ import { LoaderCircleIcon } from "@/components/ui/loader-circle";
 import { SearchIcon } from "@/components/ui/search";
 
 import { deriveHistoryStatus, formatTimestamp } from "@/app/page-components/page-utils";
+import { TagPicker } from "@/app/page-components/tag-picker";
+import { tagChipClass } from "@/app/page-components/tag-utils";
 import type {
   HistoryJobDetail,
   HistoryJobSummary,
+  TagColor,
+  TagListItem,
   Translator,
 } from "@/app/page-components/types";
 
@@ -54,6 +58,11 @@ export interface HistoryDialogProps {
   onDownload: (format: "md" | "json") => void;
   onBulkDelete: (ids: string[]) => void;
   onBulkExport: (ids: string[]) => void;
+  availableTags: TagListItem[];
+  onCreateTag: (name: string, color: TagColor) => Promise<TagListItem | null>;
+  onUpdateTag: (id: string, patch: { name?: string; color?: TagColor }) => Promise<void>;
+  onDeleteTag: (id: string) => Promise<void>;
+  onUpdateJobTags: (jobId: string, tagIds: string[]) => Promise<void>;
 }
 
 export function HistoryDialog({
@@ -73,6 +82,11 @@ export function HistoryDialog({
   onDownload,
   onBulkDelete,
   onBulkExport,
+  availableTags,
+  onCreateTag,
+  onUpdateTag,
+  onDeleteTag,
+  onUpdateJobTags,
 }: HistoryDialogProps) {
   const [search, setSearch] = React.useState("");
   const [filter, setFilter] = React.useState<HistoryFilter>("all");
@@ -337,6 +351,21 @@ export function HistoryDialog({
                         <p className="mt-0.5 text-[11px] text-muted-foreground/70 tabular">
                           {formatTimestamp(job.createdAt)}
                         </p>
+                        {job.tags && job.tags.length > 0 ? (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {job.tags.map((tag) => (
+                              <span
+                                key={tag.id}
+                                className={cn(
+                                  "inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium",
+                                  tagChipClass(tag.color),
+                                )}
+                              >
+                                {tag.name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                       </button>
                     );
                   })}
@@ -436,6 +465,19 @@ export function HistoryDialog({
                           </span>
                         </>
                       ) : null}
+                    </div>
+                    <div className="pt-1">
+                      <TagPicker
+                        t={t}
+                        available={availableTags}
+                        selected={selectedJobDetail.tags ?? []}
+                        onCreate={onCreateTag}
+                        onUpdate={onUpdateTag}
+                        onDelete={onDeleteTag}
+                        onChange={(ids) => {
+                          void onUpdateJobTags(selectedJobDetail.id, ids);
+                        }}
+                      />
                     </div>
                   </div>
                   {selectedJobDetail.sourcePreview ? (

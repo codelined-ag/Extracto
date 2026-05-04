@@ -81,6 +81,22 @@ extracto jobs cancel <job-id>   # POSTs {"action":"stop"} to /api/jobs/<id>/cont
 extracto jobs delete <job-id>   # DELETE /api/jobs/<id>
 ```
 
+### Tag jobs
+
+Tags are user-owned labels you can attach to jobs to organize the History panel. The CLI talks to `/api/v1/tags` and `/api/v1/jobs/{id}/tags`.
+
+```bash
+extracto tags list                            # all tags + jobCount per tag
+extracto tags create "Invoices" blue          # color: slate|blue|green|yellow|orange|red|pink|purple
+extracto tags update <tag-id> --name "Q1 invoices" --color green
+extracto tags delete <tag-id>                 # cascades: also removes from jobs
+
+extracto jobs set-tags <job-id> <tag-id> <tag-id> ...   # replaces the job's tag set
+extracto jobs set-tags <job-id>                          # clears all tags (no ids)
+```
+
+`jobs list` and `jobs get` include a `tags: [{id, name, color}]` array.
+
 ### Manage output presets
 
 Presets are saved post-processing instructions (e.g. "Extract all tables as JSON"). Useful for repeated downstream pipelines.

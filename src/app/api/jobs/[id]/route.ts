@@ -30,6 +30,11 @@ export const GET = withAuth<{ id: string }>(
         extractedTextLocation: true,
         result: true,
         resultLocation: true,
+        jobTags: {
+          select: {
+            tag: { select: { id: true, name: true, color: true } },
+          },
+        },
       },
     });
 
@@ -55,6 +60,7 @@ export const GET = withAuth<{ id: string }>(
       errorMessage: row.errorMessage,
       extractedText,
       result,
+      tags: row.jobTags.map((jt) => jt.tag),
     };
 
     return NextResponse.json({ job });

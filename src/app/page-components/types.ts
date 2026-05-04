@@ -80,6 +80,27 @@ export interface ProcessingFile {
   isPreprocessing?: boolean;
 }
 
+export type TagColor =
+  | "slate"
+  | "blue"
+  | "green"
+  | "yellow"
+  | "orange"
+  | "red"
+  | "pink"
+  | "purple";
+
+export interface TagSummary {
+  id: string;
+  name: string;
+  color: TagColor;
+}
+
+export interface TagListItem extends TagSummary {
+  createdAt?: string;
+  jobCount?: number;
+}
+
 export interface HistoryJobSummary {
   id: string;
   status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
@@ -91,6 +112,7 @@ export interface HistoryJobSummary {
   processingMs?: number | null;
   metadata?: unknown;
   errorMessage?: string | null;
+  tags?: TagSummary[];
 }
 
 export interface HistoryJobDetail extends HistoryJobSummary {

@@ -97,6 +97,7 @@ import { TemplatesSection } from "@/app/page-components/templates-section";
 import { clearQueue, deletePagePreviews, loadAllPagePreviews, loadQueue, persistPagePreviews, persistQueue, reconcileJobFromServer } from "@/app/page-components/queue-persistence";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { useHistory } from "@/app/page-components/use-history";
+import { useTags } from "@/app/page-components/use-tags";
 import { PreviewHeader } from "@/app/page-components/preview-header";
 import { NoSelectionCard } from "@/app/page-components/no-selection-card";
 import { DocumentGallery } from "@/app/page-components/document-gallery";
@@ -632,6 +633,7 @@ export default function ExtractoPage() {
  [uiLanguage]
  );
  const history = useHistory(t);
+ const tagState = useTags(t);
  const { start: restartTour } = useOnboardingTour(t);
  const openSettingsTab = React.useCallback(
  (tab: SettingsTab) => {
@@ -1091,6 +1093,11 @@ export default function ExtractoPage() {
  }
  void history.loadDetail(history.selectedId);
  }, [historyOpen, history.selectedId, history.loadDetail, history.resetSelection]);
+
+ React.useEffect(() => {
+ if (!historyOpen) return;
+ void tagState.loadTags();
+ }, [historyOpen, tagState.loadTags]);
 
  React.useEffect(() => {
  if (!ocrSettingsLoadedRef.current) return;
@@ -2973,6 +2980,23 @@ export default function ExtractoPage() {
         onDownload={downloadHistoryResult}
         onBulkDelete={history.deleteMany}
         onBulkExport={history.exportManyAsZip}
+        availableTags={tagState.tags}
+        onCreateTag={tagState.createTag}
+        onUpdateTag={async (id, patch) => {
+          await tagState.updateTag(id, patch);
+          await history.loadJobs();
+          if (history.selectedId) await history.loadDetail(history.selectedId);
+        }}
+        onDeleteTag={async (id) => {
+          await tagState.deleteTag(id);
+          await history.loadJobs();
+          if (history.selectedId) await history.loadDetail(history.selectedId);
+        }}
+        onUpdateJobTags={async (jobId, tagIds) => {
+          await tagState.setJobTags(jobId, tagIds);
+          await history.loadJobs();
+          if (history.selectedId === jobId) await history.loadDetail(jobId);
+        }}
       />
 
  {/* Main Content */}

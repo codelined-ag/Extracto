@@ -69,12 +69,14 @@ describe("GET /api/jobs/[id]", () => {
       extractedTextLocation: null,
       result: { markdown: "x" },
       resultLocation: null,
+      jobTags: [{ tag: { id: "t1", name: "invoices", color: "blue" } }],
     });
     const res = await GET(makeReq(), { params: Promise.resolve({ id: "j1" }) });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.job.id).toBe("j1");
     expect(body.job.extractedText).toBe("extracted text");
+    expect(body.job.tags).toEqual([{ id: "t1", name: "invoices", color: "blue" }]);
     expect(mockedFindFirst.mock.calls[0][0].where).toEqual({ id: "j1", userId: "u1" });
   });
 

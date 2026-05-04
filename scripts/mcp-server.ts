@@ -12,7 +12,7 @@ if (!EXTRACTO_TOKEN) {
 }
 
 interface ExtractoFetchInit {
-  method?: "GET" | "POST" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
 }
 
@@ -176,6 +176,75 @@ server.tool(
       await call(`/api/jobs/${encodeURIComponent(jobId)}/control`, {
         method: "POST",
         body: { action: "stop" },
+      }),
+    ),
+);
+
+const TAG_COLOR_ENUM = z.enum([
+  "slate",
+  "blue",
+  "green",
+  "yellow",
+  "orange",
+  "red",
+  "pink",
+  "purple",
+]);
+
+server.tool(
+  "tags_list",
+  "List the caller's tags with the count of jobs each tag is applied to.",
+  {},
+  async () => asTextResult(await call("/api/v1/tags")),
+);
+
+server.tool(
+  "tags_create",
+  "Create a tag, or update its color if a tag with the same name already exists.",
+  {
+    name: z.string().min(1).max(32),
+    color: TAG_COLOR_ENUM.optional(),
+  },
+  async (input) => asTextResult(await call("/api/v1/tags", { method: "POST", body: input })),
+);
+
+server.tool(
+  "tags_update",
+  "Rename a tag and/or change its color. At least one of `name` or `color` is required.",
+  {
+    id: z.string(),
+    name: z.string().min(1).max(32).optional(),
+    color: TAG_COLOR_ENUM.optional(),
+  },
+  async ({ id, ...rest }) => {
+    if (rest.name === undefined && rest.color === undefined) {
+      throw new Error("tags_update requires at least one of name or color");
+    }
+    return asTextResult(
+      await call(`/api/v1/tags/${encodeURIComponent(id)}`, { method: "PATCH", body: rest }),
+    );
+  },
+);
+
+server.tool(
+  "tags_delete",
+  "Delete a tag. The tag is also removed from any jobs it was applied to.",
+  { id: z.string() },
+  async ({ id }) =>
+    asTextResult(
+      await call(`/api/v1/tags/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    ),
+);
+
+server.tool(
+  "job_set_tags",
+  "Replace the set of tags applied to a job. Pass an empty array to clear all tags.",
+  { jobId: z.string(), tagIds: z.array(z.string()) },
+  async ({ jobId, tagIds }) =>
+    asTextResult(
+      await call(`/api/v1/jobs/${encodeURIComponent(jobId)}/tags`, {
+        method: "PUT",
+        body: { tagIds },
       }),
     ),
 );

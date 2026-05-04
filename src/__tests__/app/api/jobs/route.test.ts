@@ -49,11 +49,19 @@ afterEach(() => vi.clearAllMocks());
 
 describe("GET /api/jobs", () => {
   it("returns the user's jobs (default limit 20)", async () => {
-    mockedFindMany.mockResolvedValueOnce([{ id: "j1" }, { id: "j2" }]);
+    mockedFindMany.mockResolvedValueOnce([
+      { id: "j1", jobTags: [] },
+      {
+        id: "j2",
+        jobTags: [{ tag: { id: "t1", name: "invoices", color: "blue" } }],
+      },
+    ]);
     const res = await GET(makeRequest("http://localhost/api/jobs"));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.jobs).toHaveLength(2);
+    expect(body.jobs[0].tags).toEqual([]);
+    expect(body.jobs[1].tags).toEqual([{ id: "t1", name: "invoices", color: "blue" }]);
     expect(mockedFindMany.mock.calls[0][0].take).toBe(20);
     expect(mockedFindMany.mock.calls[0][0].where.userId).toBe("u1");
   });
