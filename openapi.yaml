@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Extracto v1 API
-  version: 0.5.4
+  version: 0.7.0
   description: |
     Stable bearer-auth HTTP surface for Extracto. Mint a key with
     `extracto api-key create <user-email> <name>` (or `POST /api/v1/keys`
@@ -688,6 +688,43 @@ paths:
               schema:
                 type: object
                 properties: { deleted: { type: integer } }
+
+  /api/v1/webhooks/{id}/deliveries:
+    get:
+      summary: List recent webhook delivery attempts for one webhook
+      description: |
+        Returns the most recent delivery attempts for the given webhook
+        (capped, newest first). Useful for debugging webhook failures.
+      operationId: listWebhookDeliveries
+      tags: [Webhooks]
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        "200":
+          description: Array of delivery records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deliveries:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        webhookId: { type: string }
+                        event: { type: string }
+                        url: { type: string }
+                        statusCode: { type: integer, nullable: true }
+                        ok: { type: boolean }
+                        durationMs: { type: integer, nullable: true }
+                        errorMessage: { type: string, nullable: true }
+                        attemptedAt: { type: string, format: date-time }
 
   /api/v1/search:
     get:

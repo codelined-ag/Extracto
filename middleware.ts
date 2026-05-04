@@ -13,6 +13,8 @@ const PUBLIC_PATHS = [
   // extr_-prefixed bearer check would reject it before the route runs. The
   // route itself does the constant-time token check.
   "/api/v1/metrics",
+  "/api/v1/docs",
+  "/api/v1/openapi.yaml",
   "/manifest.webmanifest",
   "/sw.js",
   "/extracto-favicon.svg",
