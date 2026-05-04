@@ -98,4 +98,4 @@ Include: what you did, what you expected, what happened, the relevant log lines 
 
 ## Security
 
-Don't open public issues for security problems. Email security@codelined.ag (or the maintainers listed in the GitHub org) so we can coordinate a fix and a disclosure.
+Don't open public issues for security problems. Email supporto@codelined.com (or the maintainers listed in the GitHub org) so we can coordinate a fix and a disclosure.

@@ -5,7 +5,7 @@
 If you find a security issue in Extracto, please **do not** open a public
 GitHub issue. Email the maintainer directly:
 
-> **security@codelined.com**
+> **supporto@codelined.com**
 
 Include:
 
