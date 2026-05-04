@@ -2,12 +2,14 @@
 
 import * as React from "react";
 import { AnimatePresence } from "motion/react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, LayoutGridIcon, ListIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import { CircleCheckIcon } from "@/components/ui/circle-check";
 import { DeleteIcon } from "@/components/ui/delete";
@@ -19,6 +21,8 @@ import type {
   Translator,
   UiLanguage,
 } from "@/app/page-components/types";
+
+type QueueView = "list" | "gallery";
 
 export interface FileListCardProps {
   files: ProcessingFile[];
@@ -32,6 +36,9 @@ export interface FileListCardProps {
   onToggleBulk: (id: string) => void;
   onClearBulk: () => void;
   onBulkRemove: () => void;
+  onBulkRun: () => void;
+  bulkRunReady: boolean;
+  bulkRunPendingCount: number;
   t: Translator;
   uiLanguage: UiLanguage;
   footer?: React.ReactNode;
@@ -49,10 +56,14 @@ export function FileListCard({
   onToggleBulk,
   onClearBulk,
   onBulkRemove,
+  onBulkRun,
+  bulkRunReady,
+  bulkRunPendingCount,
   t,
   uiLanguage,
   footer,
 }: FileListCardProps) {
+  const [queueView, setQueueView] = React.useState<QueueView>("list");
   return (
     <Card className="min-h-[220px] overflow-hidden">
       <CardContent className="p-0 flex flex-col">
@@ -94,18 +105,60 @@ export function FileListCard({
             )}
           </div>
           {files.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-muted-foreground hover:text-destructive group"
-              onClick={onClearAll}
-            >
-              <DeleteIcon
-                size={12}
-                className="inline-flex items-center justify-center mr-1 transition-transform duration-200 group-hover:scale-110"
-              />
-              {t("Pulisci", "Clear", "Effacer", "Limpiar", "Leeren")}
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <div className="inline-flex rounded-md border border-border/60 bg-secondary/50 p-0.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setQueueView("list")}
+                      aria-pressed={queueView === "list"}
+                      className={cn(
+                        "inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 text-xs transition-colors",
+                        queueView === "list"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                      aria-label={t("Vista lista", "List view", "Vue liste", "Vista lista", "Listenansicht")}
+                    >
+                      <ListIcon size={13} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t("Vista lista", "List view", "Vue liste", "Vista lista", "Listenansicht")}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setQueueView("gallery")}
+                      aria-pressed={queueView === "gallery"}
+                      className={cn(
+                        "inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 text-xs transition-colors",
+                        queueView === "gallery"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                      aria-label={t("Vista galleria", "Gallery view", "Vue galerie", "Vista galería", "Galerieansicht")}
+                    >
+                      <LayoutGridIcon size={13} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t("Vista galleria", "Gallery view", "Vue galerie", "Vista galería", "Galerieansicht")}</TooltipContent>
+                </Tooltip>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground hover:text-destructive group"
+                onClick={onClearAll}
+              >
+                <DeleteIcon
+                  size={12}
+                  className="inline-flex items-center justify-center mr-1 transition-transform duration-200 group-hover:scale-110"
+                />
+                {t("Pulisci", "Clear", "Effacer", "Limpiar", "Leeren")}
+              </Button>
+            </div>
           )}
         </div>
 
@@ -129,6 +182,34 @@ export function FileListCard({
               >
                 {t("Annulla", "Clear", "Effacer", "Quitar", "Aufheben")}
               </Button>
+              {bulkRunPendingCount > 0 ? (
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={onBulkRun}
+                  disabled={!bulkRunReady}
+                  title={
+                    bulkRunReady
+                      ? undefined
+                      : t(
+                          "Seleziona un modello prima di avviare l'OCR",
+                          "Select a model before running OCR",
+                          "Sélectionne un modèle avant de lancer l'OCR",
+                          "Selecciona un modelo antes de iniciar OCR",
+                          "Wähle ein Modell, bevor du OCR startest",
+                        )
+                  }
+                >
+                  {t(
+                    `Avvia OCR (${bulkRunPendingCount})`,
+                    `Run OCR (${bulkRunPendingCount})`,
+                    `Lancer l'OCR (${bulkRunPendingCount})`,
+                    `Iniciar OCR (${bulkRunPendingCount})`,
+                    `OCR starten (${bulkRunPendingCount})`,
+                  )}
+                </Button>
+              ) : null}
               <Button
                 variant="ghost"
                 size="sm"
@@ -141,7 +222,50 @@ export function FileListCard({
           </div>
         ) : null}
 
-        {files.length > 0 ? (
+        {files.length > 0 && queueView === "gallery" ? (
+          <div className="overflow-x-auto custom-scroll px-2 py-2 hairline-t">
+            <div className="flex gap-2">
+              {files.map((file) => {
+                const isActive = selectedFileId === file.id;
+                const isBulk = bulkSelectedIds.has(file.id);
+                return (
+                  <button
+                    key={file.id}
+                    type="button"
+                    onClick={() => onSelectFile(file.id)}
+                    onDoubleClick={() => onToggleBulk(file.id)}
+                    aria-current={isActive}
+                    title={file.name}
+                    className={cn(
+                      "relative shrink-0 w-[88px] rounded-md overflow-hidden transition-all border-2",
+                      isActive ? "border-primary shadow-md" : "border-transparent opacity-80 hover:opacity-100",
+                      isBulk && "ring-2 ring-primary/40 ring-offset-1 ring-offset-background",
+                    )}
+                  >
+                    {file.preview ? (
+                      <img src={file.preview} alt="" loading="lazy" decoding="async" className="h-24 w-full object-cover bg-background" draggable={false} />
+                    ) : (
+                      <div className="h-24 w-full bg-secondary/40 flex items-center justify-center">
+                        <FileTextIcon size={20} className="inline-flex items-center justify-center text-muted-foreground" />
+                      </div>
+                    )}
+                    <span className="absolute bottom-0 inset-x-0 bg-background/85 text-[10px] truncate text-center py-0.5 px-1">
+                      {file.name}
+                    </span>
+                    {file.status === "completed" ? (
+                      <CircleCheckIcon size={12} className="absolute top-1 left-1 text-[oklch(0.55_0.13_150)]" />
+                    ) : null}
+                    {file.status === "error" ? (
+                      <AlertCircle className="absolute top-1 left-1 h-3 w-3 text-destructive" />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {files.length > 0 && queueView === "list" ? (
           <ScrollArea className="max-h-[220px]">
             <div className="p-2 space-y-1">
               <AnimatePresence initial={false}>
@@ -162,7 +286,9 @@ export function FileListCard({
               </AnimatePresence>
             </div>
           </ScrollArea>
-        ) : (
+        ) : null}
+
+        {files.length === 0 ? (
           <div className="flex items-center justify-center py-8 min-h-[120px]">
             <div className="text-center">
               <div className="mx-auto mb-3 flex items-center justify-center text-muted-foreground/70">
@@ -188,7 +314,7 @@ export function FileListCard({
               </p>
             </div>
           </div>
-        )}
+        ) : null}
 
         {footer}
       </CardContent>
