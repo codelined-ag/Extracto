@@ -54,7 +54,7 @@ export function Combobox({
   const display = selected?.label ?? (value && allowCustom ? value : "")
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <button
           type="button"
