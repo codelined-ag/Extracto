@@ -35,6 +35,13 @@ jobs:
       - name: Generate Prisma client
         run: bun run db:generate
 
+      - name: Set up test SQLite schema
+        run: |
+          mkdir -p db
+          bunx prisma db push --skip-generate
+        env:
+          DATABASE_URL: file:./db/custom.db
+
       - name: Lint
         run: bun run lint
 
@@ -43,6 +50,8 @@ jobs:
 
       - name: Tests
         run: bun run test
+        env:
+          DATABASE_URL: file:./db/custom.db
 
       - name: Build
         run: bun run build
