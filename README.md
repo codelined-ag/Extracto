@@ -21,6 +21,7 @@
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/codelined-ag/Extracto?color=brightgreen" alt="License"></a>
   <a href="https://github.com/codelined-ag/Extracto/pkgs/container/extracto"><img src="https://img.shields.io/badge/ghcr.io-extracto-blue?logo=docker" alt="GHCR"></a>
   <a href="https://github.com/codelined-ag/Extracto/stargazers"><img src="https://img.shields.io/github/stars/codelined-ag/Extracto?style=flat&color=ffb000" alt="Stars"></a>
+[![SafeSkill 86/100](https://img.shields.io/badge/SafeSkill-86%2F100_Passes%20with%20Notes-yellow)](https://safeskill.dev/scan/codelined-ag-extracto)
 </p>
 
 <!--
