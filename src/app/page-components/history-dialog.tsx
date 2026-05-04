@@ -2,8 +2,7 @@
 
 import * as React from "react";
 import { Code } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownView } from "@/app/page-components/markdown-view";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -473,9 +472,7 @@ export function HistoryDialog({
                   <div className="flex-1 min-h-0 min-w-0">
                     <TabsContent value="markdown" className="h-full m-0">
                       <ScrollArea className="h-full">
-                        <div className="prose prose-sm dark:prose-invert max-w-none px-7 py-4 break-words [overflow-wrap:anywhere] [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:[overflow-wrap:anywhere] [&_code]:break-words">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedMarkdown}</ReactMarkdown>
-                        </div>
+                        <MarkdownView source={selectedMarkdown} className="px-7 py-4" />
                       </ScrollArea>
                     </TabsContent>
                     <TabsContent value="markdown-raw" className="h-full m-0">

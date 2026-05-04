@@ -6,6 +6,9 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Settings dialog regrouped into 4 tabs (OCR, Knowledge base, Storage, Templates) with collapsible sections; personal preferences (language, API keys, push, usage) moved to a dedicated Account dialog.
+
 ## [0.5.5] - 2026-05-04
 
 ### Added

@@ -66,3 +66,4 @@ prisma/db/
 .venv-desloppify/
 .playwright-mcp/
 CLAUDE.md
+ROADMAP.md

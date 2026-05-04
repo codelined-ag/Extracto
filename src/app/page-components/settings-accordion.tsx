@@ -16,20 +16,43 @@ export interface SettingsAccordionProps {
   defaultOpen?: string | null;
   value?: string | null;
   onValueChange?: (next: string | null) => void;
+  storageKey?: string;
   className?: string;
   children: React.ReactNode;
 }
 
-export function SettingsAccordion({ defaultOpen = null, value, onValueChange, className, children }: SettingsAccordionProps) {
-  const [internal, setInternal] = React.useState<string | null>(defaultOpen);
+export function readPersistedOpen(storageKey: string | undefined, fallback: string | null): string | null {
+  if (!storageKey || typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (raw === null) return fallback;
+    if (raw === "__none__") return null;
+    return raw;
+  } catch {
+    return fallback;
+  }
+}
+
+function writePersistedOpen(storageKey: string | undefined, next: string | null) {
+  if (!storageKey || typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(storageKey, next ?? "__none__");
+  } catch {
+    // ignore quota / privacy mode
+  }
+}
+
+export function SettingsAccordion({ defaultOpen = null, value, onValueChange, storageKey, className, children }: SettingsAccordionProps) {
+  const [internal, setInternal] = React.useState<string | null>(() => readPersistedOpen(storageKey, defaultOpen));
   const isControlled = value !== undefined;
   const open = isControlled ? value : internal;
   const setOpen = React.useCallback(
     (next: string | null) => {
       if (!isControlled) setInternal(next);
+      writePersistedOpen(storageKey, next);
       onValueChange?.(next);
     },
-    [isControlled, onValueChange],
+    [isControlled, onValueChange, storageKey],
   );
   const ctx = React.useMemo<AccordionContextValue>(() => ({ open, setOpen }), [open, setOpen]);
   return (
@@ -77,7 +100,7 @@ export function SettingsAccordionItem({ value, title, hint, right, children }: S
         </CollapsibleTrigger>
         {right ? <div className="shrink-0">{right}</div> : null}
       </div>
-      <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0">
+      <CollapsibleContent className="collapsible-content data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0">
         <div className="px-4 pb-4 pt-3 space-y-3 hairline-t">
           {children}
         </div>

@@ -86,7 +86,9 @@ import { Footer } from "@/app/page-components/footer";
 import { HeaderBar } from "@/app/page-components/header-bar";
 import { ChangePasswordDialog } from "@/app/page-components/change-password-dialog";
 import { AccountDialog } from "@/app/page-components/account-dialog";
-import { SettingsAccordion, SettingsAccordionItem } from "@/app/page-components/settings-accordion";
+import { SettingsAccordion, SettingsAccordionItem, readPersistedOpen } from "@/app/page-components/settings-accordion";
+import { isUiLanguage } from "@/app/page-components/ui-language";
+import { MarkdownView } from "@/app/page-components/markdown-view";
 import { S3SettingsSection } from "@/app/page-components/s3-settings-section";
 import { WatchersSection } from "@/app/page-components/watchers-section";
 import { TemplatesSection } from "@/app/page-components/templates-section";
@@ -105,8 +107,6 @@ import type {
   UiLanguage,
   KbExportPhase,
 } from "@/app/page-components/types";
-import ReactMarkdown from"react-markdown";
-import remarkGfm from"remark-gfm";
 
 // Types
 
@@ -192,12 +192,6 @@ type ApiSettingsForm = ClientApiSettings & { apiKey: string };
 
 
 type ProviderModelSelections = Partial<Record<ProviderKind, string>>;
-
-const UI_LANGUAGES: UiLanguage[] = ["it","en","fr","es","de"];
-
-function isUiLanguage(value: unknown): value is UiLanguage {
- return typeof value ==="string"&& (UI_LANGUAGES as string[]).includes(value);
-}
 
 const DEFAULT_OLLAMA_ENDPOINT ="http://localhost:11434";
 const DEFAULT_MISTRAL_ENDPOINT ="https://api.mistral.ai/v1/ocr";
@@ -520,7 +514,7 @@ export default function ExtractoPage() {
  const [isSigningOut, setIsSigningOut] = React.useState(false);
  const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
  const [accountDialogOpen, setAccountDialogOpen] = React.useState(false);
- const [ocrAccordionOpen, setOcrAccordionOpen] = React.useState<string | null>("provider");
+ const [ocrAccordionOpen, setOcrAccordionOpen] = React.useState<string | null>(() => readPersistedOpen("extracto.settings.ocr.open", "provider"));
  const [modelError, setModelError] = React.useState("");
  const [historyOpen, setHistoryOpen] = React.useState(false);
 
@@ -636,11 +630,14 @@ export default function ExtractoPage() {
  const history = useHistory(t);
  const openSettingsTab = React.useCallback(
  (tab: SettingsTab) => {
+ if (tab === "ocr") {
  setApiSettingsDraft(apiSettings);
  setApiKeyDirty(false);
+ } else if (tab === "kb") {
  setKbDefaultsDraft(kbDefaults);
  setKbEmbeddingKeyDirty(false);
  setKbStoreKeyDirty(false);
+ }
  setSettingsTab(tab);
  setApiSettingsOpen(true);
  },
@@ -2321,7 +2318,7 @@ export default function ExtractoPage() {
 
  <ScrollArea className="flex-1 min-h-0 px-6 pb-2">
  <TabsContent value="ocr"className="mt-4 space-y-3">
- <SettingsAccordion value={ocrAccordionOpen} onValueChange={setOcrAccordionOpen}>
+ <SettingsAccordion value={ocrAccordionOpen} onValueChange={setOcrAccordionOpen} storageKey="extracto.settings.ocr.open">
  <SettingsAccordionItem
  value="provider"
  title={t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}
@@ -2499,7 +2496,7 @@ export default function ExtractoPage() {
  </SettingsAccordionItem>
  </SettingsAccordion>
 
- <div className="flex justify-end pt-2">
+ <div className="sticky bottom-0 -mx-6 px-6 py-3 bg-background/85 backdrop-blur-sm hairline-t flex justify-end z-10">
  <Button onClick={saveApiSettings} disabled={isSavingApiSettings}>
  {isSavingApiSettings ? <LoaderCircleIcon size={16} className="inline-flex items-center justify-center mr-1.5 animate-spin"/> : null}
  {t("Salva provider","Save provider","Enregistrer le fournisseur","Guardar proveedor","Provider speichern")}
@@ -2508,7 +2505,7 @@ export default function ExtractoPage() {
  </TabsContent>
 
  <TabsContent value="kb"className="mt-4 space-y-3">
- <SettingsAccordion defaultOpen="embedding">
+ <SettingsAccordion defaultOpen="embedding" storageKey="extracto.settings.kb.open">
  <SettingsAccordionItem
  value="embedding"
  title={t("Embedding","Embeddings","Embeddings","Embeddings","Embeddings")}
@@ -2831,7 +2828,7 @@ export default function ExtractoPage() {
  </SettingsAccordionItem>
  </SettingsAccordion>
 
- <div className="flex justify-end pt-2">
+ <div className="sticky bottom-0 -mx-6 px-6 py-3 bg-background/85 backdrop-blur-sm hairline-t flex justify-end z-10">
  <Button onClick={saveKbDefaults} disabled={isSavingKbDefaults}>
  {isSavingKbDefaults ? <LoaderCircleIcon size={16} className="inline-flex items-center justify-center mr-1.5 animate-spin"/> : null}
  {t("Salva knowledge base","Save knowledge base","Enregistrer KB","Guardar KB","KB speichern")}
@@ -2840,7 +2837,7 @@ export default function ExtractoPage() {
  </TabsContent>
 
  <TabsContent value="storage"className="mt-4">
- <SettingsAccordion defaultOpen="s3">
+ <SettingsAccordion defaultOpen="s3" storageKey="extracto.settings.storage.open">
  <SettingsAccordionItem
  value="s3"
  title={t("Archiviazione S3","S3 cloud storage","Stockage S3","Almacenamiento S3","S3-Cloud-Speicher")}
@@ -3239,9 +3236,7 @@ export default function ExtractoPage() {
 
  <TabsContent value="markdown"className="flex-1 m-0 min-h-0 min-w-0">
  <ScrollArea className="h-full w-full">
- <div className="prose prose-sm dark:prose-invert max-w-none p-4 break-words [overflow-wrap:anywhere] [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:[overflow-wrap:anywhere] [&_code]:break-words">
- <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedFileMarkdown}</ReactMarkdown>
- </div>
+ <MarkdownView source={selectedFileMarkdown} className="p-4"/>
  </ScrollArea>
  </TabsContent>
 
@@ -3442,4 +3437,3 @@ export default function ExtractoPage() {
  </div>
  );
 }
-

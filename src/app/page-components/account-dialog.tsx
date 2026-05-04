@@ -13,25 +13,12 @@ import {
   SettingsAccordion,
   SettingsAccordionItem,
 } from "@/app/page-components/settings-accordion";
+import {
+  UI_LANGUAGES,
+  UI_LANGUAGE_FLAGS,
+  UI_LANGUAGE_LABELS,
+} from "@/app/page-components/ui-language";
 import type { Translator, UiLanguage } from "@/app/page-components/types";
-
-const UI_LANGUAGES: UiLanguage[] = ["it", "en", "fr", "es", "de"];
-
-const UI_LANGUAGE_FLAGS: Record<UiLanguage, string> = {
-  it: "🇮🇹",
-  en: "🇬🇧",
-  fr: "🇫🇷",
-  es: "🇪🇸",
-  de: "🇩🇪",
-};
-
-const UI_LANGUAGE_LABELS: Record<UiLanguage, string> = {
-  it: "Italiano",
-  en: "English",
-  fr: "Français",
-  es: "Español",
-  de: "Deutsch",
-};
 
 export interface AccountDialogProps {
   open: boolean;
@@ -62,7 +49,7 @@ export function AccountDialog({ open, onOpenChange, t, uiLanguage, setUiLanguage
 
         <ScrollArea className="flex-1 min-h-0 px-6 pb-2">
           <div className="pt-2">
-            <SettingsAccordion defaultOpen="language">
+            <SettingsAccordion defaultOpen="language" storageKey="extracto.account.open">
               <SettingsAccordionItem
                 value="language"
                 title={t("Lingua interfaccia", "Interface language", "Langue de l'interface", "Idioma de la interfaz", "Oberflächensprache")}
