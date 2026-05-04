@@ -203,3 +203,60 @@ export function enforceVectorStoreEndpointPolicy(rawBaseUrl: string): string {
   return parsed.toString().replace(/\/+$/u, "");
 }
 
+const DEFAULT_S3_HOST_PATTERNS = [
+  "*.amazonaws.com",
+  "*.r2.cloudflarestorage.com",
+  "*.backblazeb2.com",
+  "*.digitaloceanspaces.com",
+  "*.wasabisys.com",
+  "*.linodeobjects.com",
+  "storage.googleapis.com",
+  "localhost",
+  "127.0.0.1",
+  "0.0.0.0",
+  "::1",
+  "host.docker.internal",
+  "host-gateway",
+  "host.containers.internal",
+  "172.17.0.1",
+];
+
+function getS3Patterns(): string[] {
+  const configured = parsePatternList(process.env.S3_ALLOWED_HOSTS || "");
+  return configured.length > 0
+    ? Array.from(new Set([...DEFAULT_S3_HOST_PATTERNS, ...configured]))
+    : DEFAULT_S3_HOST_PATTERNS;
+}
+
+export function enforceS3EndpointPolicy(rawEndpoint: string): string {
+  const trimmed = rawEndpoint.trim();
+  if (!trimmed) return "";
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new ApiRouteError("S3 endpoint must be a valid absolute URL", 400);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new ApiRouteError("S3 endpoint must use http or https", 400);
+  }
+  if (parsed.username || parsed.password) {
+    throw new ApiRouteError("S3 endpoint must not embed credentials", 400);
+  }
+  parsed.search = "";
+  parsed.hash = "";
+
+  const hostname = parsed.hostname.toLowerCase();
+  rejectBlockedHost(hostname);
+
+  const patterns = getS3Patterns().map(normalizeHostPattern).filter(Boolean);
+  const allowed = patterns.some((pattern) => hostMatchesPattern(hostname, pattern));
+  if (!allowed) {
+    throw new ApiRouteError(
+      `S3 endpoint host "${hostname}" is not allowed. Set S3_ALLOWED_HOSTS to extend the allowlist (current: ${patterns.join(", ")}).`,
+      400,
+    );
+  }
+  return parsed.toString().replace(/\/+$/u, "");
+}
+

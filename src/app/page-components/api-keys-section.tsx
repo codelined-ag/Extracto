@@ -132,6 +132,20 @@ const SCOPE_HINTS: Record<string, [string, string, string, string, string]> = {
     "Exportar a un vector store.",
     "In einen Vektor-Store exportieren.",
   ],
+  "s3:read": [
+    "Sfogliare e importare oggetti da S3.",
+    "Browse and import objects from S3.",
+    "Parcourir et importer des objets depuis S3.",
+    "Explorar e importar objetos desde S3.",
+    "Objekte aus S3 durchsuchen und importieren.",
+  ],
+  "s3:write": [
+    "Esportare i risultati verso un bucket S3.",
+    "Export results to an S3 bucket.",
+    "Exporter les résultats vers un bucket S3.",
+    "Exportar resultados a un bucket de S3.",
+    "Ergebnisse in einen S3-Bucket exportieren.",
+  ],
 };
 
 function formatDate(value: string | null): string {

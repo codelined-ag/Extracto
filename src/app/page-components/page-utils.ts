@@ -156,6 +156,29 @@ export function getMarkdownFromJsonPayload(payload: unknown, fallback = ""): str
   return fallbackNormalized;
 }
 
+export type DerivedHistoryStatus =
+  | "completed"
+  | "failed"
+  | "processing"
+  | "queued"
+  | "stopped";
+
+export function deriveHistoryStatus(
+  status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED",
+  metadata: unknown,
+): DerivedHistoryStatus {
+  if (status === "COMPLETED") return "completed";
+  if (status === "FAILED") return "failed";
+  if (status === "PROCESSING") return "processing";
+
+  const stage =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>).stage
+      : undefined;
+  if (typeof stage === "string" && stage === "paused") return "stopped";
+  return "queued";
+}
+
 export function getStructuredJsonPayload(payload: unknown): Record<string, unknown> {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return {};

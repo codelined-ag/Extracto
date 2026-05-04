@@ -19,7 +19,14 @@ import {
   enforceVectorStoreEndpointPolicy,
 } from "@/lib/ocr/endpoint-policy";
 
-export type VectorStoreKind = "chroma" | "qdrant" | "weaviate" | "milvus" | "opensearch" | "pinecone";
+export type VectorStoreKind =
+  | "chroma"
+  | "qdrant"
+  | "weaviate"
+  | "milvus"
+  | "opensearch"
+  | "pinecone"
+  | "typesense";
 
 export interface VectorStoreDefaults {
   kind: VectorStoreKind;
@@ -35,6 +42,7 @@ const VALID_STORE_KINDS: ReadonlySet<VectorStoreKind> = new Set([
   "milvus",
   "opensearch",
   "pinecone",
+  "typesense",
 ]);
 
 const DEFAULT_BASE_URL_BY_KIND: Record<VectorStoreKind, string> = {
@@ -44,6 +52,7 @@ const DEFAULT_BASE_URL_BY_KIND: Record<VectorStoreKind, string> = {
   milvus: "http://127.0.0.1:9091",
   opensearch: "http://127.0.0.1:9200",
   pinecone: "",
+  typesense: "http://127.0.0.1:8108",
 };
 
 export interface KbDefaults {

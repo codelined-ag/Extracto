@@ -10,6 +10,8 @@ export const ALL_SCOPES = [
   "presets:write",
   "search:read",
   "kb:write",
+  "s3:read",
+  "s3:write",
 ] as const;
 
 export type Scope = (typeof ALL_SCOPES)[number];

@@ -8,6 +8,7 @@ import {
  ScanLine,
  ImageOff,
  KeyRoundIcon,
+ Cloud,
 } from"lucide-react";
 
 import { ArchiveIcon } from"@/components/ui/archive";
@@ -87,6 +88,7 @@ import { Footer } from "@/app/page-components/footer";
 import { HeaderBar } from "@/app/page-components/header-bar";
 import { ChangePasswordDialog } from "@/app/page-components/change-password-dialog";
 import { ApiKeysSection } from "@/app/page-components/api-keys-section";
+import { S3SettingsSection } from "@/app/page-components/s3-settings-section";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { useHistory } from "@/app/page-components/use-history";
 import { PreviewHeader } from "@/app/page-components/preview-header";
@@ -102,12 +104,13 @@ import type {
   KbExportPhase,
 } from "@/app/page-components/types";
 import ReactMarkdown from"react-markdown";
+import remarkGfm from"remark-gfm";
 
 // Types
 
 type KbEmbeddingProvider ="ollama"|"openrouter"|"openai_compat";
 type KbChunkingStrategy ="fixed"|"sentence"|"paragraph"|"hierarchical"|"semantic";
-type KbStoreKind ="chroma"|"qdrant"|"weaviate"|"milvus"|"opensearch"|"pinecone";
+type KbStoreKind ="chroma"|"qdrant"|"weaviate"|"milvus"|"opensearch"|"pinecone"|"typesense";
 
 const STORE_DEFAULT_BASE_URLS: Record<KbStoreKind, string> = {
  chroma:"http://127.0.0.1:8000",
@@ -116,6 +119,7 @@ const STORE_DEFAULT_BASE_URLS: Record<KbStoreKind, string> = {
  milvus:"http://127.0.0.1:9091",
  opensearch:"http://127.0.0.1:9200",
  pinecone:"",
+ typesense:"http://127.0.0.1:8108",
 };
 
 const STORE_LABELS: Record<KbStoreKind, string> = {
@@ -125,6 +129,7 @@ const STORE_LABELS: Record<KbStoreKind, string> = {
  milvus:"Milvus",
  opensearch:"OpenSearch",
  pinecone:"Pinecone",
+ typesense:"Typesense",
 };
 
 interface KbDefaultsForm {
@@ -1346,6 +1351,94 @@ export default function ExtractoPage() {
  }
  };
 
+ const exportFileToS3 = async (file: ProcessingFile) => {
+ if (!file.jobId) {
+ toast({
+ title: t("Nessun jobId","Missing jobId","jobId manquant","Falta jobId","jobId fehlt"),
+ description: t(
+"Solo i lavori OCR completati possono essere inviati su S3.",
+"Only completed OCR jobs can be sent to S3.",
+"Seuls les jobs OCR terminés peuvent être envoyés vers S3.",
+"Solo se pueden enviar a S3 trabajos OCR completados.",
+"Nur abgeschlossene OCR-Jobs können an S3 gesendet werden.",
+ ),
+ variant:"destructive",
+ });
+ return;
+ }
+ updateFileById(file.id, (entry) => ({ ...entry, s3Export: { status:"pending", phase:"queued", uploadedBytes: 0, totalBytes: 0 } }));
+ try {
+ const resp = await fetch("/api/s3/export", {
+ method:"POST",
+ headers:{"Content-Type":"application/json"},
+ body: JSON.stringify({ jobId: file.jobId }),
+ });
+ const payload = (await resp.json().catch(() => ({}))) as { error?: string; exportId?: string; bucket?: string };
+ if (!resp.ok || !payload.exportId) {
+ throw new Error(payload.error || `S3 export failed (${resp.status})`);
+ }
+ const exportId = payload.exportId;
+ const finalEvent = await new Promise<{ phase:"done"|"error"; bucket: string; keys: string[]; totalBytes: number; error?: string }>((resolve, reject) => {
+ const es = new EventSource(`/api/s3/export/${encodeURIComponent(exportId)}/stream`);
+ es.addEventListener("progress", (event) => {
+ try {
+ const data = JSON.parse((event as MessageEvent).data) as { phase: string; bucket?: string; keys?: string[]; uploadedBytes?: number; totalBytes?: number; error?: string };
+ updateFileById(file.id, (entry) => ({
+ ...entry,
+ s3Export: {
+ status: data.phase === "done"?"success": data.phase === "error"?"error":"pending",
+ phase: data.phase as "queued"|"reading"|"uploading"|"done"|"error",
+ bucket: data.bucket ?? entry.s3Export?.bucket ?? payload.bucket,
+ keys: data.keys ?? entry.s3Export?.keys,
+ uploadedBytes: data.uploadedBytes ?? 0,
+ totalBytes: data.totalBytes ?? 0,
+ error: data.error,
+ },
+ }));
+ if (data.phase === "done"|| data.phase === "error") {
+ es.close();
+ if (data.phase === "done") {
+ resolve({ phase:"done", bucket: data.bucket ?? payload.bucket ??"", keys: data.keys ?? [], totalBytes: data.totalBytes ?? 0 });
+ } else {
+ reject(new Error(data.error || "S3 export failed"));
+ }
+ }
+ } catch (err) {
+ es.close();
+ reject(err);
+ }
+ });
+ es.onerror = () => {
+ es.close();
+ reject(new Error("Lost connection to S3 export progress stream"));
+ };
+ });
+ toast({
+ title: t("Inviato su S3","Sent to S3","Envoyé sur S3","Enviado a S3","An S3 gesendet"),
+ description: finalEvent.keys.length > 0
+ ? t(
+ `${finalEvent.keys.length} oggetti in ${finalEvent.bucket}`,
+ `${finalEvent.keys.length} objects in ${finalEvent.bucket}`,
+ `${finalEvent.keys.length} objets dans ${finalEvent.bucket}`,
+ `${finalEvent.keys.length} objetos en ${finalEvent.bucket}`,
+ `${finalEvent.keys.length} Objekte in ${finalEvent.bucket}`,
+ )
+ : undefined,
+ });
+ } catch (error) {
+ const message = error instanceof Error ? error.message :"Unknown error";
+ updateFileById(file.id, (entry) => ({
+ ...entry,
+ s3Export: { status:"error", error: message },
+ }));
+ toast({
+ title: t("Esportazione S3 non riuscita","S3 export failed","Échec d'export S3","Error de exportación S3","S3-Export fehlgeschlagen"),
+ description: message,
+ variant:"destructive",
+ });
+ }
+ };
+
  const pullEmbeddingModel = async (model: string, file: ProcessingFile) => {
  toast({
  title: t(`Scaricamento ${model}...`,`Pulling ${model}...`,`Téléchargement de ${model}...`,`Descargando ${model}...`,`${model} wird geladen...`),
@@ -2157,6 +2250,7 @@ export default function ExtractoPage() {
  <TabsTrigger value="provider"className="gap-1.5"><SettingsIcon size={14} className="inline-flex items-center justify-center"/>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</TabsTrigger>
  <TabsTrigger value="general"className="gap-1.5"><LanguagesIcon size={14} className="inline-flex items-center justify-center"/>{t("Generale","General","Général","General","Allgemein")}</TabsTrigger>
  <TabsTrigger value="keys"className="gap-1.5"><KeyRoundIcon size={14} className="inline-flex items-center justify-center"/>{t("Chiavi API","API keys","Clés API","Claves API","API-Schlüssel")}</TabsTrigger>
+ <TabsTrigger value="s3"className="gap-1.5"><Cloud className="size-3.5"/>S3</TabsTrigger>
  </TabsList>
  </div>
 
@@ -2494,6 +2588,7 @@ export default function ExtractoPage() {
  <SelectItem value="milvus">Milvus</SelectItem>
  <SelectItem value="opensearch">OpenSearch</SelectItem>
  <SelectItem value="pinecone">Pinecone</SelectItem>
+ <SelectItem value="typesense">Typesense</SelectItem>
  </SelectContent>
  </Select>
  </div>
@@ -2663,6 +2758,10 @@ export default function ExtractoPage() {
 
  <TabsContent value="keys"className="space-y-5 mt-4">
  <ApiKeysSection t={t} />
+ </TabsContent>
+
+ <TabsContent value="s3"className="space-y-5 mt-4">
+ <S3SettingsSection t={t} />
  </TabsContent>
 
  </ScrollArea>
@@ -2964,6 +3063,7 @@ export default function ExtractoPage() {
                     onCopy={copyToClipboard}
                     onDownload={downloadResult}
                     onExportToKb={exportFileToKb}
+                    onSendToS3={exportFileToS3}
                     t={t}
                   />
 
@@ -3029,7 +3129,7 @@ export default function ExtractoPage() {
  <TabsContent value="markdown"className="flex-1 m-0 min-h-0 min-w-0">
  <ScrollArea className="h-full w-full">
  <div className="prose prose-sm dark:prose-invert max-w-none p-4 break-words [overflow-wrap:anywhere] [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:[overflow-wrap:anywhere] [&_code]:break-words">
- <ReactMarkdown>{selectedFileMarkdown}</ReactMarkdown>
+ <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedFileMarkdown}</ReactMarkdown>
  </div>
  </ScrollArea>
  </TabsContent>

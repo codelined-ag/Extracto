@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Code } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -28,14 +29,14 @@ import { HistoryIcon } from "@/components/ui/history";
 import { LoaderCircleIcon } from "@/components/ui/loader-circle";
 import { SearchIcon } from "@/components/ui/search";
 
-import { formatTimestamp } from "@/app/page-components/page-utils";
+import { deriveHistoryStatus, formatTimestamp } from "@/app/page-components/page-utils";
 import type {
   HistoryJobDetail,
   HistoryJobSummary,
   Translator,
 } from "@/app/page-components/types";
 
-type HistoryFilter = "all" | "completed" | "failed" | "running";
+type HistoryFilter = "all" | "completed" | "failed" | "running" | "stopped";
 
 export interface HistoryDialogProps {
   open: boolean;
@@ -88,22 +89,34 @@ export function HistoryDialog({
   };
   const checkedCount = checked.size;
 
+  const derivedById = React.useMemo(() => {
+    const map = new Map<string, ReturnType<typeof deriveHistoryStatus>>();
+    for (const j of jobs) map.set(j.id, deriveHistoryStatus(j.status, j.metadata));
+    return map;
+  }, [jobs]);
+
   const counts = {
     all: jobs.length,
-    completed: jobs.filter((j) => j.status === "COMPLETED").length,
-    failed: jobs.filter((j) => j.status === "FAILED").length,
-    running: jobs.filter((j) => j.status === "PROCESSING" || j.status === "QUEUED").length,
+    completed: jobs.filter((j) => derivedById.get(j.id) === "completed").length,
+    failed: jobs.filter((j) => derivedById.get(j.id) === "failed").length,
+    running: jobs.filter((j) => {
+      const d = derivedById.get(j.id);
+      return d === "processing" || d === "queued";
+    }).length,
+    stopped: jobs.filter((j) => derivedById.get(j.id) === "stopped").length,
   };
 
   const term = search.trim().toLowerCase();
   const filtered = jobs.filter((j) => {
     const matchesText =
       !term || j.fileName.toLowerCase().includes(term) || (j.model || "").toLowerCase().includes(term);
+    const d = derivedById.get(j.id);
     const matchesFilter =
       filter === "all" ||
-      (filter === "completed" && j.status === "COMPLETED") ||
-      (filter === "failed" && j.status === "FAILED") ||
-      (filter === "running" && (j.status === "PROCESSING" || j.status === "QUEUED"));
+      (filter === "completed" && d === "completed") ||
+      (filter === "failed" && d === "failed") ||
+      (filter === "running" && (d === "processing" || d === "queued")) ||
+      (filter === "stopped" && d === "stopped");
     return matchesText && matchesFilter;
   });
 
@@ -171,6 +184,7 @@ export function HistoryDialog({
                     ["completed", t("Completate", "Completed", "Terminées", "Completadas", "Abgeschlossen")],
                     ["failed", t("Fallite", "Failed", "Échouées", "Fallidas", "Fehlgeschlagen")],
                     ["running", t("In corso", "Running", "En cours", "En curso", "Läuft")],
+                    ["stopped", t("Interrotte", "Stopped", "Arrêtées", "Detenidas", "Gestoppt")],
                   ] as const
                 ).map(([key, label]) => (
                   <button
@@ -256,18 +270,25 @@ export function HistoryDialog({
                 <div className="px-3 py-3 space-y-1">
                   {filtered.map((job) => {
                     const active = selectedJobId === job.id;
+                    const derived = derivedById.get(job.id) ?? "queued";
                     const statusTone =
-                      job.status === "FAILED"
+                      derived === "failed"
                         ? "text-destructive"
-                        : job.status === "COMPLETED"
+                        : derived === "completed"
                           ? "text-[oklch(0.55_0.13_150)]"
-                          : "text-accent-foreground";
+                          : derived === "stopped"
+                            ? "text-muted-foreground"
+                            : "text-accent-foreground";
                     const statusLabel =
-                      job.status === "FAILED"
+                      derived === "failed"
                         ? t("fallito", "failed", "échoué", "fallido", "fehlgeschlagen")
-                        : job.status === "COMPLETED"
+                        : derived === "completed"
                           ? t("completato", "completed", "terminé", "completado", "abgeschlossen")
-                          : t("in corso", "running", "en cours", "en curso", "läuft");
+                          : derived === "stopped"
+                            ? t("interrotto", "stopped", "arrêté", "detenido", "gestoppt")
+                            : derived === "queued"
+                              ? t("in coda", "queued", "en file", "en cola", "in Warteschlange")
+                              : t("in corso", "running", "en cours", "en curso", "läuft");
                     const isChecked = checked.has(job.id);
                     return (
                       <button
@@ -365,23 +386,41 @@ export function HistoryDialog({
                       {selectedJobDetail.fileName}
                     </h3>
                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span
-                        className={cn(
-                          "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium",
-                          selectedJobDetail.status === "FAILED"
+                      {(() => {
+                        const d = deriveHistoryStatus(
+                          selectedJobDetail.status,
+                          selectedJobDetail.metadata,
+                        );
+                        const cls =
+                          d === "failed"
                             ? "bg-destructive/15 text-destructive"
-                            : selectedJobDetail.status === "COMPLETED"
+                            : d === "completed"
                               ? "bg-[oklch(0.55_0.13_150)]/15 text-[oklch(0.55_0.13_150)]"
-                              : "bg-accent text-accent-foreground",
-                        )}
-                      >
-                        <span className="status-dot" />
-                        {selectedJobDetail.status === "FAILED"
-                          ? t("fallito", "failed", "échoué", "fallido", "fehlgeschlagen")
-                          : selectedJobDetail.status === "COMPLETED"
-                            ? t("completato", "completed", "terminé", "completado", "abgeschlossen")
-                            : t("in corso", "running", "en cours", "en curso", "läuft")}
-                      </span>
+                              : d === "stopped"
+                                ? "bg-muted text-muted-foreground"
+                                : "bg-accent text-accent-foreground";
+                        const label =
+                          d === "failed"
+                            ? t("fallito", "failed", "échoué", "fallido", "fehlgeschlagen")
+                            : d === "completed"
+                              ? t("completato", "completed", "terminé", "completado", "abgeschlossen")
+                              : d === "stopped"
+                                ? t("interrotto", "stopped", "arrêté", "detenido", "gestoppt")
+                                : d === "queued"
+                                  ? t("in coda", "queued", "en file", "en cola", "in Warteschlange")
+                                  : t("in corso", "running", "en cours", "en curso", "läuft");
+                        return (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium",
+                              cls,
+                            )}
+                          >
+                            <span className="status-dot" />
+                            {label}
+                          </span>
+                        );
+                      })()}
                       <span className="text-muted-foreground">·</span>
                       <span className="font-mono text-[11px] text-muted-foreground">
                         {selectedJobDetail.model}
@@ -435,7 +474,7 @@ export function HistoryDialog({
                     <TabsContent value="markdown" className="h-full m-0">
                       <ScrollArea className="h-full">
                         <div className="prose prose-sm dark:prose-invert max-w-none px-7 py-4 break-words [overflow-wrap:anywhere] [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:[overflow-wrap:anywhere] [&_code]:break-words">
-                          <ReactMarkdown>{selectedMarkdown}</ReactMarkdown>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedMarkdown}</ReactMarkdown>
                         </div>
                       </ScrollArea>
                     </TabsContent>

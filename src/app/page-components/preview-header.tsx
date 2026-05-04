@@ -1,6 +1,6 @@
 "use client";
 
-import { Columns, MoreHorizontal } from "lucide-react";
+import { Cloud, Columns, MoreHorizontal } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +40,7 @@ export interface PreviewHeaderProps {
   onCopy: (format: ResultFormat) => void;
   onDownload: (format: ResultFormat) => void;
   onExportToKb: (file: ProcessingFile) => void;
+  onSendToS3: (file: ProcessingFile) => void;
   t: Translator;
 }
 
@@ -51,6 +52,7 @@ export function PreviewHeader({
   onCopy,
   onDownload,
   onExportToKb,
+  onSendToS3,
   t,
 }: PreviewHeaderProps) {
   const viewModes: Array<{
@@ -232,6 +234,53 @@ export function PreviewHeader({
                               "Envoyer au vector store",
                               "Enviar al vector store",
                               "An Vektor-Store senden",
+                            )}
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => onSendToS3(selectedFile)}
+                      disabled={selectedFile.s3Export?.status === "pending"}
+                    >
+                      {selectedFile.s3Export?.status === "pending" ? (
+                        <LoaderCircleIcon size={16} className="inline-flex animate-spin text-primary" />
+                      ) : selectedFile.s3Export?.status === "success" ? (
+                        <Cloud className="size-4 text-primary" />
+                      ) : (
+                        <Cloud className="size-4" />
+                      )}
+                      <span>
+                        {selectedFile.s3Export?.status === "pending"
+                          ? (() => {
+                              const s = selectedFile.s3Export;
+                              if (s?.phase === "uploading" && (s.totalBytes ?? 0) > 0) {
+                                const pct = Math.min(100, Math.round(((s.uploadedBytes ?? 0) / (s.totalBytes ?? 1)) * 100));
+                                return t(
+                                  `Caricamento ${pct}%`,
+                                  `Uploading ${pct}%`,
+                                  `Téléversement ${pct}%`,
+                                  `Subiendo ${pct}%`,
+                                  `Hochladen ${pct}%`,
+                                );
+                              }
+                              if (s?.phase === "reading") {
+                                return t("Lettura risultato...", "Reading result...", "Lecture du résultat...", "Leyendo resultado...", "Ergebnis wird gelesen...");
+                              }
+                              return t("In coda...", "Queued...", "En attente...", "En cola...", "In der Warteschlange...");
+                            })()
+                          : selectedFile.s3Export?.status === "success"
+                          ? t(
+                              "Riinvia su S3",
+                              "Re-send to S3",
+                              "Renvoyer sur S3",
+                              "Reenviar a S3",
+                              "Erneut an S3 senden",
+                            )
+                          : t(
+                              "Invia su S3",
+                              "Send to S3",
+                              "Envoyer sur S3",
+                              "Enviar a S3",
+                              "An S3 senden",
                             )}
                       </span>
                     </DropdownMenuItem>

@@ -23,6 +23,7 @@ import { WeaviateAdapter } from "@/lib/kb/stores/weaviate";
 import { MilvusAdapter } from "@/lib/kb/stores/milvus";
 import { OpenSearchAdapter } from "@/lib/kb/stores/opensearch";
 import { PineconeAdapter } from "@/lib/kb/stores/pinecone";
+import { TypesenseAdapter } from "@/lib/kb/stores/typesense";
 import type { VectorStoreAdapter } from "@/lib/kb/types";
 import {
   getKbDefaults,
@@ -41,6 +42,12 @@ function buildVectorStore(kind: VectorStoreKind, baseUrl: string, apiKey: string
       throw new ApiRouteError("Pinecone requires an api key", 400);
     }
     return new PineconeAdapter({ baseUrl, apiKey, dimensions });
+  }
+  if (kind === "typesense") {
+    if (!apiKey) {
+      throw new ApiRouteError("Typesense requires an api key", 400);
+    }
+    return new TypesenseAdapter({ baseUrl, apiKey, dimensions });
   }
   return new ChromaAdapter({ baseUrl, apiKey, dimensions });
 }
