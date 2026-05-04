@@ -307,6 +307,7 @@ export default function AuthPage() {
                     label={t("Password", "Password", "Mot de passe", "Contraseña", "Passwort")}
                     value={form.password}
                     onChange={(v) => setForm((c) => ({ ...c, password: v }))}
+                    placeholder={t("Inserisci la tua password", "Enter your password", "Saisis ton mot de passe", "Introduce tu contraseña", "Passwort eingeben")}
                   />
                   <Button type="submit" disabled={loading} className="w-full group" size="lg">
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -324,6 +325,7 @@ export default function AuthPage() {
                     label={t("Nome", "Name", "Nom", "Nombre", "Name")}
                     value={form.name}
                     onChange={(v) => setForm((c) => ({ ...c, name: v }))}
+                    placeholder={t("Il tuo nome", "Your name", "Votre nom", "Tu nombre", "Dein Name")}
                   />
                   <FieldEmail
                     id="signup-email"
@@ -337,6 +339,7 @@ export default function AuthPage() {
                     value={form.password}
                     onChange={(v) => setForm((c) => ({ ...c, password: v }))}
                     helper={t("Minimo 12 caratteri.", "Minimum 12 characters.", "Au moins 12 caractères.", "Mínimo 12 caracteres.", "Mindestens 12 Zeichen.")}
+                    placeholder={t("Almeno 12 caratteri", "At least 12 characters", "Au moins 12 caractères", "Al menos 12 caracteres", "Mindestens 12 Zeichen")}
                     autoComplete="new-password"
                   />
                   <Button type="submit" disabled={loading} className="w-full group" size="lg">
@@ -361,9 +364,10 @@ interface FieldProps {
   value: string;
   onChange: (value: string) => void;
   helper?: string;
+  placeholder?: string;
 }
 
-function FieldText({ id, label, value, onChange, icon: Icon, helper }: FieldProps & { icon: React.ComponentType<{ className?: string }> }) {
+function FieldText({ id, label, value, onChange, icon: Icon, helper, placeholder }: FieldProps & { icon: React.ComponentType<{ className?: string }> }) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id} className="text-xs uppercase tracking-wider text-muted-foreground/80">{label}</Label>
@@ -375,6 +379,7 @@ function FieldText({ id, label, value, onChange, icon: Icon, helper }: FieldProp
           onChange={(e) => onChange(e.target.value)}
           className="pl-10"
           autoComplete="name"
+          placeholder={placeholder}
         />
       </div>
       {helper ? <p className="pl-1 text-[11px] text-muted-foreground/80">{helper}</p> : null}
@@ -382,7 +387,7 @@ function FieldText({ id, label, value, onChange, icon: Icon, helper }: FieldProp
   );
 }
 
-function FieldEmail({ id, label, value, onChange, helper }: FieldProps) {
+function FieldEmail({ id, label, value, onChange, helper, placeholder }: FieldProps) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id} className="text-xs uppercase tracking-wider text-muted-foreground/80">{label}</Label>
@@ -396,6 +401,7 @@ function FieldEmail({ id, label, value, onChange, helper }: FieldProps) {
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="pl-10"
+          placeholder={placeholder ?? "name@example.com"}
         />
       </div>
       {helper ? <p className="pl-1 text-[11px] text-muted-foreground/80">{helper}</p> : null}
@@ -403,7 +409,7 @@ function FieldEmail({ id, label, value, onChange, helper }: FieldProps) {
   );
 }
 
-function FieldPassword({ id, label, value, onChange, helper, autoComplete = "current-password" }: FieldProps & { autoComplete?: "current-password" | "new-password" }) {
+function FieldPassword({ id, label, value, onChange, helper, placeholder, autoComplete = "current-password" }: FieldProps & { autoComplete?: "current-password" | "new-password" }) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id} className="text-xs uppercase tracking-wider text-muted-foreground/80">{label}</Label>
@@ -416,6 +422,7 @@ function FieldPassword({ id, label, value, onChange, helper, autoComplete = "cur
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="pl-10"
+          placeholder={placeholder}
         />
       </div>
       {helper ? <p className="pl-1 text-[11px] text-muted-foreground/80">{helper}</p> : null}
