@@ -19,10 +19,10 @@ export function Footer({ t }: FooterProps) {
       className="mt-auto"
     >
       <div className="container mx-auto px-3 sm:px-5 min-h-14 py-2 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
-          © {new Date().getFullYear()}{" "}
-          <span className="font-display italic font-medium text-foreground/80">Extracto</span>{" "}
-          {t("di", "by", "par", "por", "von")}{" "}
+        <div className="text-xs text-muted-foreground inline-flex items-center flex-wrap gap-1">
+          <span>©&nbsp;{new Date().getFullYear()}</span>
+          <span className="font-display italic font-medium text-foreground/80">Extracto</span>
+          <span>{t("di", "by", "par", "por", "von")}</span>
           <a
             href="https://github.com/codelined-ag"
             target="_blank"
@@ -35,7 +35,7 @@ export function Footer({ t }: FooterProps) {
               className="inline-flex items-center justify-center transition-transform duration-200 group-hover:rotate-6 group-hover:scale-110"
             />
           </a>
-        </p>
+        </div>
         <a
           href="https://github.com/codelined-ag/Extracto"
           target="_blank"

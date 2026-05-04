@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -188,9 +190,18 @@ export function HistoryDialog({
       <DialogContent className="w-[96vw] !max-w-6xl h-[92vh] flex flex-col overflow-hidden p-0">
         <header className="px-7 pt-7 pb-5 space-y-4">
           <div className="space-y-1">
-            <h2 className="font-display text-3xl font-semibold tracking-tight">
+            <DialogTitle className="font-display text-3xl font-semibold tracking-tight">
               {t("Cronologia", "History", "Historique", "Historial", "Verlauf")}
-            </h2>
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              {t(
+                "Sfoglia, filtra ed esporta le esecuzioni OCR passate.",
+                "Browse, filter, and export past OCR runs.",
+                "Parcourez, filtrez et exportez les exécutions OCR précédentes.",
+                "Explora, filtra y exporta las ejecuciones de OCR anteriores.",
+                "Frühere OCR-Läufe durchsuchen, filtern und exportieren.",
+              )}
+            </DialogDescription>
             <p className="text-sm text-muted-foreground">
               {jobs.length === 0
                 ? activeFilterCount > 0
