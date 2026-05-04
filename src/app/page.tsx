@@ -2986,6 +2986,11 @@ export default function ExtractoPage() {
         onDownload={downloadHistoryResult}
         onBulkDelete={history.deleteMany}
         onBulkExport={history.exportManyAsZip}
+        onBulkTag={async (jobIds, tagIds) => {
+          await tagState.bulkTag(jobIds, tagIds, "add");
+          await history.loadJobs();
+          if (history.selectedId) await history.loadDetail(history.selectedId);
+        }}
         onApplyFilters={historyApplyFilters}
         availableTags={tagState.tags}
         onCreateTag={tagState.createTag}

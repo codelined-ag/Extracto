@@ -98,6 +98,10 @@ extracto tags delete <tag-id>                 # cascades: also removes from jobs
 
 extracto jobs set-tags <job-id> <tag-id> <tag-id> ...   # replaces the job's tag set
 extracto jobs set-tags <job-id>                          # clears all tags (no ids)
+
+extracto jobs bulk-tag --jobs id,id,... --tags id,id,...                # union (idempotent)
+extracto jobs bulk-tag --jobs id,id --tags id --mode replace            # clear-and-write
+extracto jobs bulk-tag --jobs id,id --tags "" --mode replace            # destructive: strips ALL tags from those jobs
 ```
 
 `jobs list` and `jobs get` include a `tags: [{id, name, color}]` array.

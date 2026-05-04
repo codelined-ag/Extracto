@@ -13,6 +13,7 @@ export interface TagsState {
   updateTag: (id: string, patch: { name?: string; color?: TagColor }) => Promise<void>;
   deleteTag: (id: string) => Promise<void>;
   setJobTags: (jobId: string, tagIds: string[]) => Promise<TagListItem[] | null>;
+  bulkTag: (jobIds: string[], tagIds: string[], mode?: "add" | "replace") => Promise<number>;
 }
 
 export function useTags(t: Translator): TagsState {
@@ -127,6 +128,29 @@ export function useTags(t: Translator): TagsState {
     [failureToast],
   );
 
+  const bulkTag = React.useCallback(
+    async (jobIds: string[], tagIds: string[], mode: "add" | "replace" = "add"): Promise<number> => {
+      if (jobIds.length === 0) return 0;
+      try {
+        const res = await fetch("/api/jobs/bulk/tags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobIds, tagIds, mode }),
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error || `Bulk tag failed (${res.status})`);
+        }
+        const payload = (await res.json()) as { updated?: number };
+        return payload.updated ?? 0;
+      } catch (error) {
+        failureToast(error, "bulk tag failed");
+        return 0;
+      }
+    },
+    [failureToast],
+  );
+
   return {
     tags,
     isLoading,
@@ -135,5 +159,6 @@ export function useTags(t: Translator): TagsState {
     updateTag,
     deleteTag,
     setJobTags,
+    bulkTag,
   };
 }

@@ -491,6 +491,26 @@ cmd_jobs() {
       done
       printf "%s\n" "$body"
       ;;
+    bulk-tag)
+      local mode="add"
+      local job_csv=""
+      local tag_csv=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --mode) mode="${2:-add}"; shift 2 ;;
+          --jobs) job_csv="${2:-}"; shift 2 ;;
+          --tags) tag_csv="${2:-}"; shift 2 ;;
+          *) die "usage: extracto jobs bulk-tag --jobs id,id,... --tags id,id,... [--mode add|replace]" ;;
+        esac
+      done
+      [ -n "$job_csv" ] || die "--jobs is required"
+      local job_json tag_json
+      job_json="$(printf '%s' "$job_csv" | python3 -c 'import json,sys; print(json.dumps([s for s in sys.stdin.read().split(",") if s]))')"
+      tag_json="$(printf '%s' "$tag_csv" | python3 -c 'import json,sys; print(json.dumps([s for s in sys.stdin.read().split(",") if s]))')"
+      api_post_json "/api/v1/jobs/bulk/tags" \
+        "$(printf '{"jobIds":%s,"tagIds":%s,"mode":%s}' "$job_json" "$tag_json" \
+          "$(printf '%s' "$mode" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")"
+      ;;
     set-tags)
       [ -n "${1:-}" ] || die "usage: extracto jobs set-tags <job-id> [<tag-id> ...]"
       local job_id="$1"
@@ -505,7 +525,7 @@ cmd_jobs() {
       api_put_json "/api/v1/jobs/${job_id}/tags" "$(printf '{"tagIds":%s}' "$ids_json")"
       ;;
     *)
-      die "usage: extracto jobs <list|get|delete|cancel|wait|set-tags> [args...]"
+      die "usage: extracto jobs <list|get|delete|cancel|wait|set-tags|bulk-tag> [args...]"
       ;;
   esac
 }
@@ -1067,6 +1087,9 @@ Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
   jobs cancel <id>              Request a job stop
   jobs wait <id>                Poll until the job leaves QUEUED/RUNNING
   jobs set-tags <id> [tag-id...]  Replace the tags applied to a job
+  jobs bulk-tag --jobs id,id,... --tags id,id,... [--mode add|replace]
+                                Apply tags to many jobs at once (default mode add = union).
+                                Mode replace clears existing tags first; mode replace with --tags "" strips all tags from those jobs.
   tags list                     List the caller's tags
   tags create <name> [color]    Create or recolor a tag (slate|blue|green|yellow|orange|red|pink|purple)
   tags update <id> [--name X] [--color C]

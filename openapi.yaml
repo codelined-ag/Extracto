@@ -438,6 +438,44 @@ paths:
                 type: object
                 properties: { deleted: { type: integer } }
 
+  /api/v1/jobs/bulk/tags:
+    post:
+      summary: Apply tags to many jobs in one call
+      operationId: bulkTagJobs
+      tags: [Jobs, Tags]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jobIds, tagIds]
+              properties:
+                jobIds:
+                  type: array
+                  items: { type: string }
+                  minItems: 1
+                  maxItems: 200
+                tagIds:
+                  type: array
+                  items: { type: string }
+                mode:
+                  type: string
+                  enum: [add, replace]
+                  default: add
+                  description: "'add' is a union (idempotent on duplicates); 'replace' clears existing tags on each job and writes the new set. 'replace' with an empty tagIds array is destructive and strips all tags from the listed jobs."
+      responses:
+        "200":
+          description: Bulk applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated: { type: integer }
+                  mode: { type: string, enum: [add, replace] }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/v1/jobs/{id}/tags:
     put:
       summary: Replace the set of tags applied to a job

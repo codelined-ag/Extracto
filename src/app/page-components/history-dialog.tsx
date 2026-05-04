@@ -67,6 +67,7 @@ export interface HistoryDialogProps {
   onDownload: (format: "md" | "json") => void;
   onBulkDelete: (ids: string[]) => void;
   onBulkExport: (ids: string[]) => void;
+  onBulkTag: (jobIds: string[], tagIds: string[]) => Promise<void>;
   availableTags: TagListItem[];
   onCreateTag: (name: string, color: TagColor) => Promise<TagListItem | null>;
   onUpdateTag: (id: string, patch: { name?: string; color?: TagColor }) => Promise<void>;
@@ -98,6 +99,7 @@ export function HistoryDialog({
   onDownload,
   onBulkDelete,
   onBulkExport,
+  onBulkTag,
   availableTags,
   onCreateTag,
   onUpdateTag,
@@ -381,6 +383,14 @@ export function HistoryDialog({
             <span className="text-xs text-muted-foreground">
               {t(`${checkedCount} selezionate`, `${checkedCount} selected`, `${checkedCount} sélectionnées`, `${checkedCount} seleccionadas`, `${checkedCount} ausgewählt`)}
             </span>
+            <BulkTagMenu
+              t={t}
+              availableTags={availableTags}
+              disabled={isDeleting}
+              onApply={async (tagIds) => {
+                await onBulkTag(checkedIds, tagIds);
+              }}
+            />
             <Button
               variant="outline"
               size="sm"
@@ -742,5 +752,90 @@ export function HistoryDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function BulkTagMenu({
+  t,
+  availableTags,
+  onApply,
+  disabled,
+}: {
+  t: Translator;
+  availableTags: TagListItem[];
+  onApply: (tagIds: string[]) => Promise<void>;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [picked, setPicked] = React.useState<string[]>([]);
+  const [busy, setBusy] = React.useState(false);
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) setPicked([]);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-7" disabled={disabled || availableTags.length === 0}>
+          <FilterIcon className="size-3 mr-1.5" />
+          {t("Tag", "Tags", "Tags", "Etiquetas", "Tags")}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-3 space-y-3">
+        <p className="text-[11px] text-muted-foreground">
+          {t(
+            "Aggiungi tag alle esecuzioni selezionate.",
+            "Add tags to the selected runs.",
+            "Ajouter des tags aux exécutions sélectionnées.",
+            "Añadir etiquetas a las ejecuciones seleccionadas.",
+            "Tags zu den ausgewählten Läufen hinzufügen.",
+          )}
+        </p>
+        <div className="flex flex-wrap gap-1">
+          {availableTags.map((tag) => {
+            const active = picked.includes(tag.id);
+            return (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() =>
+                  setPicked((prev) =>
+                    prev.includes(tag.id) ? prev.filter((id) => id !== tag.id) : [...prev, tag.id],
+                  )
+                }
+                className={cn(
+                  "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors",
+                  active
+                    ? `${tagChipClass(tag.color)} border-transparent`
+                    : "border-border text-muted-foreground hover:bg-accent",
+                )}
+              >
+                <span className={cn("size-2 rounded-full", tagSwatchClass(tag.color))} />
+                {tag.name}
+              </button>
+            );
+          })}
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          className="w-full h-8"
+          disabled={picked.length === 0 || busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await onApply(picked);
+              setOpen(false);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {t("Applica", "Apply", "Appliquer", "Aplicar", "Anwenden")}
+        </Button>
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -253,6 +253,20 @@ server.tool(
 );
 
 server.tool(
+  "jobs_bulk_tag",
+  "Apply tags to many jobs at once. Default mode 'add' is a union (idempotent on duplicates). Mode 'replace' clears existing tags on each job and writes the new set; 'replace' with an empty tagIds array is destructive and strips all tags from the listed jobs.",
+  {
+    jobIds: z.array(z.string()).min(1).max(200),
+    tagIds: z.array(z.string()),
+    mode: z.enum(["add", "replace"]).optional(),
+  },
+  async (input) =>
+    asTextResult(
+      await call("/api/v1/jobs/bulk/tags", { method: "POST", body: input }),
+    ),
+);
+
+server.tool(
   "job_set_tags",
   "Replace the set of tags applied to a job. Pass an empty array to clear all tags.",
   { jobId: z.string(), tagIds: z.array(z.string()) },
