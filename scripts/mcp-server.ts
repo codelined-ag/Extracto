@@ -208,7 +208,7 @@ server.tool(
     jobId: z.string(),
     collectionName: z.string(),
     vectorStore: z.object({
-      kind: z.enum(["chroma", "qdrant", "weaviate", "milvus", "opensearch", "pinecone"]),
+      kind: z.enum(["chroma", "qdrant", "weaviate", "milvus", "opensearch", "pinecone", "typesense"]),
       baseUrl: z.string().url(),
       apiKey: z.string().optional(),
       dimensions: z.number().int().positive().optional(),
@@ -250,6 +250,42 @@ server.tool(
     apiKey: z.string().optional(),
   },
   async (input) => asTextResult(await call("/api/v1/kb/test-connection", { method: "POST", body: input })),
+);
+
+server.tool(
+  "s3_export",
+  "Upload a completed OCR job's markdown + JSON to the user's pre-configured S3 bucket. Credentials live on the Extracto server (Settings → S3) and never round-trip through the client. Returns the bucket and object keys. Defaults to wait=true: the call blocks until the upload finishes.",
+  {
+    jobId: z.string().describe("ID of the OCR job whose results to upload."),
+    keyPrefix: z
+      .string()
+      .optional()
+      .describe(
+        "Optional sub-prefix appended under the user's configured prefix. Defaults to a slugified version of the job's fileName.",
+      ),
+    wait: z.boolean().optional().describe("Default true. When false, returns {exportId} immediately."),
+  },
+  async (input) => asTextResult(await call("/api/v1/export/s3", { method: "POST", body: input })),
+);
+
+server.tool(
+  "s3_list",
+  "List objects in the user's configured S3 bucket under a sub-prefix. By default, only OCR-able file extensions (.pdf, .png, .jpg, .jpeg, .webp, .tif, .tiff, .bmp, .gif, .heic, .heif) are returned. Pass all=true to lift that filter. Returns a paginated result with nextToken when more results are available.",
+  {
+    prefix: z.string().optional().describe("Sub-prefix appended under the user's configured prefix."),
+    pageSize: z.number().int().min(1).max(200).optional(),
+    token: z.string().optional().describe("Continuation token from a prior response's nextToken."),
+    all: z.boolean().optional().describe("When true, do not filter by OCR-able extensions."),
+  },
+  async (input) => {
+    const qs = new URLSearchParams();
+    if (input.prefix) qs.set("prefix", input.prefix);
+    if (input.pageSize) qs.set("pageSize", String(input.pageSize));
+    if (input.token) qs.set("token", input.token);
+    if (input.all) qs.set("all", "1");
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return asTextResult(await call(`/api/v1/s3/list${suffix}`));
+  },
 );
 
 const transport = new StdioServerTransport();

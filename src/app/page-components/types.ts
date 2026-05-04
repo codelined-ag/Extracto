@@ -6,7 +6,7 @@ export type Translator = (
   de?: string,
 ) => string;
 
-export type SettingsTab = "model" | "provider" | "kb" | "general" | "keys";
+export type SettingsTab = "model" | "provider" | "kb" | "general" | "keys" | "s3";
 
 export type ResultViewMode = "preview" | "split" | "result";
 
@@ -39,6 +39,18 @@ export interface KbExportFileState {
   embeddingTotal?: number;
 }
 
+export type S3ExportPhase = "queued" | "reading" | "uploading" | "done" | "error";
+
+export interface S3ExportFileState {
+  status: "idle" | "pending" | "success" | "error";
+  phase?: S3ExportPhase;
+  bucket?: string;
+  keys?: string[];
+  uploadedBytes?: number;
+  totalBytes?: number;
+  error?: string;
+}
+
 export interface ProcessingFile {
   id: string;
   name: string;
@@ -64,6 +76,7 @@ export interface ProcessingFile {
   events?: OcrProgressEventView[];
   file?: File;
   kbExport?: KbExportFileState;
+  s3Export?: S3ExportFileState;
   isPreprocessing?: boolean;
 }
 

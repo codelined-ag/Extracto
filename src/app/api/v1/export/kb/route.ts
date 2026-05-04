@@ -30,6 +30,7 @@ import { WeaviateAdapter } from "@/lib/kb/stores/weaviate";
 import { MilvusAdapter } from "@/lib/kb/stores/milvus";
 import { OpenSearchAdapter } from "@/lib/kb/stores/opensearch";
 import { PineconeAdapter } from "@/lib/kb/stores/pinecone";
+import { TypesenseAdapter } from "@/lib/kb/stores/typesense";
 import type {
   ChunkingOptions,
   ChunkingStrategy,
@@ -58,7 +59,7 @@ const VALID_STRATEGIES: readonly ChunkingStrategy[] = [
   "semantic",
 ];
 const VALID_PROVIDERS: readonly EmbeddingProviderKind[] = ["ollama", "openrouter", "openai_compat"];
-const VALID_STORES = ["chroma", "qdrant", "weaviate", "milvus", "opensearch", "pinecone"] as const;
+const VALID_STORES = ["chroma", "qdrant", "weaviate", "milvus", "opensearch", "pinecone", "typesense"] as const;
 type StoreKind = (typeof VALID_STORES)[number];
 
 interface KbExportRequest extends Record<string, unknown> {
@@ -247,6 +248,12 @@ function parseVectorStore(raw: unknown): VectorStoreAdapter {
       throw new ApiRouteError("vectorStore.apiKey is required for Pinecone", 400);
     }
     return new PineconeAdapter({ baseUrl, apiKey, dimensions });
+  }
+  if (k === "typesense") {
+    if (!apiKey) {
+      throw new ApiRouteError("vectorStore.apiKey is required for Typesense", 400);
+    }
+    return new TypesenseAdapter({ baseUrl, apiKey, dimensions });
   }
   return new ChromaAdapter({ baseUrl, apiKey, dimensions });
 }

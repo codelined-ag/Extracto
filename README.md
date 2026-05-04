@@ -68,39 +68,44 @@ Other things you don't need to bolt on:
 
 ## Quickstart
 
-You need Docker. That's it. Pick one path.
+You need Docker. That's it.
 
-### Path A: single `docker run`
+### One-liner (Linux / macOS)
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/codelined-ag/Extracto/main/scripts/install.sh | bash
+```
+
+### One-liner (Windows)
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/codelined-ag/Extracto/main/scripts/install.ps1 | iex
+```
+
+The installer clones the repo to `~/.local/share/extracto` (or `%LOCALAPPDATA%\Extracto`), sets up Docker + Ollama if missing, drops an `extracto` launcher on PATH, and starts the stack. Open <http://localhost:3000> and sign up.
+
+The launcher wraps the full API: `extracto ocr ./invoice.pdf`, `extracto jobs list`, `extracto kb export`, `extracto api-key create ...`. Full reference at [extracto.help/cli/overview](https://extracto.help/cli/overview).
+
+<details>
+<summary>Manual paths</summary>
+
+**From source:**
+```bash
+git clone https://github.com/codelined-ag/Extracto.git
+cd Extracto
+./install-extracto.sh   # Linux/macOS
+# or: .\scripts\extracto.ps1 install   # Windows (Docker Desktop + WSL2)
+extracto on
+```
+
+**Single `docker run` (no launcher):**
 ```bash
 docker run -d --name extracto -p 3000:3000 -v extracto-data:/app/data -e AUTH_SECRET="$(openssl rand -hex 32)" ghcr.io/codelined-ag/extracto:latest
 ```
 
-Open <http://localhost:3000>, sign up, you're in. Multi-arch (`linux/amd64` + `linux/arm64`); pin a release with `:v0.3.1` instead of `:latest`.
+Multi-arch (`linux/amd64` + `linux/arm64`); pin a release with `:v0.5.3` instead of `:latest`.
 
-### Path B (recommended): the `extracto` installer (Linux / macOS)
-
-The installer adds Docker and Ollama if missing, drops an `extracto` launcher in `~/.local/bin`, and runs Extracto from the published image (no source build needed):
-
-```bash
-git clone https://github.com/codelined-ag/Extracto.git
-cd Extracto
-./install-extracto.sh
-extracto on
-```
-
-The launcher also wraps the API: `extracto ocr ./invoice.pdf`, `extracto jobs list`, `extracto kb export`, `extracto api-key create ...`. Full reference at [extracto.help/cli/overview](https://extracto.help/cli/overview).
-
-### Path C: Windows
-
-```powershell
-git clone https://github.com/codelined-ag/Extracto.git
-cd Extracto
-.\scripts\extracto.ps1 install
-extracto on
-```
-
-Requires Docker Desktop with the WSL2 backend.
+</details>
 
 ---
 

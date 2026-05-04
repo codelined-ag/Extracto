@@ -307,6 +307,18 @@ api_get() {
     "${EXTRACTO_URL_DEFAULT}${path}"
 }
 
+api_get_raw() {
+  # api_get_raw <path> <out-file>
+  local path="$1"
+  local out="$2"
+  local token
+  token="$(require_token)"
+  curl -fsS \
+    -H "Authorization: Bearer ${token}" \
+    -o "$out" \
+    "${EXTRACTO_URL_DEFAULT}${path}"
+}
+
 api_post_json() {
   # api_post_json <path> <json-body>
   local path="$1"
@@ -780,6 +792,66 @@ print(json.dumps(payload, separators=(",", ":")))
   esac
 }
 
+cmd_s3() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    export)
+      local job_id="${1:-}"
+      [ -n "$job_id" ] || die "usage: extracto s3 export <job-id> [--prefix SUBPREFIX]"
+      shift
+      local prefix=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --prefix) prefix="${2:-}"; shift 2 ;;
+          *) die "unknown s3 export flag: $1" ;;
+        esac
+      done
+      local body
+      if [ -n "$prefix" ]; then
+        body="{\"jobId\":\"${job_id}\",\"keyPrefix\":\"${prefix}\",\"wait\":true}"
+      else
+        body="{\"jobId\":\"${job_id}\",\"wait\":true}"
+      fi
+      info "exporting job ${job_id} to S3..."
+      api_post_json "/api/v1/export/s3" "$body"
+      ;;
+    ls|list)
+      local prefix="" page_size="" token="" all=0
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --prefix)    prefix="${2:-}"; shift 2 ;;
+          --page-size) page_size="${2:-}"; shift 2 ;;
+          --token)     token="${2:-}"; shift 2 ;;
+          --all)       all=1; shift ;;
+          *) die "unknown s3 ls flag: $1" ;;
+        esac
+      done
+      local query=""
+      [ -n "$prefix" ] && query="${query}&prefix=$(printf '%s' "$prefix" | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read()))')"
+      [ -n "$page_size" ] && query="${query}&pageSize=${page_size}"
+      [ -n "$token" ] && query="${query}&token=$(printf '%s' "$token" | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read()))')"
+      [ "$all" -eq 1 ] && query="${query}&all=1"
+      query="${query#&}"
+      local path="/api/v1/s3/list"
+      [ -n "$query" ] && path="${path}?${query}"
+      api_get "$path"
+      ;;
+    download|dl)
+      local key="${1:-}"
+      local out="${2:-}"
+      [ -n "$key" ] || die "usage: extracto s3 download <key> [out-file]"
+      [ -n "$out" ] || out="$(basename "$key")"
+      info "downloading ${key} -> ${out}..."
+      api_get_raw "/api/v1/s3/download?key=$(printf '%s' "$key" | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read()))')" "$out"
+      ok "saved ${out}"
+      ;;
+    *)
+      die "usage: extracto s3 {export|ls|download} [flags]"
+      ;;
+  esac
+}
+
 cmd_uninstall() {
   ensure_project
   run_step "Removing Extracto containers and volumes..." compose down -v --remove-orphans
@@ -832,9 +904,16 @@ Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
   settings get                  Show current API provider settings
   kb export <job-id> --collection N --store-url URL --embed-model M
                                 Export an OCR job's text to a vector store
-  kb test-connection --store chroma|qdrant|weaviate|milvus|opensearch|pinecone --store-url URL [--store-key KEY]
+  kb test-connection --store chroma|qdrant|weaviate|milvus|opensearch|pinecone|typesense --store-url URL [--store-key KEY]
                                 Probe a vector store for reachability + auth
                                 before running an export
+  s3 export <job-id> [--prefix SUBPREFIX]
+                                Upload an OCR job's markdown + JSON to the
+                                configured user S3 bucket
+  s3 ls [--prefix P] [--page-size N] [--token T] [--all]
+                                List objects in the configured S3 bucket
+                                (filtered to OCR-able extensions by default)
+  s3 download <key> [out-file]  Stream an S3 object to a local file
 
 Environment:
   EXTRACTO_URL                  Base URL (default http://127.0.0.1:3000)
@@ -860,6 +939,7 @@ main() {
     presets)   shift; cmd_presets "$@" ;;
     settings)  shift; cmd_settings "$@" ;;
     kb)        shift; cmd_kb "$@" ;;
+    s3)        shift; cmd_s3 "$@" ;;
     -h|--help|help|"")
       print_help
       ;;
