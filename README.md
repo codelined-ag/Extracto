@@ -62,7 +62,6 @@ Other things you don't need to bolt on:
 - Resumable jobs, page-by-page progress, searchable history.
 - Optional S3/MinIO blob offload, Prometheus metrics, healthcheck.
 - Five UI languages (English, Italian, French, Spanish, German).
-- 1200+ tests, MIT-licensed, semver on `/api/v1`.
 
 ---
 
