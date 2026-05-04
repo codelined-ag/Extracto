@@ -23,6 +23,20 @@ function safeFileNameStem(name: string, fallback: string): string {
   return cleaned || fallback;
 }
 
+function sanitizeKeyPrefix(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  if (/[\x00-\x1f\x7f]/.test(trimmed)) {
+    throw new Error("keyPrefix contains control characters");
+  }
+  const segments = trimmed.replace(/^\/+|\/+$/g, "").split("/");
+  if (segments.includes("..")) {
+    throw new Error('keyPrefix contains a ".." segment');
+  }
+  return segments.join("/");
+}
+
 export async function runS3Export(input: S3ExportInput): Promise<S3ExportResult> {
   const job = await db.ocrJob.findFirst({
     where: { id: input.jobId, userId: input.userId },
@@ -51,7 +65,8 @@ export async function runS3Export(input: S3ExportInput): Promise<S3ExportResult>
 
   const { client, sdk, bucket, prefix } = await buildUserS3Client(defaults);
   const stem = safeFileNameStem(job.fileName ?? job.id, job.id);
-  const callerPrefix = (input.keyPrefix || stem).replace(/^\/+|\/+$/g, "");
+  const sanitized = sanitizeKeyPrefix(input.keyPrefix);
+  const callerPrefix = (sanitized ?? stem).replace(/^\/+|\/+$/g, "");
   const baseKey = joinKey(prefix, callerPrefix);
   const mdKey = `${baseKey}/${job.id}.md`;
   const jsonKey = `${baseKey}/${job.id}.json`;

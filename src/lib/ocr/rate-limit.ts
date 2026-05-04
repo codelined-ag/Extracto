@@ -5,6 +5,8 @@ import type { NextResponse } from "next/server";
 
 export const OCR_RATE_LIMIT_WINDOW_MS = 60_000;
 export const OCR_RATE_LIMIT_MAX = 6;
+export const S3_READ_RATE_LIMIT_MAX = 60;
+export const S3_WRITE_RATE_LIMIT_MAX = 12;
 
 export function enforceOcrSubmitRateLimit(auth: AuthContext, clientIp: string): NextResponse | null {
   const rateLimitKey =
@@ -23,6 +25,24 @@ export function enforceOcrSubmitRateLimit(auth: AuthContext, clientIp: string): 
   if (rateLimit.allowed) return null;
   return handleApiError(
     new ApiRouteError("Too many OCR jobs requested. Please retry shortly.", 429),
+    { headers: { "Retry-After": `${rateLimit.retryAfterSeconds}` } },
+  );
+}
+
+export function enforceS3RateLimit(
+  auth: AuthContext,
+  clientIp: string,
+  kind: "read" | "write",
+): NextResponse | null {
+  const max = kind === "read" ? S3_READ_RATE_LIMIT_MAX : S3_WRITE_RATE_LIMIT_MAX;
+  const rateLimitKey =
+    auth.method === "api-key" && auth.apiKeyId
+      ? `s3:${kind}:key:${auth.apiKeyId}`
+      : `s3:${kind}:${auth.userId}:${clientIp}`;
+  const rateLimit = consumeRateLimit({ key: rateLimitKey, max, windowMs: OCR_RATE_LIMIT_WINDOW_MS });
+  if (rateLimit.allowed) return null;
+  return handleApiError(
+    new ApiRouteError(`Too many S3 ${kind} requests. Retry shortly.`, 429),
     { headers: { "Retry-After": `${rateLimit.retryAfterSeconds}` } },
   );
 }

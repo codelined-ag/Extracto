@@ -169,13 +169,19 @@ export function deriveHistoryStatus(
 ): DerivedHistoryStatus {
   if (status === "COMPLETED") return "completed";
   if (status === "FAILED") return "failed";
-  if (status === "PROCESSING") return "processing";
 
-  const stage =
+  const meta =
     metadata && typeof metadata === "object" && !Array.isArray(metadata)
-      ? (metadata as Record<string, unknown>).stage
+      ? (metadata as Record<string, unknown>)
       : undefined;
-  if (typeof stage === "string" && stage === "paused") return "stopped";
+  const stage = typeof meta?.stage === "string" ? (meta.stage as string) : undefined;
+  const stopRequested = meta?.stopRequested === true;
+
+  if (status === "PROCESSING") {
+    if (stopRequested) return "stopped";
+    return "processing";
+  }
+  if (stage === "paused" || stopRequested) return "stopped";
   return "queued";
 }
 

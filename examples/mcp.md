@@ -14,6 +14,9 @@ directly.
 | `jobs_list`   | List the caller's recent jobs (filter by status, paginate).       |
 | `job_stop`    | Pause a running job at the next page checkpoint.                  |
 | `kb_search`   | Full-text search across KB-exported jobs.                         |
+| `kb_export`   | Chunk + embed + push a job's text to a vector store.              |
+| `s3_export`   | Upload a job's markdown + JSON to the user's configured S3 bucket.|
+| `s3_list`     | List OCR-able files under the user's S3 prefix (paginated).       |
 | `presets_list`| List the caller's output presets.                                 |
 
 ## 1. Mint an Extracto API key

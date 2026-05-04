@@ -2,39 +2,42 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { ApiRouteError } from "@/lib/api-error";
 import { withAuth } from "@/lib/auth/request";
-import { downloadS3Object } from "@/lib/s3/list";
+import { enforceS3RateLimit } from "@/lib/ocr/rate-limit";
+import { openS3Download } from "@/lib/s3/list";
+import { getClientIpAddress } from "@/lib/request-security";
 
 const MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024;
 
-export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) => {
+export const GET = withAuth("s3:read", async (request: NextRequest, { auth }) => {
+  const limited = enforceS3RateLimit(auth, getClientIpAddress(request), "read");
+  if (limited) return limited;
+
   const { searchParams } = new URL(request.url);
   const key = (searchParams.get("key") ?? "").trim();
-  if (!key) {
-    throw new ApiRouteError("key (string) is required", 400);
-  }
-  if (key.length > 1024) {
-    throw new ApiRouteError("key is too long", 400);
-  }
+  if (!key) throw new ApiRouteError("key (string) is required", 400);
+  if (key.length > 1024) throw new ApiRouteError("key is too long", 400);
 
   try {
-    const obj = await downloadS3Object(auth.userId, key);
-    if (obj.size > MAX_DOWNLOAD_BYTES) {
-      throw new ApiRouteError(`Object is too large (${obj.size} bytes; max ${MAX_DOWNLOAD_BYTES})`, 413);
-    }
+    const dl = await openS3Download(auth.userId, key, MAX_DOWNLOAD_BYTES);
     const fileName = key.split("/").pop() || "download";
-    return new NextResponse(new Uint8Array(obj.body), {
+    return new NextResponse(dl.stream as unknown as BodyInit, {
       status: 200,
       headers: {
-        "Content-Type": obj.contentType,
-        "Content-Length": String(obj.size),
+        "Content-Type": dl.contentType,
+        "Content-Length": String(dl.size),
         "Content-Disposition": `attachment; filename="${fileName.replace(/[^a-zA-Z0-9._-]+/g, "_")}"`,
         "Cache-Control": "private, no-store",
       },
     });
   } catch (err) {
     if (err instanceof ApiRouteError) throw err;
+    if (err && typeof err === "object" && "statusCode" in err) {
+      const e = err as { message?: unknown; statusCode: number };
+      throw new ApiRouteError(typeof e.message === "string" ? e.message : "S3 download failed", e.statusCode);
+    }
     if (err instanceof Error) {
-      throw new ApiRouteError(err.message, /not configured/i.test(err.message) ? 400 : 502);
+      const status = /not configured|invalid|outside|".."|control char/i.test(err.message) ? 400 : 502;
+      throw new ApiRouteError(err.message, status);
     }
     throw err;
   }

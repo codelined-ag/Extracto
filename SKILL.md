@@ -99,6 +99,20 @@ extracto settings get
 
 Settings (provider, endpoint, hasApiKey) are per-user and stored on the filesystem next to the SQLite DB. To change them, use the web UI — the CLI deliberately does not write secrets.
 
+### S3-compatible storage
+
+Configure the bucket once via Settings → S3 in the UI (any S3-compatible endpoint: AWS S3, R2, Backblaze, MinIO, Garage, Ceph, SeaweedFS, etc.). Then from the CLI:
+
+```bash
+extracto s3 export <job-id>                   # upload one job's md + JSON to S3
+extracto s3 export <job-id> --prefix scans    # override the per-job sub-prefix
+extracto s3 ls                                # list OCR-able files in the bucket
+extracto s3 ls --prefix invoices --all        # any extension under a sub-prefix
+extracto s3 download <key> [out-file]         # stream object to disk
+```
+
+Endpoint is server-side validated against SSRF (cloud-metadata IPs and link-local always blocked). Loopback / RFC1918 hosts require `S3_ALLOW_LOOPBACK=1` (global) or `S3_ALLOWED_HOSTS=foo.internal,*.bar.internal` (granular).
+
 ## Output formats
 
 - All commands emit JSON straight from the API surface — no transformation. Pipe to `jq` for filtering.

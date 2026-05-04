@@ -146,11 +146,97 @@ const DEFAULT_VECTOR_STORE_HOST_PATTERNS = [
   "172.17.0.1",
 ];
 
-const BLOCKED_VECTOR_STORE_HOST_LITERALS: ReadonlySet<string> = new Set([
+const BLOCKED_HOST_LITERALS: ReadonlySet<string> = new Set([
   "169.254.169.254",
   "metadata.google.internal",
   "metadata.azure.com",
+  "metadata.packet.net",
+  "metadata.platformequinix.com",
 ]);
+
+function parseIPv4(host: string): [number, number, number, number] | null {
+  const parts = host.split(".");
+  if (parts.length !== 4) return null;
+  const out: number[] = [];
+  for (const p of parts) {
+    if (!/^\d{1,3}$/.test(p)) return null;
+    const n = Number(p);
+    if (n < 0 || n > 255) return null;
+    out.push(n);
+  }
+  return out as [number, number, number, number];
+}
+
+function stripIPv6Brackets(host: string): string {
+  return host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+}
+
+function normalizeHostname(rawHostname: string): string {
+  return stripIPv6Brackets(rawHostname.toLowerCase()).replace(/\.$/, "");
+}
+
+/**
+ * True for any host that is **always** unsafe regardless of policy: cloud
+ * metadata services and the AWS IMDS link-local literal, plus IPv6 link-local
+ * IMDS variants. Loopback and RFC1918 are NOT included here — those are
+ * legitimate for Ollama / Chroma / etc. and must be denied per-policy when
+ * the per-policy allowlist excludes them.
+ */
+function isUnconditionallyBlockedHost(rawHostname: string): boolean {
+  const hostname = normalizeHostname(rawHostname);
+  if (BLOCKED_HOST_LITERALS.has(hostname)) return true;
+
+  const v4 = parseIPv4(hostname);
+  if (v4 && v4[0] === 169 && v4[1] === 254) return true; // 169.254.0.0/16 link-local
+
+  if (hostname === "::ffff:a9fe:a9fe") return true;      // IPv4-mapped IMDS
+  if (hostname.startsWith("::ffff:")) {
+    const tail = hostname.slice("::ffff:".length);
+    const mapped = parseIPv4(tail);
+    if (mapped && mapped[0] === 169 && mapped[1] === 254) return true;
+  }
+  if (hostname.startsWith("fe80:")) return true;         // IPv6 link-local
+  return false;
+}
+
+/**
+ * Stricter than isUnconditionallyBlockedHost — also blocks loopback, RFC1918,
+ * CGNAT, ULA-IPv6, "0.0.0.0", "host-gateway", and Docker bridge IPs.
+ * Used by S3 to deny the AWS-SDK-as-signed-HTTP-request gadget against the
+ * Extracto host's internal services. Opt out per-deployment with
+ * S3_ALLOW_LOOPBACK=1 (e.g. local MinIO sidecar testing).
+ */
+function isPrivateOrLoopbackHost(rawHostname: string): boolean {
+  if (isUnconditionallyBlockedHost(rawHostname)) return true;
+  const hostname = normalizeHostname(rawHostname);
+
+  if (hostname === "localhost" || hostname.endsWith(".localhost")) return true;
+  if (hostname === "host.docker.internal" || hostname === "host.containers.internal") return true;
+  if (hostname === "host-gateway") return true;
+
+  const v4 = parseIPv4(hostname);
+  if (v4) {
+    const [a, b] = v4;
+    if (a === 127) return true;
+    if (a === 0) return true;
+    if (a === 10) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    return false;
+  }
+
+  if (hostname === "::1" || hostname === "::") return true;
+  if (hostname.startsWith("fc") || hostname.startsWith("fd")) return true;
+  if (hostname.startsWith("::ffff:")) {
+    const tail = hostname.slice("::ffff:".length);
+    const mapped = parseIPv4(tail);
+    if (mapped) {
+      return isPrivateOrLoopbackHost(`${mapped[0]}.${mapped[1]}.${mapped[2]}.${mapped[3]}`);
+    }
+  }
+  return false;
+}
 
 function getVectorStorePatterns(): string[] {
   const configured = parsePatternList(process.env.VECTOR_STORE_ALLOWED_HOSTS || "");
@@ -160,9 +246,9 @@ function getVectorStorePatterns(): string[] {
 }
 
 function rejectBlockedHost(hostname: string): void {
-  if (BLOCKED_VECTOR_STORE_HOST_LITERALS.has(hostname)) {
+  if (isUnconditionallyBlockedHost(hostname)) {
     throw new ApiRouteError(
-      `Endpoint host "${hostname}" is blocked (cloud-metadata address)`,
+      `Endpoint host "${hostname}" is blocked (cloud-metadata or link-local IMDS address)`,
       400,
     );
   }
@@ -203,31 +289,28 @@ export function enforceVectorStoreEndpointPolicy(rawBaseUrl: string): string {
   return parsed.toString().replace(/\/+$/u, "");
 }
 
-const DEFAULT_S3_HOST_PATTERNS = [
-  "*.amazonaws.com",
-  "*.r2.cloudflarestorage.com",
-  "*.backblazeb2.com",
-  "*.digitaloceanspaces.com",
-  "*.wasabisys.com",
-  "*.linodeobjects.com",
-  "storage.googleapis.com",
-  "localhost",
-  "127.0.0.1",
-  "0.0.0.0",
-  "::1",
-  "host.docker.internal",
-  "host-gateway",
-  "host.containers.internal",
-  "172.17.0.1",
-];
-
-function getS3Patterns(): string[] {
-  const configured = parsePatternList(process.env.S3_ALLOWED_HOSTS || "");
-  return configured.length > 0
-    ? Array.from(new Set([...DEFAULT_S3_HOST_PATTERNS, ...configured]))
-    : DEFAULT_S3_HOST_PATTERNS;
+function s3LoopbackOptedIn(): boolean {
+  const flag = (process.env.S3_ALLOW_LOOPBACK || "").trim().toLowerCase();
+  return flag === "1" || flag === "true";
 }
 
+function s3HostExplicitlyAllowed(hostname: string): boolean {
+  const configured = parsePatternList(process.env.S3_ALLOWED_HOSTS || "")
+    .map(normalizeHostPattern)
+    .filter(Boolean);
+  return configured.some((pattern) => hostMatchesPattern(hostname, pattern));
+}
+
+/**
+ * Open by default to any S3-compatible host (AWS, R2, Backblaze, MinIO,
+ * Garage, Ceph, SeaweedFS, on-prem, ...). The only refusals are
+ * SSRF-relevant: cloud-metadata IPs (always), and private/loopback ranges
+ * unless explicitly opted in.
+ *
+ * Two opt-in mechanisms for private hosts:
+ *  - S3_ALLOW_LOOPBACK=1 — global opt-in, allows all RFC1918/loopback/Docker hosts
+ *  - S3_ALLOWED_HOSTS=foo.internal,*.bar.internal — granular opt-in, only those names
+ */
 export function enforceS3EndpointPolicy(rawEndpoint: string): string {
   const trimmed = rawEndpoint.trim();
   if (!trimmed) return "";
@@ -246,17 +329,16 @@ export function enforceS3EndpointPolicy(rawEndpoint: string): string {
   parsed.search = "";
   parsed.hash = "";
 
-  const hostname = parsed.hostname.toLowerCase();
+  const hostname = normalizeHostname(parsed.hostname);
   rejectBlockedHost(hostname);
 
-  const patterns = getS3Patterns().map(normalizeHostPattern).filter(Boolean);
-  const allowed = patterns.some((pattern) => hostMatchesPattern(hostname, pattern));
-  if (!allowed) {
+  if (isPrivateOrLoopbackHost(hostname) && !s3LoopbackOptedIn() && !s3HostExplicitlyAllowed(hostname)) {
     throw new ApiRouteError(
-      `S3 endpoint host "${hostname}" is not allowed. Set S3_ALLOWED_HOSTS to extend the allowlist (current: ${patterns.join(", ")}).`,
+      `S3 endpoint host "${hostname}" is private/loopback. Set S3_ALLOW_LOOPBACK=1 to allow all private hosts, or list it in S3_ALLOWED_HOSTS for granular access.`,
       400,
     );
   }
+
   return parsed.toString().replace(/\/+$/u, "");
 }
 
