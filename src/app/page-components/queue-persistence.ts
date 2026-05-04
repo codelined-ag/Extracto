@@ -3,8 +3,9 @@
 import type { ProcessingFile } from "@/app/page-components/types";
 
 const DB_NAME = "extracto-queue";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = "files";
+const PAGES_STORE = "pages";
 const SCHEMA_VERSION = 1;
 
 interface PersistedRecord {
@@ -30,11 +31,84 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: "id" });
       }
+      if (!db.objectStoreNames.contains(PAGES_STORE)) {
+        db.createObjectStore(PAGES_STORE, { keyPath: "fileId" });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error ?? new Error("Failed to open IndexedDB"));
   });
   return dbPromise;
+}
+
+interface PagesRecord {
+  fileId: string;
+  pages: string[];
+  savedAt: number;
+}
+
+export async function persistPagePreviews(fileId: string, pages: string[]): Promise<{ ok: boolean; error?: string }> {
+  if (typeof window === "undefined") return { ok: true };
+  let db: IDBDatabase;
+  try {
+    db = await openDb();
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+  const tx = db.transaction(PAGES_STORE, "readwrite");
+  const record: PagesRecord = { fileId, pages, savedAt: Date.now() };
+  tx.objectStore(PAGES_STORE).put(record);
+  return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+    tx.oncomplete = () => resolve({ ok: true });
+    tx.onerror = () => {
+      const message = tx.error?.message ?? "IndexedDB write failed";
+      console.warn("[queue-persist] failed to save pages for", fileId, tx.error);
+      resolve({ ok: false, error: message });
+    };
+    tx.onabort = () => resolve({ ok: false, error: tx.error?.message ?? "Transaction aborted" });
+  });
+}
+
+export async function loadAllPagePreviews(): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (typeof window === "undefined") return out;
+  let db: IDBDatabase;
+  try {
+    db = await openDb();
+  } catch {
+    return out;
+  }
+  const tx = db.transaction(PAGES_STORE, "readonly");
+  const store = tx.objectStore(PAGES_STORE);
+  return new Promise<Map<string, string[]>>((resolve) => {
+    const req = store.getAll();
+    req.onsuccess = () => {
+      const records = (req.result as PagesRecord[] | undefined) ?? [];
+      for (const r of records) {
+        if (Array.isArray(r.pages) && r.pages.length > 0) {
+          out.set(r.fileId, r.pages);
+        }
+      }
+      resolve(out);
+    };
+    req.onerror = () => resolve(out);
+  });
+}
+
+export async function deletePagePreviews(fileId: string): Promise<void> {
+  if (typeof window === "undefined") return;
+  let db: IDBDatabase;
+  try {
+    db = await openDb();
+  } catch {
+    return;
+  }
+  const tx = db.transaction(PAGES_STORE, "readwrite");
+  tx.objectStore(PAGES_STORE).delete(fileId);
+  await new Promise<void>((resolve) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
 }
 
 function strip(file: ProcessingFile): SerializableProcessingFile {
@@ -105,8 +179,9 @@ export async function clearQueue(): Promise<void> {
   } catch {
     return;
   }
-  const tx = db.transaction(STORE_NAME, "readwrite");
+  const tx = db.transaction([STORE_NAME, PAGES_STORE], "readwrite");
   tx.objectStore(STORE_NAME).clear();
+  tx.objectStore(PAGES_STORE).clear();
   await new Promise<void>((resolve) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => resolve();

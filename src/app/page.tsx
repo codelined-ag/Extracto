@@ -95,7 +95,7 @@ import { NotificationsSection } from "@/app/page-components/notifications-sectio
 import { UsageSection } from "@/app/page-components/usage-section";
 import { WatchersSection } from "@/app/page-components/watchers-section";
 import { TemplatesSection } from "@/app/page-components/templates-section";
-import { clearQueue, loadQueue, persistQueue, reconcileJobFromServer } from "@/app/page-components/queue-persistence";
+import { clearQueue, deletePagePreviews, loadAllPagePreviews, loadQueue, persistPagePreviews, persistQueue, reconcileJobFromServer } from "@/app/page-components/queue-persistence";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { useHistory } from "@/app/page-components/use-history";
 import { PreviewHeader } from "@/app/page-components/preview-header";
@@ -537,6 +537,7 @@ export default function ExtractoPage() {
  const [settingsTab, setSettingsTab] = React.useState<SettingsTab>("model");
  const [viewMode, setViewMode] = React.useState<"preview"|"split"|"result">("split");
  const pdfPagePreviewCacheRef = React.useRef<Record<string, string[]>>({});
+ const persistQuotaWarnedRef = React.useRef(false);
  const modelSelectionsRef = React.useRef<ProviderModelSelections>({});
  const postProcessModelSelectionsRef = React.useRef<ProviderModelSelections>({});
  const modelSelectionsHydratedRef = React.useRef(false);
@@ -929,23 +930,32 @@ export default function ExtractoPage() {
  };
 
  const queueHydrated = React.useRef(false);
+ const [hydrateComplete, setHydrateComplete] = React.useState(false);
  React.useEffect(() => {
  if (queueHydrated.current) return;
  queueHydrated.current = true;
  void (async () => {
- const stored = await loadQueue();
- if (stored.length === 0) return;
+ try {
+ const [stored, pagesByFile] = await Promise.all([loadQueue(), loadAllPagePreviews()]);
+ for (const [fileId, pages] of pagesByFile) {
+ pdfPagePreviewCacheRef.current[fileId] = pages;
+ }
+ if (stored.length > 0) {
  setFiles(stored);
  const reconciled = await Promise.all(stored.map((f) => reconcileJobFromServer(f)));
  setFiles(reconciled);
+ }
+ } finally {
+ setHydrateComplete(true);
+ }
  })();
  }, []);
 
  React.useEffect(() => {
- if (!queueHydrated.current) return;
+ if (!hydrateComplete) return;
  const t = setTimeout(() => { void persistQueue(files); }, 400);
  return () => clearTimeout(t);
- }, [files]);
+ }, [files, hydrateComplete]);
 
  React.useEffect(() => {
  try {
@@ -982,13 +992,15 @@ export default function ExtractoPage() {
  }, [loadSavedSettings]);
 
  React.useEffect(() => {
+ if (!hydrateComplete) return;
  const activeIds = new Set(files.map((file) => file.id));
  for (const fileId of Object.keys(pdfPagePreviewCacheRef.current)) {
  if (!activeIds.has(fileId)) {
  delete pdfPagePreviewCacheRef.current[fileId];
+ void deletePagePreviews(fileId);
  }
  }
- }, [files]);
+ }, [files, hydrateComplete]);
 
  React.useEffect(() => {
  if (!modelSelectionsHydratedRef.current || !selectedModel) {
@@ -1807,11 +1819,33 @@ export default function ExtractoPage() {
  throw new Error("Unable to render PDF pages for OCR");
  }
  pdfPagePreviewCacheRef.current[file.id] = renderedPages;
+ void (async () => {
+ const r = await persistPagePreviews(file.id, renderedPages);
+ if (!r.ok && !persistQuotaWarnedRef.current) {
+ persistQuotaWarnedRef.current = true;
+ toast({
+ title: t(
+"Salvataggio anteprime non riuscito",
+"Could not cache previews",
+"Échec du cache des aperçus",
+"No se pudo guardar la vista previa",
+"Vorschau konnte nicht zwischengespeichert werden",
+ ),
+ description: t(
+"Lo spazio del browser è esaurito. La coda non sopravvivrà al refresh.",
+"Browser storage is full. The queue will not survive a refresh.",
+"Le stockage du navigateur est plein. La file ne survivra pas au rafraîchissement.",
+"El almacenamiento del navegador está lleno. La cola no sobrevivirá a un refresco.",
+"Browser-Speicher voll. Die Warteschlange überlebt keinen Refresh.",
+ ),
+ variant: "destructive",
+ });
+ }
+ })();
 
  updateFileById(file.id, (entry) => ({
  ...entry,
  preview: renderedPages[0],
- // Keep state light: only first page preview is kept in React state.
  pagePreviews: renderedPages.length > 0 ? [renderedPages[0]] : [],
  pageCount: renderedPages.length,
  }));
@@ -2272,15 +2306,15 @@ export default function ExtractoPage() {
 
  <Tabs value={settingsTab} onValueChange={(v) => setSettingsTab(v as typeof settingsTab)} className="flex-1 min-h-0 flex flex-col gap-0">
  <div className="px-6">
- <TabsList className="w-full justify-start overflow-x-auto">
- <TabsTrigger value="model"className="gap-1.5"><SparklesIcon size={14} className="inline-flex items-center justify-center"/>{t("Modello","Model","Modèle","Modelo","Modell")}</TabsTrigger>
- <TabsTrigger value="kb"className="gap-1.5"><DatabaseBackupIcon size={14} className="inline-flex items-center justify-center"/>{t("Knowledge base","Knowledge base","Base de connaissances","Base de conocimiento","Wissensdatenbank")}</TabsTrigger>
- <TabsTrigger value="provider"className="gap-1.5"><SettingsIcon size={14} className="inline-flex items-center justify-center"/>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</TabsTrigger>
- <TabsTrigger value="general"className="gap-1.5"><LanguagesIcon size={14} className="inline-flex items-center justify-center"/>{t("Generale","General","Général","General","Allgemein")}</TabsTrigger>
- <TabsTrigger value="keys"className="gap-1.5"><KeyRoundIcon size={14} className="inline-flex items-center justify-center"/>{t("Chiavi API","API keys","Clés API","Claves API","API-Schlüssel")}</TabsTrigger>
- <TabsTrigger value="s3"className="gap-1.5"><Cloud className="size-3.5"/>S3</TabsTrigger>
- <TabsTrigger value="templates"className="gap-1.5"><Layers className="size-3.5"/>{t("Template","Templates","Modèles","Plantillas","Vorlagen")}</TabsTrigger>
- <TabsTrigger value="notifications"className="gap-1.5"><BellRing className="size-3.5"/>{t("Notifiche","Notifications","Notifications","Notificaciones","Benachrichtigungen")}</TabsTrigger>
+ <TabsList className="w-full justify-start gap-0.5">
+ <TabsTrigger value="model"className="gap-1.5 px-2.5"><SparklesIcon size={14} className="inline-flex items-center justify-center"/>{t("Modello","Model","Modèle","Modelo","Modell")}</TabsTrigger>
+ <TabsTrigger value="kb"className="gap-1.5 px-2.5"><DatabaseBackupIcon size={14} className="inline-flex items-center justify-center"/>KB</TabsTrigger>
+ <TabsTrigger value="provider"className="gap-1.5 px-2.5"><SettingsIcon size={14} className="inline-flex items-center justify-center"/>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</TabsTrigger>
+ <TabsTrigger value="general"className="gap-1.5 px-2.5"><LanguagesIcon size={14} className="inline-flex items-center justify-center"/>{t("Generale","General","Général","General","Allgemein")}</TabsTrigger>
+ <TabsTrigger value="keys"className="gap-1.5 px-2.5"><KeyRoundIcon size={14} className="inline-flex items-center justify-center"/>{t("Chiavi","Keys","Clés","Claves","Schlüssel")}</TabsTrigger>
+ <TabsTrigger value="s3"className="gap-1.5 px-2.5"><Cloud className="size-3.5"/>S3</TabsTrigger>
+ <TabsTrigger value="templates"className="gap-1.5 px-2.5"><Layers className="size-3.5"/>{t("Template","Templates","Modèles","Plantillas","Vorlagen")}</TabsTrigger>
+ <TabsTrigger value="notifications"className="gap-1.5 px-2.5"><BellRing className="size-3.5"/>{t("Notifiche","Push","Push","Push","Push")}</TabsTrigger>
  </TabsList>
  </div>
 

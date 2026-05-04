@@ -111,53 +111,36 @@ export function FileListCard({
                   <TooltipTrigger asChild>
                     <button
                       type="button"
-                      onClick={() => setQueueView("list")}
-                      aria-pressed={queueView === "list"}
-                      className={cn(
-                        "inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 text-xs transition-colors",
+                      onClick={() => setQueueView(queueView === "list" ? "gallery" : "list")}
+                      className="inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={
                         queueView === "list"
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                      aria-label={t("Vista lista", "List view", "Vue liste", "Vista lista", "Listenansicht")}
+                          ? t("Passa alla galleria", "Switch to gallery", "Passer en galerie", "Cambiar a galería", "Zur Galerie wechseln")
+                          : t("Passa alla lista", "Switch to list", "Passer en liste", "Cambiar a lista", "Zur Liste wechseln")
+                      }
                     >
-                      <ListIcon size={13} />
+                      {queueView === "list" ? <LayoutGridIcon size={13} /> : <ListIcon size={13} />}
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>{t("Vista lista", "List view", "Vue liste", "Vista lista", "Listenansicht")}</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={() => setQueueView("gallery")}
-                      aria-pressed={queueView === "gallery"}
-                      className={cn(
-                        "inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 text-xs transition-colors",
-                        queueView === "gallery"
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                      aria-label={t("Vista galleria", "Gallery view", "Vue galerie", "Vista galería", "Galerieansicht")}
-                    >
-                      <LayoutGridIcon size={13} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>{t("Vista galleria", "Gallery view", "Vue galerie", "Vista galería", "Galerieansicht")}</TooltipContent>
+                  <TooltipContent>
+                    {queueView === "list"
+                      ? t("Galleria", "Gallery", "Galerie", "Galería", "Galerie")
+                      : t("Lista", "List", "Liste", "Lista", "Liste")}
+                  </TooltipContent>
                 </Tooltip>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs text-muted-foreground hover:text-destructive group"
-                onClick={onClearAll}
-              >
-                <DeleteIcon
-                  size={12}
-                  className="inline-flex items-center justify-center mr-1 transition-transform duration-200 group-hover:scale-110"
-                />
-                {t("Pulisci", "Clear", "Effacer", "Limpiar", "Leeren")}
-              </Button>
+              {bulkSelectedIds.size === 0 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                  onClick={onClearAll}
+                  aria-label={t("Svuota la coda", "Clear queue", "Vider la file", "Vaciar la cola", "Warteschlange leeren")}
+                >
+                  <DeleteIcon size={12} className="inline-flex items-center justify-center mr-1" />
+                  {t("Svuota", "Clear", "Vider", "Vaciar", "Leeren")}
+                </Button>
+              ) : null}
             </div>
           )}
         </div>
@@ -180,7 +163,7 @@ export function FileListCard({
                 className="h-7 text-xs"
                 onClick={onClearBulk}
               >
-                {t("Annulla", "Clear", "Effacer", "Quitar", "Aufheben")}
+                {t("Deseleziona", "Deselect", "Désélectionner", "Deseleccionar", "Auswahl aufheben")}
               </Button>
               {bulkRunPendingCount > 0 ? (
                 <Button
