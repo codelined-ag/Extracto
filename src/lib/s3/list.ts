@@ -1,4 +1,4 @@
-import { buildUserS3Client, joinKey } from "@/lib/s3/client";
+import { assertKeyUnderPrefix, buildUserS3Client, joinKey } from "@/lib/s3/client";
 import { getS3Defaults } from "@/lib/s3/defaults-store";
 
 export interface S3ListItem {
@@ -91,30 +91,44 @@ export async function listS3Objects(
   };
 }
 
-export async function downloadS3Object(
+export interface S3DownloadHandle {
+  stream: ReadableStream<Uint8Array>;
+  contentType: string;
+  size: number;
+}
+
+export async function openS3Download(
   userId: string,
   key: string,
-): Promise<{ body: Buffer; contentType: string; size: number }> {
+  maxBytes: number,
+): Promise<S3DownloadHandle> {
   const defaults = await getS3Defaults(userId);
   if (!defaults.bucket) throw new Error("S3 bucket is not configured.");
-  const { client, sdk, bucket } = await buildUserS3Client(defaults);
+  const { client, sdk, bucket, prefix } = await buildUserS3Client(defaults);
+  assertKeyUnderPrefix(prefix, key);
 
-  const resp = await client.send(new sdk.GetObjectCommand({ Bucket: bucket, Key: key }));
-  const stream = resp.Body;
-  if (!stream) throw new Error("Empty response from S3");
+  const head = await client.send(new sdk.HeadObjectCommand({ Bucket: bucket, Key: key }));
+  const size = head.ContentLength ?? 0;
+  if (size > maxBytes) {
+    throw Object.assign(new Error(`Object is too large (${size} bytes; max ${maxBytes})`), {
+      statusCode: 413,
+    });
+  }
 
-  let bodyBuffer: Buffer;
-  if (typeof (stream as { transformToByteArray?: () => Promise<Uint8Array> }).transformToByteArray === "function") {
-    const bytes = await (stream as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray();
-    bodyBuffer = Buffer.from(bytes);
+  const get = await client.send(new sdk.GetObjectCommand({ Bucket: bucket, Key: key }));
+  const body = get.Body;
+  if (!body) throw new Error("Empty response from S3");
+
+  let stream: ReadableStream<Uint8Array>;
+  if (typeof (body as { transformToWebStream?: () => ReadableStream<Uint8Array> }).transformToWebStream === "function") {
+    stream = (body as { transformToWebStream: () => ReadableStream<Uint8Array> }).transformToWebStream();
   } else {
-    const arrayBuffer = await new Response(stream as ReadableStream).arrayBuffer();
-    bodyBuffer = Buffer.from(arrayBuffer);
+    stream = body as ReadableStream<Uint8Array>;
   }
 
   return {
-    body: bodyBuffer,
-    contentType: resp.ContentType ?? "application/octet-stream",
-    size: bodyBuffer.byteLength,
+    stream,
+    contentType: get.ContentType ?? "application/octet-stream",
+    size,
   };
 }

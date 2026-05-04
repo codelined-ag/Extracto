@@ -2,7 +2,11 @@
 $ErrorActionPreference = "Stop"
 
 $RepoUrl    = if ($env:EXTRACTO_REPO_URL)    { $env:EXTRACTO_REPO_URL }    else { "https://github.com/codelined-ag/Extracto.git" }
-$RepoRef    = if ($env:EXTRACTO_REPO_REF)    { $env:EXTRACTO_REPO_REF }    else { "main" }
+$RepoRef    = if ($env:EXTRACTO_REPO_REF)    { $env:EXTRACTO_REPO_REF }    else { "v0.5.4" }
+if ($RepoUrl -notmatch "^https://") {
+  Write-Host "EXTRACTO_REPO_URL must be https:// (got $RepoUrl)" -ForegroundColor Red
+  exit 1
+}
 $InstallDir = if ($env:EXTRACTO_INSTALL_DIR) { $env:EXTRACTO_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "Extracto" }
 $AutoStart  = if ($env:EXTRACTO_AUTOSTART)   { $env:EXTRACTO_AUTOSTART }   else { "1" }
 
@@ -17,13 +21,23 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 $parent = Split-Path -Parent $InstallDir
 if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
 
+Info "Plan: clone $RepoUrl @ $RepoRef -> $InstallDir (Ctrl-C within 3s to abort)"
+Start-Sleep -Seconds 3
+
 if (Test-Path (Join-Path $InstallDir ".git")) {
   Info "Updating Extracto checkout at $InstallDir"
-  git -C $InstallDir fetch --depth 1 origin $RepoRef
-  git -C $InstallDir reset --hard FETCH_HEAD
+  git -C "$InstallDir" fetch --depth 1 origin "$RepoRef"
+  git -C "$InstallDir" reset --hard FETCH_HEAD
 } else {
-  Info "Cloning $RepoUrl -> $InstallDir"
-  git clone --depth 1 --branch $RepoRef $RepoUrl $InstallDir
+  Info "Cloning $RepoUrl @ $RepoRef -> $InstallDir"
+  $staging = "$InstallDir.partial.$PID"
+  try {
+    git clone --depth 1 --branch "$RepoRef" "$RepoUrl" "$staging"
+    Move-Item -LiteralPath $staging -Destination $InstallDir
+  } catch {
+    if (Test-Path $staging) { Remove-Item -Recurse -Force $staging }
+    throw
+  }
 }
 
 Set-Location $InstallDir

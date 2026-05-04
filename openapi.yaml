@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Extracto v1 API
-  version: 0.3.0
+  version: 0.5.4
   description: |
     Stable bearer-auth HTTP surface for Extracto. Mint a key with
     `extracto api-key create <user-email> <name>` (or `POST /api/v1/keys`
@@ -783,6 +783,124 @@ paths:
                   error: { type: string, nullable: true }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/export/s3:
+    post:
+      summary: Export an OCR job's markdown + JSON to the user's S3 bucket
+      operationId: exportS3
+      tags: [S3]
+      description: |
+        Uploads `<job-id>.md` and `<job-id>.json` under
+        `<configured-prefix>/<keyPrefix or fileName-stem>/` in the bucket
+        configured under Settings → S3. Credentials live on the Extracto
+        server filesystem and never round-trip to the caller. Endpoint policy
+        rejects cloud-metadata IPs, link-local, and (by default) RFC1918 /
+        loopback hosts. Set `S3_ALLOW_LOOPBACK=1` for local MinIO sidecars.
+        Requires the `s3:write` scope.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jobId]
+              properties:
+                jobId: { type: string }
+                keyPrefix: { type: string, nullable: true }
+                wait: { type: boolean, default: true, description: "When false returns 202 + {exportId} immediately and the upload runs in the background; subscribe to /api/s3/export/{exportId}/stream for progress." }
+      responses:
+        "200":
+          description: Upload result (when wait=true)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exportId: { type: string }
+                  bucket: { type: string }
+                  keys: { type: array, items: { type: string } }
+                  totalBytes: { type: integer }
+        "202":
+          description: Upload queued (when wait=false)
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429":
+          description: Rate limit exceeded (12/min per user for S3 writes)
+
+  /api/v1/s3/list:
+    get:
+      summary: List objects in the configured S3 bucket
+      operationId: listS3
+      tags: [S3]
+      description: |
+        Paginated listing under `<configured-prefix>/<prefix>/`. By default
+        only OCR-able file extensions are returned (`.pdf`, `.png`, `.jpg`,
+        `.jpeg`, `.webp`, `.tif`, `.tiff`, `.bmp`, `.gif`, `.heic`,
+        `.heif`); pass `all=1` to lift that filter. Requires `s3:read`.
+      parameters:
+        - name: prefix
+          in: query
+          schema: { type: string }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - name: token
+          in: query
+          schema: { type: string }
+          description: Continuation token from a prior response's `nextToken`.
+        - name: all
+          in: query
+          schema: { type: string, enum: ["1"] }
+      responses:
+        "200":
+          description: Listing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bucket: { type: string }
+                  prefix: { type: string }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { type: string }
+                        size: { type: integer }
+                        lastModified: { type: string, nullable: true }
+                        etag: { type: string, nullable: true }
+                  nextToken: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429":
+          description: Rate limit exceeded (60/min per user for S3 reads)
+
+  /api/v1/s3/download:
+    get:
+      summary: Stream an S3 object back to the caller
+      operationId: downloadS3
+      tags: [S3]
+      description: |
+        Streams up to 200 MB. The key MUST live under the user's configured
+        prefix; cross-prefix or `..` segments are rejected. Requires `s3:read`.
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Object body
+          content:
+            application/octet-stream: {}
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413":
+          description: Object exceeds 200 MB
+        "429":
+          description: Rate limit exceeded (60/min per user for S3 reads)
 
   /api/v1/metrics:
     get:

@@ -32,10 +32,12 @@ Older minor versions are best-effort.
 
 - **Authentication bypass.** Any path that lets an unauthenticated
   caller reach an authenticated endpoint, or escalate scopes.
-- **SSRF.** The OCR + KB features call user-supplied HTTP endpoints.
+- **SSRF.** The OCR + KB + S3 features call user-supplied HTTP endpoints.
   Bypasses of `OLLAMA_ALLOWED_HOSTS`, `MISTRAL_ALLOWED_HOSTS`,
-  `OPENROUTER_ALLOWED_HOSTS`, `OPENAI_COMPAT_ALLOWED_HOSTS`, or
-  `WEBHOOK_ALLOWED_HOSTS` count as SSRF.
+  `OPENROUTER_ALLOWED_HOSTS`, `OPENAI_COMPAT_ALLOWED_HOSTS`,
+  `WEBHOOK_ALLOWED_HOSTS`, or the S3 endpoint policy (cloud-metadata IPs
+  + RFC1918/loopback unless `S3_ALLOW_LOOPBACK=1` or
+  `S3_ALLOWED_HOSTS` is set) count as SSRF.
 - **Cross-tenant data leakage.** Any path that returns one user's
   jobs, settings, presets, webhooks, or API keys to another user.
 - **Session/token theft.** Cookie or bearer-token disclosure;

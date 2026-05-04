@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
+import { enforceS3RateLimit } from "@/lib/ocr/rate-limit";
+import { getClientIpAddress } from "@/lib/request-security";
 import { getS3Defaults } from "@/lib/s3/defaults-store";
 import { runS3Export } from "@/lib/s3/export";
 import { registerS3Export, updateS3Export } from "@/lib/s3/export-progress";
@@ -12,7 +14,9 @@ interface S3ExportBrowserRequest extends Record<string, unknown> {
   keyPrefix?: unknown;
 }
 
-export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { auth }) => {
+export const POST = withMutationAuth("s3:write", async (request: NextRequest, { auth }) => {
+  const limited = enforceS3RateLimit(auth, getClientIpAddress(request), "write");
+  if (limited) return limited;
   const body = await parseJsonBody<S3ExportBrowserRequest>(request);
   const jobId = typeof body.jobId === "string" ? body.jobId.trim() : "";
   if (!jobId) {

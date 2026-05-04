@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { ApiRouteError } from "@/lib/api-error";
 import { withAuth } from "@/lib/auth/request";
+import { enforceS3RateLimit } from "@/lib/ocr/rate-limit";
+import { getClientIpAddress } from "@/lib/request-security";
 import { listS3Objects } from "@/lib/s3/list";
 
-export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) => {
+export const GET = withAuth("s3:read", async (request: NextRequest, { auth }) => {
+  const limited = enforceS3RateLimit(auth, getClientIpAddress(request), "read");
+  if (limited) return limited;
   const { searchParams } = new URL(request.url);
   const subPrefix = searchParams.get("prefix") ?? undefined;
   const continuationToken = searchParams.get("token") ?? undefined;
