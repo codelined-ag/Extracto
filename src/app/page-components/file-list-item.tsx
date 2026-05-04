@@ -104,6 +104,17 @@ export function FileListItem({
               <span className="text-xs text-primary">{file.progress}%</span>
             </div>
           )}
+          {file.status === "pending" && file.isPreprocessing ? (
+            <div className="flex items-center gap-1">
+              <LoaderCircleIcon
+                size={11}
+                className="inline-flex items-center justify-center animate-spin text-muted-foreground"
+              />
+              <span className="text-[11px] text-muted-foreground">
+                {t("Preparazione...", "Preparing...", "Préparation...", "Preparando...", "Vorbereitung...")}
+              </span>
+            </div>
+          ) : null}
           {file.status === "paused" ? (
             <div className="flex items-center gap-1">
               <PauseIcon

@@ -1415,6 +1415,31 @@ export default function ExtractoPage() {
  setSelectedFileId(newFiles[0].id);
  }
 
+ const PARALLEL_PREPROCESS = 2;
+ const pdfQueue = newFiles.filter((f) => f.file && isPdfFile(f.file));
+ if (pdfQueue.length > 0) {
+ for (const f of pdfQueue) {
+ updateFileById(f.id, (entry) => ({ ...entry, isPreprocessing: true }));
+ }
+ void (async () => {
+ const queue = [...pdfQueue];
+ while (queue.length > 0) {
+ const batch = queue.splice(0, PARALLEL_PREPROCESS);
+ await Promise.allSettled(
+ batch.map(async (f) => {
+ try {
+ await ensurePagePreviews(f);
+ } catch {
+ /* ignore */
+ } finally {
+ updateFileById(f.id, (entry) => ({ ...entry, isPreprocessing: false }));
+ }
+ }),
+ );
+ }
+ })();
+ }
+
  toast({
  title: t("File aggiunti","Files added","Fichiers ajoutés","Archivos añadidos","Dateien hinzugefügt"),
  description: t(
@@ -2164,6 +2189,38 @@ export default function ExtractoPage() {
  </SettingsSection>
 
  <SettingsSection
+ title={t("Pagine in parallelo","Pages in parallel","Pages en parallèle","Páginas en paralelo","Seiten parallel")}
+ hint={t(
+"Numero di pagine OCR contemporanee per ogni job. 0 = automatico (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Massimo 16.",
+"How many OCR pages run in parallel per job. 0 = auto (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max 16.",
+"Nombre de pages OCR exécutées en parallèle par job. 0 = auto (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max 16.",
+"Cuántas páginas OCR se ejecutan en paralelo por trabajo. 0 = automático (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Máximo 16.",
+"Wie viele OCR-Seiten parallel pro Job laufen. 0 = automatisch (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max. 16.",
+ )}
+ >
+ <div className="flex items-center gap-2">
+ <Input
+ type="number"
+ min={0}
+ max={16}
+ value={settings.pageConcurrency}
+ onChange={(e) => {
+ const raw = Number(e.target.value);
+ const next = Number.isFinite(raw) ? Math.max(0, Math.min(16, Math.trunc(raw))) : 0;
+ setSettings((s) => ({ ...s, pageConcurrency: next }));
+ }}
+ placeholder="0"
+ className="max-w-[6rem]"
+ />
+ {settings.pageConcurrency === 0 ? (
+ <Badge variant="outline" className="text-[10px]">
+ {t("auto","auto","auto","auto","auto")}
+ </Badge>
+ ) : null}
+ </div>
+ </SettingsSection>
+
+ <SettingsSection
  title={t("Post-processing","Post-processing","Post-traitement","Post-procesamiento","Nachverarbeitung")}
  hint={t(
 "Una seconda passata facoltativa: riformatta il risultato OCR o estrae campi specifici (es. tabelle, totali, schede prodotto).",
@@ -2823,43 +2880,6 @@ export default function ExtractoPage() {
  <SelectItem value="form">{t("Modulo","Form","Formulaire","Formulario","Formular")}</SelectItem>
  </SelectContent>
  </Select>
- </div>
-
- <div className="flex items-center justify-between rounded-xl surface-soft px-3.5 py-2.5">
- <div className="space-y-0.5">
- <Label className="text-sm font-medium">{t("Usa text-layer del PDF","Prefer PDF text layer","Utiliser le calque texte du PDF","Usar capa de texto del PDF","PDF-Textebene bevorzugen")}</Label>
- <p className="text-[11px] text-muted-foreground">{t("Per i PDF nativi salta il modello di visione e usa direttamente il testo embedded (più veloce, gratis, senza errori OCR).","For born-digital PDFs, skip the vision model and use the embedded text directly (faster, free, no OCR errors).","Pour les PDF nativement digitaux, contourne le modèle de vision (plus rapide, gratuit, sans erreurs OCR).","Para PDF nativos, omite el modelo de visión y usa el texto embebido directamente (más rápido, gratis, sin errores OCR).","Bei born-digital PDFs überspringt das Vision-Modell und nutzt direkt die eingebettete Textebene (schneller, kostenfrei, ohne OCR-Fehler).")}</p>
- </div>
- <Switch checked={settings.preferTextLayer} onCheckedChange={(v) => setSettings((s) => ({ ...s, preferTextLayer: v }))} />
- </div>
-
- <div className="space-y-1.5 surface-soft rounded-xl px-3.5 py-3">
- <Label htmlFor="page-concurrency" className="text-sm font-medium">
- {t("Pagine in parallelo","Pages in parallel","Pages en parallèle","Páginas en paralelo","Seiten parallel")}
- </Label>
- <p className="text-[11px] text-muted-foreground">
- {t(
-"Numero di pagine OCR contemporanee per ogni job. 0 = automatico (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Massimo 16.",
-"How many OCR pages run in parallel per job. 0 = auto (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max 16.",
-"Nombre de pages OCR exécutées en parallèle par job. 0 = auto (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max 16.",
-"Cuántas páginas OCR se ejecutan en paralelo por trabajo. 0 = automático (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Máximo 16.",
-"Wie viele OCR-Seiten parallel pro Job laufen. 0 = automatisch (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max. 16.",
- )}
- </p>
- <Input
- id="page-concurrency"
- type="number"
- min={0}
- max={16}
- value={settings.pageConcurrency}
- onChange={(e) => {
- const raw = Number(e.target.value);
- const next = Number.isFinite(raw) ? Math.max(0, Math.min(16, Math.trunc(raw))) : 0;
- setSettings((s) => ({ ...s, pageConcurrency: next }));
- }}
- placeholder="0"
- className="max-w-[6rem]"
- />
  </div>
 
  <div className="space-y-1.5">

@@ -64,6 +64,7 @@ export interface ProcessingFile {
   events?: OcrProgressEventView[];
   file?: File;
   kbExport?: KbExportFileState;
+  isPreprocessing?: boolean;
 }
 
 export interface HistoryJobSummary {

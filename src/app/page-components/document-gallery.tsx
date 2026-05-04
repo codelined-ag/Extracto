@@ -70,6 +70,52 @@ export function DocumentGallery({
     [selected, selectedSet, onChange],
   );
 
+  const setPageSelected = React.useCallback(
+    (page: number, shouldSelect: boolean) => {
+      const has = selectedSet.has(page);
+      if (has === shouldSelect) return;
+      if (shouldSelect) {
+        onChange([...selected, page].sort((a, b) => a - b));
+      } else {
+        onChange(selected.filter((p) => p !== page));
+      }
+    },
+    [selected, selectedSet, onChange],
+  );
+
+  const dragRef = React.useRef<{ active: boolean; setTo: boolean } | null>(null);
+
+  React.useEffect(() => {
+    const onUp = () => {
+      dragRef.current = null;
+    };
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchend", onUp);
+    window.addEventListener("touchcancel", onUp);
+    return () => {
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchend", onUp);
+      window.removeEventListener("touchcancel", onUp);
+    };
+  }, []);
+
+  const onRowPointerDown = React.useCallback(
+    (page: number) => {
+      const next = !selectedSet.has(page);
+      dragRef.current = { active: true, setTo: next };
+      setPageSelected(page, next);
+    },
+    [selectedSet, setPageSelected],
+  );
+
+  const onRowPointerEnter = React.useCallback(
+    (page: number) => {
+      if (!dragRef.current?.active) return;
+      setPageSelected(page, dragRef.current.setTo);
+    },
+    [setPageSelected],
+  );
+
   const selectAll = React.useCallback(
     () => onChange(Array.from({ length: total }, (_, i) => i + 1)),
     [onChange, total],
@@ -405,6 +451,17 @@ export function DocumentGallery({
         </div>
       ) : (
         <ScrollArea className="flex-1 min-h-0">
+          {total >= 3 ? (
+            <p className="px-3 pt-2 text-[11px] text-muted-foreground/70">
+              {t(
+                "Tocca per attivare/disattivare. Trascina per selezionare più pagine.",
+                "Tap to toggle. Drag to multi-select.",
+                "Tape pour basculer. Glisse pour sélectionner plusieurs pages.",
+                "Toca para alternar. Arrastra para seleccionar varias.",
+                "Tippen zum Umschalten. Ziehen für Mehrfachauswahl.",
+              )}
+            </p>
+          ) : null}
           <ul className="p-2 space-y-1.5">
             {pagePreviews.map((preview, i) => {
               const pageNum = i + 1;
@@ -412,48 +469,42 @@ export function DocumentGallery({
               return (
                 <li
                   key={i}
+                  role="checkbox"
+                  aria-checked={isSelected}
+                  tabIndex={0}
+                  onMouseDown={(e) => { if (e.button === 0) onRowPointerDown(pageNum); }}
+                  onMouseEnter={() => onRowPointerEnter(pageNum)}
+                  onTouchStart={() => onRowPointerDown(pageNum)}
+                  onKeyDown={(e) => {
+                    if (e.key === " " || e.key === "Enter") {
+                      e.preventDefault();
+                      togglePage(pageNum);
+                    }
+                  }}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg border p-2 transition-colors",
-                    isSelected ? "border-primary/40 bg-primary/5" : "border-border/40 bg-secondary/20",
+                    "flex items-center gap-3 rounded-lg border p-2 transition-colors cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                    isSelected ? "border-primary/40 bg-primary/5" : "border-border/40 bg-secondary/20 hover:bg-secondary/40",
                   )}
                 >
-                  <button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={isSelected}
-                    onClick={() => togglePage(pageNum)}
+                  <span
                     className={cn(
-                      "shrink-0 inline-flex h-5 w-5 items-center justify-center rounded transition-colors",
+                      "shrink-0 inline-flex h-5 w-5 items-center justify-center rounded transition-colors pointer-events-none",
                       isSelected
                         ? "bg-primary text-primary-foreground"
-                        : "border border-border/60 bg-background hover:bg-secondary",
+                        : "border border-border/60 bg-background",
                     )}
-                    aria-label={
-                      isSelected
-                        ? t("Deseleziona", "Deselect", "Désélectionner", "Deseleccionar", "Abwählen")
-                        : t("Seleziona", "Select", "Sélectionner", "Seleccionar", "Auswählen")
-                    }
                   >
                     {isSelected ? <CheckIcon size={12} /> : null}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveIndex(i);
-                      setViewMode("gallery");
-                    }}
-                    className="shrink-0 rounded-md overflow-hidden border border-border/40"
-                    aria-label={t(
-                      `Apri pagina ${pageNum}`,
-                      `Open page ${pageNum}`,
-                      `Ouvrir la page ${pageNum}`,
-                      `Abrir página ${pageNum}`,
-                      `Seite ${pageNum} öffnen`,
-                    )}
-                  >
-                    <img src={preview} alt="" loading="lazy" decoding="async" className="h-12 w-12 object-cover" draggable={false} />
-                  </button>
-                  <div className="flex-1 min-w-0">
+                  </span>
+                  <img
+                    src={preview}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    draggable={false}
+                    className="shrink-0 h-12 w-12 object-cover rounded-md border border-border/40 pointer-events-none"
+                  />
+                  <div className="flex-1 min-w-0 pointer-events-none">
                     <div className="text-sm font-medium">
                       {t("Pagina", "Page", "Page", "Página", "Seite")} {pageNum}
                     </div>
@@ -463,6 +514,27 @@ export function DocumentGallery({
                         : t("Esclusa", "Excluded", "Exclue", "Excluida", "Ausgeschlossen")}
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setActiveIndex(i);
+                      setViewMode("gallery");
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    className="shrink-0 inline-flex items-center gap-1 rounded-md border border-border/60 bg-background px-2 py-1 text-xs text-foreground/80 hover:bg-secondary hover:text-primary transition-colors"
+                    aria-label={t(
+                      `Apri pagina ${pageNum}`,
+                      `Open page ${pageNum}`,
+                      `Ouvrir la page ${pageNum}`,
+                      `Abrir página ${pageNum}`,
+                      `Seite ${pageNum} öffnen`,
+                    )}
+                  >
+                    {t("Apri", "Open", "Ouvrir", "Abrir", "Öffnen")}
+                    <ChevronRightIcon size={12} />
+                  </button>
                 </li>
               );
             })}
