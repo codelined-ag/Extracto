@@ -185,6 +185,37 @@ export function deriveHistoryStatus(
   return "queued";
 }
 
+export interface DetectedLanguagesSummary {
+  codes: string[];
+  names: string[];
+}
+
+export function summarizeDetectedLanguages(structured: unknown): DetectedLanguagesSummary {
+  if (!structured || typeof structured !== "object" || Array.isArray(structured)) {
+    return { codes: [], names: [] };
+  }
+  const pagesUnknown = (structured as Record<string, unknown>).pages;
+  if (!Array.isArray(pagesUnknown)) return { codes: [], names: [] };
+  const codes: string[] = [];
+  const names: string[] = [];
+  const seenCodes = new Set<string>();
+  const seenNames = new Set<string>();
+  for (const entry of pagesUnknown) {
+    if (!entry || typeof entry !== "object") continue;
+    const lang = (entry as Record<string, unknown>).language;
+    const name = (entry as Record<string, unknown>).languageName;
+    if (typeof lang === "string" && lang.length > 0 && !seenCodes.has(lang)) {
+      seenCodes.add(lang);
+      codes.push(lang);
+    }
+    if (typeof name === "string" && name.length > 0 && !seenNames.has(name)) {
+      seenNames.add(name);
+      names.push(name);
+    }
+  }
+  return { codes, names };
+}
+
 export function getStructuredJsonPayload(payload: unknown): Record<string, unknown> {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return {};

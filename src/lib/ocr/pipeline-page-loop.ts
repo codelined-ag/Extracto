@@ -20,6 +20,7 @@ import {
   toStructuredPagePayload,
   type ProcessedPageOutput,
 } from "@/lib/ocr/pipeline-result-builder";
+import { detectPageLanguage } from "@/lib/ocr/language-detection";
 import { runProviderOcr } from "@/lib/ocr/provider-dispatch";
 import { OcrStopRequestedError } from "@/lib/ocr/providers/shared";
 import { effectiveMaxAttempts, withProviderRetry } from "@/lib/ocr/retry";
@@ -152,6 +153,14 @@ async function runOnePage(
   }
 
   const durationMs = Date.now() - startedAt;
+  const detected = detectPageLanguage(pageText);
+  if (detected) {
+    pageMetadata = {
+      ...pageMetadata,
+      language: detected.iso6393,
+      ...(detected.name ? { languageName: detected.name } : {}),
+    };
+  }
   return {
     index,
     startedAt,

@@ -48,7 +48,14 @@ components:
         metadata: { type: object, additionalProperties: true }
         errorMessage: { type: string, nullable: true }
         extractedText: { type: string, nullable: true }
-        result: { type: object, additionalProperties: true, nullable: true }
+        result:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: |
+            Full OCR result. `result.structured.pages[]` carries per-page entries.
+            Since v0.9.0, each page entry includes `language` (ISO 639-3) and
+            `languageName` (English name) when language detection succeeded.
         tags:
           type: array
           items: { $ref: "#/components/schemas/Tag" }

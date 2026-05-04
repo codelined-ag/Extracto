@@ -28,7 +28,7 @@ import { HistoryIcon } from "@/components/ui/history";
 import { LoaderCircleIcon } from "@/components/ui/loader-circle";
 import { SearchIcon } from "@/components/ui/search";
 
-import { deriveHistoryStatus, formatTimestamp } from "@/app/page-components/page-utils";
+import { deriveHistoryStatus, formatTimestamp, summarizeDetectedLanguages } from "@/app/page-components/page-utils";
 import { TagPicker } from "@/app/page-components/tag-picker";
 import { tagChipClass, tagSwatchClass } from "@/app/page-components/tag-utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -673,6 +673,22 @@ export function HistoryDialog({
                           </span>
                         </>
                       ) : null}
+                      {(() => {
+                        const langs = summarizeDetectedLanguages(selectedStructuredJson);
+                        if (langs.codes.length === 0) return null;
+                        const label = langs.names.length > 0 ? langs.names.join(", ") : langs.codes.join(", ");
+                        return (
+                          <>
+                            <span className="text-muted-foreground">·</span>
+                            <span
+                              className="text-muted-foreground"
+                              title={t("Lingue rilevate", "Detected languages", "Langues détectées", "Idiomas detectados", "Erkannte Sprachen")}
+                            >
+                              {label}
+                            </span>
+                          </>
+                        );
+                      })()}
                     </div>
                     <div className="pt-1">
                       <TagPicker

@@ -86,10 +86,14 @@ export function toPageRecord(page: ProcessedPageOutput) {
 }
 
 export function toStructuredPagePayload(page: ProcessedPageOutput) {
+  const language = page.metadata?.language;
+  const languageName = page.metadata?.languageName;
   return {
     pageNumber: page.pageNumber,
     durationMs: page.durationMs,
     ...page.structured,
+    ...(typeof language === "string" ? { language } : {}),
+    ...(typeof languageName === "string" ? { languageName } : {}),
   };
 }
 

@@ -154,11 +154,11 @@ Endpoint is server-side validated against SSRF (cloud-metadata IPs and link-loca
 
 ## Output formats
 
-- All commands emit JSON straight from the API surface — no transformation. Pipe to `jq` for filtering.
+- All commands emit JSON straight from the API surface, no transformation. Pipe to `jq` for filtering.
 - The OCR job result includes:
-  - `extractedText` — the final markdown
-  - `result` — structured JSON with `pages[]` per-page metadata
-  - `metadata` — provider, model, timing, post-processing info
+  - `extractedText`: the final markdown.
+  - `result`: structured JSON. `result.structured.pages[]` is the per-page array; each entry has `pageNumber`, `durationMs`, `markdown`, and (when detection succeeds) `language` (ISO 639-3, e.g. `eng`/`ita`) plus `languageName` (English name).
+  - `metadata`: provider, model, timing, post-processing info, and `pageResults[]` mirroring the per-page fields above.
 
 ## Lifecycle commands (no token required)
 

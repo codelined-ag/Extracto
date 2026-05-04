@@ -116,6 +116,20 @@ describe("toStructuredPagePayload", () => {
   it("flattens structured fields alongside pageNumber + duration", () => {
     expect(toStructuredPagePayload(page)).toEqual({ pageNumber: 3, durationMs: 1234, markdown: "x" });
   });
+
+  it("surfaces detected language fields from metadata", () => {
+    const tagged = {
+      ...page,
+      metadata: { ...page.metadata, language: "ita", languageName: "Italian" },
+    };
+    expect(toStructuredPagePayload(tagged)).toEqual({
+      pageNumber: 3,
+      durationMs: 1234,
+      markdown: "x",
+      language: "ita",
+      languageName: "Italian",
+    });
+  });
 });
 
 describe("toPageResultPayload", () => {
