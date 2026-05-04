@@ -582,6 +582,61 @@ cmd_tags() {
   esac
 }
 
+cmd_searches() {
+  local sub="${1:-list}"
+  shift || true
+  case "$sub" in
+    list)
+      api_get "/api/v1/saved-searches"
+      ;;
+    save)
+      local name="${1:-}"
+      [ -n "$name" ] || die "usage: extracto searches save <name> [--q TEXT] [--status S] [--from DATE] [--to DATE] [--model TEXT] [--tags id,id]"
+      shift
+      local q="" status="" from="" to="" model="" tags=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --q) q="$2"; shift 2 ;;
+          --status) status="$2"; shift 2 ;;
+          --from) from="$2"; shift 2 ;;
+          --to) to="$2"; shift 2 ;;
+          --model) model="$2"; shift 2 ;;
+          --tags) tags="$2"; shift 2 ;;
+          *) die "unknown flag: $1" ;;
+        esac
+      done
+      local filters
+      filters="$(NAME="" Q="$q" STATUS="$status" FROM="$from" TO="$to" MODEL="$model" TAGS="$tags" python3 -c '
+import json, os
+out = {}
+for k, v in (("q", os.environ.get("Q","")), ("status", os.environ.get("STATUS","")), ("from", os.environ.get("FROM","")), ("to", os.environ.get("TO","")), ("model", os.environ.get("MODEL",""))):
+    if v: out[k] = v
+tags = os.environ.get("TAGS","")
+if tags:
+    out["tagIds"] = [t for t in tags.split(",") if t]
+print(json.dumps(out))
+')"
+      api_post_json "/api/v1/saved-searches" \
+        "$(printf '{"name":%s,"filters":%s}' \
+          "$(printf '%s' "$name" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" \
+          "$filters")"
+      ;;
+    rename)
+      [ -n "${1:-}" ] && [ -n "${2:-}" ] || die "usage: extracto searches rename <id> <new-name>"
+      api_patch_json "/api/v1/saved-searches/${1}" \
+        "$(printf '{"name":%s}' \
+          "$(printf '%s' "$2" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")"
+      ;;
+    delete)
+      [ -n "${1:-}" ] || die "usage: extracto searches delete <id>"
+      api_delete "/api/v1/saved-searches/${1}"
+      ;;
+    *)
+      die "usage: extracto searches <list|save|rename|delete> [args...]"
+      ;;
+  esac
+}
+
 cmd_presets() {
   local sub="${1:-list}"
   shift || true
@@ -1097,6 +1152,11 @@ Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
   presets list                  List output presets
   presets create <name> <inst> [markdown|json]
   presets delete <id>
+  searches list                 List saved History searches
+  searches save <name> [--q TEXT] [--status S] [--from DATE] [--to DATE] [--model TEXT] [--tags id,id]
+                                Save the given filter set as a named search (idempotent on name).
+  searches rename <id> <name>   Rename a saved search without rewriting its filters
+  searches delete <id>          Delete a saved search
   settings get                  Show current API provider settings
   kb export <job-id> --collection N --store-url URL --embed-model M
                                 Export an OCR job's text to a vector store
@@ -1134,6 +1194,7 @@ main() {
     jobs)      shift; cmd_jobs "$@" ;;
     tags)      shift; cmd_tags "$@" ;;
     presets)   shift; cmd_presets "$@" ;;
+    searches)  shift; cmd_searches "$@" ;;
     settings)  shift; cmd_settings "$@" ;;
     kb)        shift; cmd_kb "$@" ;;
     s3)        shift; cmd_s3 "$@" ;;

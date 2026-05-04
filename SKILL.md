@@ -106,6 +106,20 @@ extracto jobs bulk-tag --jobs id,id --tags "" --mode replace            # destru
 
 `jobs list` and `jobs get` include a `tags: [{id, name, color}]` array.
 
+### Saved searches
+
+Persist a filter set under a name and recall it later. Useful when an agent or operator runs the same History query repeatedly.
+
+```bash
+extracto searches list                                       # list saved searches
+extracto searches save "Q1 invoices" --q invoice --from 2026-01-01 --to 2026-03-31 --tags tagid1
+extracto searches save "Latest failures" --status FAILED --from 2026-04-01
+extracto searches rename <id> "Q2 invoices"
+extracto searches delete <id>
+```
+
+Saving with a name that already exists overwrites that search's filters. The list endpoint self-heals: tag ids in `filters.tagIds` that no longer exist (deleted tags) are stripped from the response so the search doesn't silently match nothing. Apply a saved search by reading its `filters` JSON and passing those flags to `extracto jobs list`.
+
 ### Manage output presets
 
 Presets are saved post-processing instructions (e.g. "Extract all tables as JSON"). Useful for repeated downstream pipelines.

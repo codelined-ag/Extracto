@@ -279,6 +279,58 @@ server.tool(
     ),
 );
 
+const SAVED_SEARCH_FILTERS = z
+  .object({
+    q: z.string().optional(),
+    status: z.enum(["QUEUED", "PROCESSING", "COMPLETED", "FAILED"]).optional(),
+    from: z.string().optional(),
+    to: z.string().optional(),
+    model: z.string().optional(),
+    tagIds: z.array(z.string()).optional(),
+  })
+  .partial();
+
+server.tool(
+  "saved_searches_list",
+  "List the caller's saved History searches with their filter payloads.",
+  {},
+  async () => asTextResult(await call("/api/v1/saved-searches")),
+);
+
+server.tool(
+  "saved_searches_save",
+  "Create or update a saved search. Idempotent on `name`: re-using an existing name overwrites that search's filters.",
+  {
+    name: z.string().min(1).max(64),
+    filters: SAVED_SEARCH_FILTERS,
+  },
+  async (input) =>
+    asTextResult(await call("/api/v1/saved-searches", { method: "POST", body: input })),
+);
+
+server.tool(
+  "saved_searches_rename",
+  "Rename a saved search without rewriting its filters. 409 if another saved search already uses the new name.",
+  { id: z.string(), name: z.string().min(1).max(64) },
+  async ({ id, name }) =>
+    asTextResult(
+      await call(`/api/v1/saved-searches/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: { name },
+      }),
+    ),
+);
+
+server.tool(
+  "saved_searches_delete",
+  "Delete a saved search by id.",
+  { id: z.string() },
+  async ({ id }) =>
+    asTextResult(
+      await call(`/api/v1/saved-searches/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    ),
+);
+
 server.tool(
   "kb_search",
   "Full-text search across the caller's KB-exported jobs.",

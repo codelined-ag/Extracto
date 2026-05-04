@@ -35,6 +35,7 @@ model AuthUser {
   watchedS3Sources   WatchedS3Source[]
   pushSubscriptions  PushSubscription[]
   tags               Tag[]
+  savedSearches      SavedSearch[]
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 }
@@ -284,4 +285,17 @@ model JobTag {
 
   @@id([jobId, tagId])
   @@index([tagId])
+}
+
+model SavedSearch {
+  id        String   @id @default(cuid())
+  userId    String
+  user      AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  filters   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId, updatedAt(sort: Desc)])
 }

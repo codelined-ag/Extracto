@@ -98,6 +98,7 @@ import { clearQueue, deletePagePreviews, loadAllPagePreviews, loadQueue, persist
 import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { useHistory } from "@/app/page-components/use-history";
 import { useTags } from "@/app/page-components/use-tags";
+import { useSavedSearches } from "@/app/page-components/use-saved-searches";
 import { PreviewHeader } from "@/app/page-components/preview-header";
 import { NoSelectionCard } from "@/app/page-components/no-selection-card";
 import { DocumentGallery } from "@/app/page-components/document-gallery";
@@ -634,6 +635,7 @@ export default function ExtractoPage() {
  );
  const history = useHistory(t);
  const tagState = useTags(t);
+ const savedSearches = useSavedSearches(t);
  const historyApplyFilters = React.useCallback(
    (filters: Parameters<typeof history.loadJobs>[0]) => {
      void history.loadJobs(filters);
@@ -1103,7 +1105,8 @@ export default function ExtractoPage() {
  React.useEffect(() => {
  if (!historyOpen) return;
  void tagState.loadTags();
- }, [historyOpen, tagState.loadTags]);
+ void savedSearches.load();
+ }, [historyOpen, tagState.loadTags, savedSearches.load]);
 
  React.useEffect(() => {
  if (!ocrSettingsLoadedRef.current) return;
@@ -2992,6 +2995,11 @@ export default function ExtractoPage() {
           if (history.selectedId) await history.loadDetail(history.selectedId);
         }}
         onApplyFilters={historyApplyFilters}
+        savedSearches={savedSearches.items}
+        onSaveSearch={async (name, filters) => {
+          await savedSearches.save(name, filters);
+        }}
+        onDeleteSavedSearch={savedSearches.remove}
         availableTags={tagState.tags}
         onCreateTag={tagState.createTag}
         onUpdateTag={async (id, patch) => {

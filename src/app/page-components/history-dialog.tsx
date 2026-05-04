@@ -32,7 +32,8 @@ import { deriveHistoryStatus, formatTimestamp } from "@/app/page-components/page
 import { TagPicker } from "@/app/page-components/tag-picker";
 import { tagChipClass, tagSwatchClass } from "@/app/page-components/tag-utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Filter as FilterIcon, X as XIcon } from "lucide-react";
+import { Bookmark as BookmarkIcon, Filter as FilterIcon, Trash2, X as XIcon } from "lucide-react";
+import type { SavedSearchFiltersDTO, SavedSearchItem } from "@/app/page-components/use-saved-searches";
 import type {
   HistoryJobDetail,
   HistoryJobSummary,
@@ -80,6 +81,9 @@ export interface HistoryDialogProps {
     to?: string | null;
     tagIds?: string[];
   }) => void;
+  savedSearches: SavedSearchItem[];
+  onSaveSearch: (name: string, filters: SavedSearchFiltersDTO) => Promise<void>;
+  onDeleteSavedSearch: (id: string) => Promise<void>;
 }
 
 export function HistoryDialog({
@@ -106,6 +110,9 @@ export function HistoryDialog({
   onDeleteTag,
   onUpdateJobTags,
   onApplyFilters,
+  savedSearches,
+  onSaveSearch,
+  onDeleteSavedSearch,
 }: HistoryDialogProps) {
   const [search, setSearch] = React.useState("");
   const [filter, setFilter] = React.useState<HistoryFilter>("all");
@@ -341,6 +348,43 @@ export function HistoryDialog({
                 ) : null}
               </PopoverContent>
             </Popover>
+            <SavedSearchMenu
+              t={t}
+              savedSearches={savedSearches}
+              activeFilterCount={activeFilterCount}
+              currentFilters={{
+                q: search.trim() || undefined,
+                status:
+                  filter === "completed"
+                    ? "COMPLETED"
+                    : filter === "failed"
+                      ? "FAILED"
+                      : filter === "running"
+                        ? "PROCESSING"
+                        : undefined,
+                from: from || undefined,
+                to: to || undefined,
+                tagIds: filterTagIds.length > 0 ? filterTagIds : undefined,
+              }}
+              onApplySaved={(saved) => {
+                setSearch(saved.filters.q ?? "");
+                const status = saved.filters.status;
+                setFilter(
+                  status === "COMPLETED"
+                    ? "completed"
+                    : status === "FAILED"
+                      ? "failed"
+                      : status === "PROCESSING" || status === "QUEUED"
+                        ? "running"
+                        : "all",
+                );
+                setFrom(saved.filters.from ?? "");
+                setTo(saved.filters.to ?? "");
+                setFilterTagIds(saved.filters.tagIds ?? []);
+              }}
+              onSave={onSaveSearch}
+              onDelete={onDeleteSavedSearch}
+            />
           </div>
           {(from || to || filterTags.length > 0) ? (
             <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
@@ -752,6 +796,125 @@ export function HistoryDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SavedSearchMenu({
+  t,
+  savedSearches,
+  activeFilterCount,
+  currentFilters,
+  onApplySaved,
+  onSave,
+  onDelete,
+}: {
+  t: Translator;
+  savedSearches: SavedSearchItem[];
+  activeFilterCount: number;
+  currentFilters: SavedSearchFiltersDTO;
+  onApplySaved: (saved: SavedSearchItem) => void;
+  onSave: (name: string, filters: SavedSearchFiltersDTO) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [draftName, setDraftName] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) setDraftName("");
+  };
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8">
+          <BookmarkIcon className="size-3.5 mr-1.5" />
+          {t("Salvate", "Saved", "Enregistrées", "Guardadas", "Gespeichert")}
+          {savedSearches.length > 0 ? (
+            <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-muted text-foreground text-[10px] size-4 tabular">
+              {savedSearches.length}
+            </span>
+          ) : null}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0">
+        <div className="p-3 border-b space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            {activeFilterCount === 0
+              ? t(
+                  "Imposta dei filtri prima di salvarli.",
+                  "Set some filters first to save them.",
+                  "Définissez des filtres avant de les enregistrer.",
+                  "Establece filtros antes de guardarlos.",
+                  "Filter setzen, dann speichern.",
+                )
+              : t(
+                  "Salva i filtri attivi con un nome.",
+                  "Save the active filters under a name.",
+                  "Enregistrez les filtres actifs sous un nom.",
+                  "Guarda los filtros activos con un nombre.",
+                  "Aktive Filter unter einem Namen speichern.",
+                )}
+          </p>
+          <div className="flex gap-2">
+            <Input
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              placeholder={t("Nome ricerca", "Search name", "Nom de la recherche", "Nombre de la búsqueda", "Suchname")}
+              maxLength={64}
+              className="h-8 text-xs"
+            />
+            <Button
+              size="sm"
+              className="h-8"
+              disabled={busy || activeFilterCount === 0 || !draftName.trim()}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await onSave(draftName.trim(), currentFilters);
+                  setDraftName("");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {t("Salva", "Save", "Enregistrer", "Guardar", "Speichern")}
+            </Button>
+          </div>
+        </div>
+        <div className="max-h-60 overflow-y-auto py-1">
+          {savedSearches.length === 0 ? (
+            <p className="px-3 py-3 text-center text-xs text-muted-foreground">
+              {t("Nessuna ricerca salvata", "No saved searches", "Aucune recherche enregistrée", "Sin búsquedas guardadas", "Keine gespeicherten Suchen")}
+            </p>
+          ) : (
+            savedSearches.map((saved) => (
+              <div key={saved.id} className="flex items-center gap-1 px-2 py-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onApplySaved(saved);
+                    setOpen(false);
+                  }}
+                  className="flex-1 text-left rounded-md px-2 py-1.5 text-xs hover:bg-accent"
+                >
+                  {saved.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void onDelete(saved.id); }}
+                  className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  aria-label={t("Elimina", "Delete", "Supprimer", "Eliminar", "Löschen")}
+                >
+                  <Trash2 className="size-3" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

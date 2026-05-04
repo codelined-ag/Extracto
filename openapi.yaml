@@ -53,6 +53,30 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Tag" }
 
+    SavedSearchFilters:
+      type: object
+      properties:
+        q: { type: string }
+        status:
+          type: string
+          enum: [QUEUED, PROCESSING, COMPLETED, FAILED]
+        from: { type: string }
+        to: { type: string }
+        model: { type: string }
+        tagIds:
+          type: array
+          items: { type: string }
+
+    SavedSearch:
+      type: object
+      required: [id, name, filters]
+      properties:
+        id: { type: string }
+        name: { type: string, maxLength: 64 }
+        filters: { $ref: "#/components/schemas/SavedSearchFilters" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
     Tag:
       type: object
       required: [id, name, color]
@@ -584,6 +608,96 @@ paths:
       summary: Delete a tag (cascades job associations)
       operationId: deleteTag
       tags: [Tags]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { deleted: { type: integer } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/saved-searches:
+    get:
+      summary: List the caller's saved History searches
+      operationId: listSavedSearches
+      tags: [SavedSearches]
+      responses:
+        "200":
+          description: Saved search list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  savedSearches:
+                    type: array
+                    items: { $ref: "#/components/schemas/SavedSearch" }
+    post:
+      summary: Create or update a saved search (idempotent on name)
+      operationId: createSavedSearch
+      tags: [SavedSearches]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, filters]
+              properties:
+                name: { type: string, maxLength: 64 }
+                filters: { $ref: "#/components/schemas/SavedSearchFilters" }
+      responses:
+        "200":
+          description: Saved search created or updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  savedSearch: { $ref: "#/components/schemas/SavedSearch" }
+
+  /api/v1/saved-searches/{id}:
+    patch:
+      summary: Rename a saved search and/or update its filters
+      operationId: updateSavedSearch
+      tags: [SavedSearches]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 64 }
+                filters: { $ref: "#/components/schemas/SavedSearchFilters" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  savedSearch: { $ref: "#/components/schemas/SavedSearch" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Name conflict
+    delete:
+      summary: Delete a saved search
+      operationId: deleteSavedSearch
+      tags: [SavedSearches]
       parameters:
         - name: id
           in: path
