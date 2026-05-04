@@ -28,6 +28,10 @@ export interface FileListCardProps {
   onClearAll: () => void;
   completedCount: number;
   errorCount: number;
+  bulkSelectedIds: Set<string>;
+  onToggleBulk: (id: string) => void;
+  onClearBulk: () => void;
+  onBulkRemove: () => void;
   t: Translator;
   uiLanguage: UiLanguage;
   footer?: React.ReactNode;
@@ -41,6 +45,10 @@ export function FileListCard({
   onClearAll,
   completedCount,
   errorCount,
+  bulkSelectedIds,
+  onToggleBulk,
+  onClearBulk,
+  onBulkRemove,
   t,
   uiLanguage,
   footer,
@@ -101,6 +109,38 @@ export function FileListCard({
           )}
         </div>
 
+        {bulkSelectedIds.size > 0 ? (
+          <div className="flex items-center justify-between gap-2 px-3 py-2 bg-primary/5 hairline-t hairline-b">
+            <span className="text-xs font-medium">
+              {t(
+                `${bulkSelectedIds.size} selezionati`,
+                `${bulkSelectedIds.size} selected`,
+                `${bulkSelectedIds.size} sélectionnés`,
+                `${bulkSelectedIds.size} seleccionados`,
+                `${bulkSelectedIds.size} ausgewählt`,
+              )}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={onClearBulk}
+              >
+                {t("Annulla", "Clear", "Effacer", "Quitar", "Aufheben")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-destructive hover:text-destructive"
+                onClick={onBulkRemove}
+              >
+                {t("Rimuovi", "Remove", "Supprimer", "Eliminar", "Entfernen")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         {files.length > 0 ? (
           <ScrollArea className="max-h-[220px]">
             <div className="p-2 space-y-1">
@@ -113,6 +153,8 @@ export function FileListCard({
                     isSelected={selectedFileId === file.id}
                     onSelect={onSelectFile}
                     onRemove={onRemoveFile}
+                    bulkChecked={bulkSelectedIds.has(file.id)}
+                    onToggleBulk={onToggleBulk}
                     t={t}
                     uiLanguage={uiLanguage}
                   />

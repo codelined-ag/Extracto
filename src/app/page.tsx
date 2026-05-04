@@ -501,6 +501,7 @@ export default function ExtractoPage() {
  const router = useRouter();
  const { toast } = useToast();
  const [files, setFiles] = React.useState<ProcessingFile[]>([]);
+ const [bulkSelectedIds, setBulkSelectedIds] = React.useState<Set<string>>(() => new Set());
  const [selectedModel, setSelectedModel] = React.useState<string>(OLLAMA_FALLBACK_MODELS[0].id);
  const [models, setModels] = React.useState<Model[]>(OLLAMA_FALLBACK_MODELS);
  const [apiSettings, setApiSettings] = React.useState<ApiSettingsForm>(DEFAULT_API_SETTINGS);
@@ -1406,6 +1407,12 @@ export default function ExtractoPage() {
 
  const removeFile = (id: string) => {
  setFiles((prev) => prev.filter((f) => f.id !== id));
+ setBulkSelectedIds((prev) => {
+ if (!prev.has(id)) return prev;
+ const next = new Set(prev);
+ next.delete(id);
+ return next;
+ });
  if (selectedFileId === id) {
  const remaining = files.filter((f) => f.id !== id);
  setSelectedFileId(remaining[0]?.id || null);
@@ -1415,7 +1422,27 @@ export default function ExtractoPage() {
  const clearAllFiles = () => {
  setFiles([]);
  setSelectedFileId(null);
+ setBulkSelectedIds(new Set());
  };
+
+ const toggleBulkSelected = React.useCallback((id: string) => {
+ setBulkSelectedIds((prev) => {
+ const next = new Set(prev);
+ if (next.has(id)) next.delete(id);
+ else next.add(id);
+ return next;
+ });
+ }, []);
+
+ const removeBulkSelected = React.useCallback(() => {
+ setBulkSelectedIds((prev) => {
+ if (prev.size === 0) return prev;
+ const ids = prev;
+ setFiles((current) => current.filter((f) => !ids.has(f.id)));
+ setSelectedFileId((curr) => (curr && ids.has(curr) ? null : curr));
+ return new Set();
+ });
+ }, []);
 
  const copyToClipboard = async (type:"md"|"json") => {
  if (!selectedFile?.result) return;
@@ -2554,6 +2581,10 @@ export default function ExtractoPage() {
               onClearAll={clearAllFiles}
               completedCount={completedCount}
               errorCount={errorCount}
+              bulkSelectedIds={bulkSelectedIds}
+              onToggleBulk={toggleBulkSelected}
+              onClearBulk={() => setBulkSelectedIds(new Set())}
+              onBulkRemove={removeBulkSelected}
               t={t}
               uiLanguage={uiLanguage}
               footer={

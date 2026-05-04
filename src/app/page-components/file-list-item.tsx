@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, CheckIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ export interface FileListItemProps {
   isSelected: boolean;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
+  bulkChecked: boolean;
+  onToggleBulk: (id: string) => void;
   t: Translator;
   uiLanguage: UiLanguage;
 }
@@ -32,6 +34,8 @@ export function FileListItem({
   isSelected,
   onSelect,
   onRemove,
+  bulkChecked,
+  onToggleBulk,
   t,
   uiLanguage,
 }: FileListItemProps) {
@@ -43,11 +47,34 @@ export function FileListItem({
       exit={{ opacity: 0, x: -20 }}
       transition={{ duration: 0.2, delay: index * 0.05 }}
       className={cn(
-        "flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors",
+        "group/item flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors",
         isSelected ? "bg-primary/10" : "hover:bg-muted/50",
+        bulkChecked && "ring-1 ring-primary/40",
       )}
       onClick={() => onSelect(file.id)}
     >
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={bulkChecked}
+        aria-label={
+          bulkChecked
+            ? t("Deseleziona", "Deselect", "Désélectionner", "Deseleccionar", "Abwählen")
+            : t("Seleziona", "Select", "Sélectionner", "Seleccionar", "Auswählen")
+        }
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleBulk(file.id);
+        }}
+        className={cn(
+          "shrink-0 inline-flex h-4 w-4 items-center justify-center rounded transition-colors",
+          bulkChecked
+            ? "bg-primary text-primary-foreground"
+            : "border border-border/60 bg-background opacity-0 group-hover/item:opacity-100 hover:bg-secondary",
+        )}
+      >
+        {bulkChecked ? <CheckIcon size={11} /> : null}
+      </button>
       <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
         {file.preview ? (
           <img src={file.preview} alt={file.name} className="w-full h-full object-cover" />
