@@ -121,17 +121,15 @@ export function Combobox({
             </CommandPrimitive.Empty>
             {options.map((option) => {
               const isSelected = option.value === value
-              const commit = () => {
-                onValueChange(option.value)
-                setOpen(false)
-                setSearch("")
-              }
               return (
                 <CommandPrimitive.Item
                   key={option.value}
                   value={`${option.label} ${option.value}`}
-                  onSelect={commit}
-                  onMouseDown={(e) => { e.preventDefault(); commit() }}
+                  onSelect={() => {
+                    onValueChange(option.value)
+                    setOpen(false)
+                    setSearch("")
+                  }}
                   className={cn(
                     "relative flex cursor-pointer items-start gap-2 rounded-lg px-2.5 py-2 text-sm",
                     "outline-hidden select-none transition-colors duration-150",
