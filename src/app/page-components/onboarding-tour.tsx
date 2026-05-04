@@ -5,6 +5,7 @@ import * as React from "react";
 import "@sjmc11/tourguidejs/dist/css/tour.min.css";
 
 import type { Translator } from "@/app/page-components/types";
+import { isSetupCompleted } from "@/app/page-components/setup-wizard";
 
 const STORAGE_KEY = "extracto:onboarding-completed-v1";
 
@@ -123,8 +124,7 @@ async function runTour(t: Translator, onClose?: () => void) {
       client.onFinish(onClose);
       client.onAfterExit(onClose);
     } catch {
-      void 0;
-    }
+      }
   }
   client.start();
 }
@@ -134,7 +134,6 @@ export function markOnboardingCompleted() {
   try {
     window.localStorage.setItem(STORAGE_KEY, new Date().toISOString());
   } catch {
-    void 0;
   }
 }
 
@@ -152,7 +151,6 @@ export function clearOnboardingFlag() {
   try {
     window.localStorage.removeItem(STORAGE_KEY);
   } catch {
-    void 0;
   }
 }
 
@@ -169,6 +167,7 @@ export interface OnboardingTourProps {
 
 export function OnboardingTour({ t }: OnboardingTourProps) {
   React.useEffect(() => {
+    if (!isSetupCompleted()) return;
     if (isOnboardingCompleted()) return;
     const timeout = window.setTimeout(() => {
       void runTour(t, markOnboardingCompleted);

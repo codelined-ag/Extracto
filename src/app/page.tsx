@@ -90,6 +90,7 @@ import { SettingsAccordion, SettingsAccordionItem, readPersistedOpen } from "@/a
 import { isUiLanguage } from "@/app/page-components/ui-language";
 import { MarkdownView } from "@/app/page-components/markdown-view";
 import { OnboardingTour, useOnboardingTour } from "@/app/page-components/onboarding-tour";
+import { SetupWizard, isSetupCompleted, markSetupCompleted } from "@/app/page-components/setup-wizard";
 import { S3SettingsSection } from "@/app/page-components/s3-settings-section";
 import { WatchersSection } from "@/app/page-components/watchers-section";
 import { TemplatesSection } from "@/app/page-components/templates-section";
@@ -515,12 +516,14 @@ export default function ExtractoPage() {
  const [isSigningOut, setIsSigningOut] = React.useState(false);
  const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
  const [accountDialogOpen, setAccountDialogOpen] = React.useState(false);
+ const [setupWizardOpen, setSetupWizardOpen] = React.useState(false);
  const [ocrAccordionOpen, setOcrAccordionOpen] = React.useState<string | null>(() => readPersistedOpen("extracto.settings.ocr.open", "provider"));
  const [modelError, setModelError] = React.useState("");
  const [historyOpen, setHistoryOpen] = React.useState(false);
 
  // Advanced settings state
  const ocrSettingsLoadedRef = React.useRef(false);
+ const [ocrSettingsLoaded, setOcrSettingsLoaded] = React.useState(false);
  const [settings, setSettings] = React.useState<AdvancedSettings>({
  language:"auto",
  tableDetection: true,
@@ -818,8 +821,10 @@ export default function ExtractoPage() {
  setSettings((prev) => ({ ...prev, ...ocrValues }));
  }
  ocrSettingsLoadedRef.current = true;
+ setOcrSettingsLoaded(true);
  } catch (error) {
  ocrSettingsLoadedRef.current = true;
+ setOcrSettingsLoaded(true);
  setApiSettings(DEFAULT_API_SETTINGS);
  setApiSettingsDraft(DEFAULT_API_SETTINGS);
  setApiKeyDirty(false);
@@ -882,6 +887,55 @@ export default function ExtractoPage() {
  setIsSavingApiSettings(false);
  }
  };
+
+ const saveApiSettingsDirect = async (next: { provider: ProviderKind; apiEndpoint: string; apiKey: string }) => {
+ const response = await fetch("/api/settings", {
+ method:"PUT",
+ headers: {"Content-Type":"application/json"},
+ body: JSON.stringify({
+ provider: next.provider,
+ apiEndpoint: next.apiEndpoint,
+ apiKey: next.apiKey,
+ hasApiKey: Boolean(next.apiKey),
+ replaceApiKey: Boolean(next.apiKey),
+ }),
+ });
+ if (!response.ok) {
+ const payload = (await response.json().catch(() => ({}))) as { error?: string };
+ throw new Error(payload.error || `Failed to save API settings (${response.status})`);
+ }
+ const saved = (await response.json()) as ApiSettingsForm;
+ const provider = normalizeProvider(saved.provider);
+ const normalized: ApiSettingsForm = {
+ provider,
+ apiEndpoint: saved.apiEndpoint?.trim() || defaultEndpointForProvider(provider),
+ apiKey:"",
+ hasApiKey: saved.hasApiKey === true,
+ };
+ setApiSettings(normalized);
+ setApiSettingsDraft(normalized);
+ setApiKeyDirty(false);
+ await fetchAvailableModels(normalized);
+ };
+
+ React.useEffect(() => {
+ if (typeof window === "undefined") return;
+ if (!ocrSettingsLoaded) return;
+ if (isSetupCompleted()) return;
+ if (apiSettings.hasApiKey) {
+ markSetupCompleted();
+ return;
+ }
+ const timer = window.setTimeout(() => setSetupWizardOpen(true), 200);
+ return () => window.clearTimeout(timer);
+ }, [ocrSettingsLoaded, apiSettings.hasApiKey]);
+
+ React.useEffect(() => {
+ if (setupWizardOpen && apiSettings.hasApiKey) {
+ setSetupWizardOpen(false);
+ markSetupCompleted();
+ }
+ }, [setupWizardOpen, apiSettings.hasApiKey]);
 
  const openHistoryModal = async () => {
  setHistoryOpen(true);
@@ -2281,6 +2335,17 @@ export default function ExtractoPage() {
       />
 
       <OnboardingTour t={t} />
+
+      <SetupWizard
+        open={setupWizardOpen}
+        onOpenChange={setSetupWizardOpen}
+        t={t}
+        initial={apiSettings}
+        defaultEndpointForProvider={defaultEndpointForProvider}
+        onSave={saveApiSettingsDirect}
+        onFinished={() => { void restartTour(); }}
+        onSkip={() => undefined}
+      />
 
  <Dialog
  open={apiSettingsOpen}

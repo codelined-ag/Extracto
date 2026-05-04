@@ -39,6 +39,9 @@ db/*.db-shm
 db/*.db-wal
 db/*.sqlite-shm
 db/*.sqlite-wal
+db/api-settings/
+db/kb-defaults/
+db/s3-defaults/
 obsidian-vaults/
 .docker/
 .vercel/
