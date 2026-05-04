@@ -25,11 +25,29 @@ export interface PageEditorProps {
   jobId: string;
   pages: PageEditorPage[];
   onSaved: () => Promise<void> | void;
+  jumpToPage?: number | null;
+  onJumpHandled?: () => void;
 }
 
-export function PageEditor({ t, jobId, pages, onSaved }: PageEditorProps) {
+export function PageEditor({ t, jobId, pages, onSaved, jumpToPage, onJumpHandled }: PageEditorProps) {
   const { toast } = useToast();
   const [openHistoryFor, setOpenHistoryFor] = React.useState<number | null>(null);
+  const [flashFor, setFlashFor] = React.useState<number | null>(null);
+  const tileRefs = React.useRef<Map<number, HTMLDivElement | null>>(new Map());
+
+  React.useEffect(() => {
+    if (jumpToPage == null) return;
+    const el = tileRefs.current.get(jumpToPage);
+    if (!el) return;
+    const reduced =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+    setFlashFor(jumpToPage);
+    onJumpHandled?.();
+    const id = window.setTimeout(() => setFlashFor(null), 1800);
+    return () => window.clearTimeout(id);
+  }, [jumpToPage, onJumpHandled]);
   const [historyByPage, setHistoryByPage] = React.useState<Record<number, PageEditEntryView[]>>({});
   const [editingFor, setEditingFor] = React.useState<number | null>(null);
   const [draft, setDraft] = React.useState<string>("");
@@ -117,8 +135,17 @@ export function PageEditor({ t, jobId, pages, onSaved }: PageEditorProps) {
         const isEditing = editingFor === page.pageNumber;
         const isHistoryOpen = openHistoryFor === page.pageNumber;
         const history = historyByPage[page.pageNumber] ?? [];
+        const isFlashing = flashFor === page.pageNumber;
         return (
-          <div key={page.pageNumber} className="surface-soft rounded-xl p-3 space-y-2">
+          <div
+            key={page.pageNumber}
+            ref={(node) => {
+              tileRefs.current.set(page.pageNumber, node);
+            }}
+            className={cn(
+              "surface-soft rounded-xl p-3 space-y-2 transition-shadow duration-700",
+              isFlashing ? "ring-2 ring-primary shadow-[var(--shadow-strong)]" : "",
+            )}>
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium tabular text-muted-foreground">
                 {t("Pagina", "Page", "Page", "Página", "Seite")} {page.pageNumber}

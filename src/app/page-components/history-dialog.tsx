@@ -125,6 +125,9 @@ export function HistoryDialog({
   const [to, setTo] = React.useState("");
   const [filterTagIds, setFilterTagIds] = React.useState<string[]>([]);
   const [checked, setChecked] = React.useState<Set<string>>(new Set());
+  const [activeResultTab, setActiveResultTab] = React.useState("markdown");
+  const [pageJumpTarget, setPageJumpTarget] = React.useState<number | null>(null);
+  const handlePageJumpHandled = React.useCallback(() => setPageJumpTarget(null), []);
 
   React.useEffect(() => {
     if (!open) return;
@@ -794,7 +797,8 @@ export function HistoryDialog({
                 </div>
 
                 <Tabs
-                  defaultValue="markdown"
+                  value={activeResultTab}
+                  onValueChange={setActiveResultTab}
                   className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden gap-0"
                 >
                   <div className="px-7 pb-2">
@@ -820,6 +824,47 @@ export function HistoryDialog({
                   <div className="flex-1 min-h-0 min-w-0">
                     <TabsContent value="markdown" className="h-full m-0">
                       <ScrollArea className="h-full">
+                        {(() => {
+                          const pages: PageEditorPage[] = [];
+                          const meta = selectedJobDetail.metadata;
+                          if (meta && typeof meta === "object" && !Array.isArray(meta)) {
+                            const records = (meta as Record<string, unknown>).pageRecords;
+                            if (Array.isArray(records)) {
+                              for (const r of records) {
+                                if (!r || typeof r !== "object") continue;
+                                const pageNumber = (r as Record<string, unknown>).pageNumber;
+                                const text = (r as Record<string, unknown>).text;
+                                if (typeof pageNumber === "number" && typeof text === "string") {
+                                  pages.push({ pageNumber, text });
+                                }
+                              }
+                            }
+                          }
+                          if (pages.length <= 1) return null;
+                          return (
+                            <div className="px-7 pt-4 pb-1 sticky top-0 bg-background/80 backdrop-blur-sm z-10 flex flex-wrap items-center gap-1.5 text-[11px] hairline-b">
+                              <span className="text-muted-foreground/80 mr-1">
+                                {t("Pagine", "Pages", "Pages", "Páginas", "Seiten")}
+                              </span>
+                              {pages
+                                .sort((a, b) => a.pageNumber - b.pageNumber)
+                                .map((p) => (
+                                  <button
+                                    key={p.pageNumber}
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveResultTab("pages");
+                                      setPageJumpTarget(p.pageNumber);
+                                    }}
+                                    className="px-2 py-0.5 rounded-full bg-muted hover:bg-accent font-medium tabular"
+                                    title={t("Vai alla pagina", "Jump to page", "Aller à la page", "Ir a página", "Zur Seite")}
+                                  >
+                                    {p.pageNumber}
+                                  </button>
+                                ))}
+                            </div>
+                          );
+                        })()}
                         <MarkdownView source={selectedMarkdown} className="px-7 py-4" />
                       </ScrollArea>
                     </TabsContent>
@@ -862,6 +907,8 @@ export function HistoryDialog({
                           onSaved={async () => {
                             await onPageSaved(selectedJobDetail.id);
                           }}
+                          jumpToPage={pageJumpTarget}
+                          onJumpHandled={handlePageJumpHandled}
                         />
                       </ScrollArea>
                     </TabsContent>
