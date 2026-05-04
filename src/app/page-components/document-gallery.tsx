@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import type { Translator } from "@/app/page-components/types";
@@ -137,7 +138,7 @@ export function DocumentGallery({
 
   return (
     <div
-      className="flex flex-col h-full min-h-0 outline-none"
+      className="flex flex-col h-full min-h-0 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
       tabIndex={0}
       onKeyDown={handleKey}
       aria-label={t(
@@ -177,46 +178,60 @@ export function DocumentGallery({
             {t("Nessuna", "None", "Aucune", "Ninguna", "Keine")}
           </Button>
           <div className="ml-1 inline-flex rounded-md border border-border/60 bg-secondary/50 p-0.5">
-            <button
-              type="button"
-              onClick={() => setViewMode("gallery")}
-              aria-pressed={viewMode === "gallery"}
-              className={cn(
-                "inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 text-xs transition-colors",
-                viewMode === "gallery"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              aria-label={t(
-                "Vista galleria",
-                "Gallery view",
-                "Vue galerie",
-                "Vista galería",
-                "Galerieansicht",
-              )}
-            >
-              <LayoutGridIcon size={13} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("list")}
-              aria-pressed={viewMode === "list"}
-              className={cn(
-                "inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 text-xs transition-colors",
-                viewMode === "list"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              aria-label={t(
-                "Vista lista",
-                "List view",
-                "Vue liste",
-                "Vista lista",
-                "Listenansicht",
-              )}
-            >
-              <ListIcon size={13} />
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("gallery")}
+                  aria-pressed={viewMode === "gallery"}
+                  className={cn(
+                    "inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 text-xs transition-colors",
+                    viewMode === "gallery"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  aria-label={t(
+                    "Vista galleria",
+                    "Gallery view",
+                    "Vue galerie",
+                    "Vista galería",
+                    "Galerieansicht",
+                  )}
+                >
+                  <LayoutGridIcon size={13} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {t("Vista galleria", "Gallery view", "Vue galerie", "Vista galería", "Galerieansicht")}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  aria-pressed={viewMode === "list"}
+                  className={cn(
+                    "inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 text-xs transition-colors",
+                    viewMode === "list"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  aria-label={t(
+                    "Vista lista",
+                    "List view",
+                    "Vue liste",
+                    "Vista lista",
+                    "Listenansicht",
+                  )}
+                >
+                  <ListIcon size={13} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {t("Vista lista", "List view", "Vue liste", "Vista lista", "Listenansicht")}
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </div>
@@ -250,7 +265,31 @@ export function DocumentGallery({
               <motion.img
                 key={activeIndex}
                 src={pagePreviews[activeIndex]}
-                alt={`page ${activePage}`}
+                alt={t(
+                  `Pagina ${activePage} di ${total}`,
+                  `Page ${activePage} of ${total}`,
+                  `Page ${activePage} sur ${total}`,
+                  `Página ${activePage} de ${total}`,
+                  `Seite ${activePage} von ${total}`,
+                )}
+                role="button"
+                aria-label={
+                  activeIsSelected
+                    ? t(
+                        `Deseleziona pagina ${activePage}`,
+                        `Deselect page ${activePage}`,
+                        `Désélectionner la page ${activePage}`,
+                        `Deseleccionar página ${activePage}`,
+                        `Seite ${activePage} abwählen`,
+                      )
+                    : t(
+                        `Seleziona pagina ${activePage}`,
+                        `Select page ${activePage}`,
+                        `Sélectionner la page ${activePage}`,
+                        `Seleccionar página ${activePage}`,
+                        `Seite ${activePage} auswählen`,
+                      )
+                }
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -316,10 +355,32 @@ export function DocumentGallery({
                     <img
                       src={preview}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="h-20 w-auto object-contain bg-background"
                       draggable={false}
                     />
-                    <span
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={isSelected}
+                      aria-label={
+                        isSelected
+                          ? t(
+                              `Deseleziona pagina ${pageNum}`,
+                              `Deselect page ${pageNum}`,
+                              `Désélectionner la page ${pageNum}`,
+                              `Deseleccionar página ${pageNum}`,
+                              `Seite ${pageNum} abwählen`,
+                            )
+                          : t(
+                              `Seleziona pagina ${pageNum}`,
+                              `Select page ${pageNum}`,
+                              `Sélectionner la page ${pageNum}`,
+                              `Seleccionar página ${pageNum}`,
+                              `Seite ${pageNum} auswählen`,
+                            )
+                      }
                       className={cn(
                         "absolute top-1 right-1 inline-flex h-4 w-4 items-center justify-center rounded-sm text-[9px] font-semibold transition-colors",
                         isSelected
@@ -330,11 +391,9 @@ export function DocumentGallery({
                         e.stopPropagation();
                         togglePage(pageNum);
                       }}
-                      role="checkbox"
-                      aria-checked={isSelected}
                     >
                       {isSelected ? <CheckIcon size={10} /> : null}
-                    </span>
+                    </button>
                     <span className="absolute bottom-0 inset-x-0 bg-background/80 text-[9px] font-mono text-center py-0.5">
                       {pageNum}
                     </span>
@@ -392,7 +451,7 @@ export function DocumentGallery({
                       `Seite ${pageNum} öffnen`,
                     )}
                   >
-                    <img src={preview} alt="" className="h-12 w-12 object-cover" draggable={false} />
+                    <img src={preview} alt="" loading="lazy" decoding="async" className="h-12 w-12 object-cover" draggable={false} />
                   </button>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium">
