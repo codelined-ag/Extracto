@@ -203,16 +203,15 @@ export function PreviewHeader({
                           ? (() => {
                               const k = selectedFile.kbExport;
                               if (k?.phase === "embedding" && (k.embeddingTotal ?? 0) > 0) {
+                                const d = k.embeddingDone ?? 0;
+                                const tot = k.embeddingTotal ?? 0;
                                 return t(
-                                  `Embedding ${k.embeddingDone ?? 0}/${k.embeddingTotal ?? 0}`,
-                                  `Embedding ${k.embeddingDone ?? 0}/${k.embeddingTotal ?? 0}`,
-                                  `Embedding ${k.embeddingDone ?? 0}/${k.embeddingTotal ?? 0}`,
-                                  `Embedding ${k.embeddingDone ?? 0}/${k.embeddingTotal ?? 0}`,
-                                  `Embedding ${k.embeddingDone ?? 0}/${k.embeddingTotal ?? 0}`,
+                                  `Incorporamento ${d}/${tot}`,
+                                  `Embedding ${d}/${tot}`,
+                                  `Vectorisation ${d}/${tot}`,
+                                  `Generando ${d}/${tot}`,
+                                  `Einbettung ${d}/${tot}`,
                                 );
-                              }
-                              if (k?.phase === "chunking") {
-                                return t("Suddivisione...", "Chunking...", "Découpage...", "Fragmentando...", "Chunking...");
                               }
                               if (k?.phase === "upserting") {
                                 return t("Caricamento nel vector store...", "Upserting to vector store...", "Téléversement vers le vector store...", "Subiendo al vector store...", "In Vektor-Store laden...");

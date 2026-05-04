@@ -49,7 +49,7 @@ export async function GET(
 
       if (initial.phase === "done" || initial.phase === "error") {
         cancelled = true;
-        try { controller.close(); } catch { /* already closed */ }
+        queueMicrotask(() => { try { controller.close(); } catch { /* already closed */ } });
         return;
       }
 
@@ -58,7 +58,7 @@ export async function GET(
         if (event.phase === "done" || event.phase === "error") {
           cancelled = true;
           if (typeof unsubscribe === "function") unsubscribe();
-          try { controller.close(); } catch { /* already closed */ }
+          queueMicrotask(() => { try { controller.close(); } catch { /* already closed */ } });
         }
       });
 
@@ -71,7 +71,7 @@ export async function GET(
           cancelled = true;
           if (typeof unsubscribe === "function") unsubscribe();
           clearInterval(lifetimeTimer);
-          try { controller.close(); } catch { /* already closed */ }
+          queueMicrotask(() => { try { controller.close(); } catch { /* already closed */ } });
         }
       }, 30_000);
 
@@ -79,7 +79,7 @@ export async function GET(
         cancelled = true;
         if (typeof unsubscribe === "function") unsubscribe();
         clearInterval(lifetimeTimer);
-        try { controller.close(); } catch { /* already closed */ }
+        queueMicrotask(() => { try { controller.close(); } catch { /* already closed */ } });
       });
     },
     cancel() {

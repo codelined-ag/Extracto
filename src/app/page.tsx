@@ -115,7 +115,7 @@ const STORE_DEFAULT_BASE_URLS: Record<KbStoreKind, string> = {
  weaviate:"http://127.0.0.1:8080",
  milvus:"http://127.0.0.1:9091",
  opensearch:"http://127.0.0.1:9200",
- pinecone:"https://INDEX-PROJ.svc.REGION.pinecone.io",
+ pinecone:"",
 };
 
 const STORE_LABELS: Record<KbStoreKind, string> = {
@@ -2421,11 +2421,24 @@ export default function ExtractoPage() {
  <Input
  value={kbDefaultsDraft.storeBaseUrl}
  onChange={(e) => { setStoreTestResult(null); setKbDefaultsDraft((p) => ({ ...p, storeBaseUrl: e.target.value })); }}
- placeholder={STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind]}
+ placeholder={kbDefaultsDraft.storeKind ==="pinecone"?"https://your-index-PROJECT.svc.REGION.pinecone.io": STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind]}
  />
  <p className="text-[11px] text-muted-foreground/70">
- {t(`Default per ${STORE_LABELS[kbDefaultsDraft.storeKind]}: ${STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind]}`,
- `${STORE_LABELS[kbDefaultsDraft.storeKind]} default: ${STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind]}`)}
+ {kbDefaultsDraft.storeKind === "pinecone"
+ ? t(
+"Pinecone richiede l'host specifico del tuo indice (sostituisci INDEX, PROJECT, REGION).",
+"Pinecone needs the per-index host URL (replace INDEX, PROJECT, REGION).",
+"Pinecone exige l'URL d'hôte de l'index (remplace INDEX, PROJECT, REGION).",
+"Pinecone requiere la URL del host del índice (sustituye INDEX, PROJECT, REGION).",
+"Pinecone braucht die index-spezifische Host-URL (ersetze INDEX, PROJECT, REGION).",
+ )
+ : t(
+ `Default per ${STORE_LABELS[kbDefaultsDraft.storeKind]}: ${STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind]}`,
+ `${STORE_LABELS[kbDefaultsDraft.storeKind]} default: ${STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind]}`,
+ `${STORE_LABELS[kbDefaultsDraft.storeKind]} par défaut : ${STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind]}`,
+ `${STORE_LABELS[kbDefaultsDraft.storeKind]} por defecto: ${STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind]}`,
+ `${STORE_LABELS[kbDefaultsDraft.storeKind]} Standard: ${STORE_DEFAULT_BASE_URLS[kbDefaultsDraft.storeKind]}`,
+ )}
  </p>
  </div>
  <div className="space-y-1.5">

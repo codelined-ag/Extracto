@@ -25,6 +25,7 @@ interface ProgressEntry {
 }
 
 const TTL_MS = 10 * 60 * 1000;
+const SWEEP_INTERVAL_MS = 60 * 1000;
 const sweep = new Map<string, ProgressEntry>();
 
 function evictExpired() {
@@ -34,6 +35,11 @@ function evictExpired() {
       sweep.delete(id);
     }
   }
+}
+
+const sweepTimer = setInterval(evictExpired, SWEEP_INTERVAL_MS);
+if (typeof sweepTimer === "object" && sweepTimer !== null && "unref" in sweepTimer) {
+  (sweepTimer as { unref: () => void }).unref();
 }
 
 export function registerKbExport(input: {

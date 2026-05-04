@@ -6,6 +6,30 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-04
+
+### Added
+- Concurrency control: OCR pages now run in parallel batches with per-provider sane defaults (Ollama 1, Mistral 4, OpenRouter 4, openai_compat 2). Override per-request with `pageConcurrency` (UI / API / CLI `--page-concurrency` / MCP).
+- KB export embeddings can now run in parallel batches; pass `embeddingConcurrency` via the API, MCP, or CLI `--embed-concurrency`.
+- KB export streams real-time progress over SSE: chunking → embedding (with done/total) → upserting → done. The UI dropdown reflects the current phase + embedding count live.
+- Three new vector store adapters: Milvus (REST v2), OpenSearch (k-NN bulk), and Pinecone (per-index host).
+- Settings dialog gained an API keys tab for creating, listing, and revoking bearer keys without touching the CLI.
+- Header user dropdown gained a "Change password" entry backed by a new `/api/auth/change-password` route with rate-limit + session refresh.
+- Sessions on other devices are invalidated after a password change via a `passwordChangedAt` claim plus a per-request DB check.
+- Document preview redesigned: gallery view (one big page with prev/next + thumbnail strip and per-page selection) and list view (page-by-page rows with bulk-toggle); old text-input page-range picker removed.
+- Bulk selection across queued documents with a Remove action.
+- Translated placeholders on every text input (5 languages).
+- Footer link points to the Extracto repo.
+
+### Changed
+- `extracto on` and `extracto upgrade` now remove any stale `--name extracto` containers from the README's Path A flow before bringing up the compose stack.
+- KB export defaults to enabled; `KB_EXPORT_ENABLED=0` opts out (was opt-in).
+- Empty-state document icon switched to an animated GIF; copy now sits closer to the icon.
+
+### Fixed
+- Settings Combobox items were rendered with `pointer-events: none` and `opacity-0.5` because the Tailwind `data-[disabled]:` selector matched the literal string "false". Items now select on click and scroll properly.
+- Service worker bumped to `extracto-v2` and stops precaching the HTML shell so chunk-hash references stay current after redeploys.
+
 ## [0.4.0] - 2026-05-04
 
 ### Added

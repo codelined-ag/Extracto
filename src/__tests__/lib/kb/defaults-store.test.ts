@@ -42,9 +42,9 @@ describe("saveKbDefaults", () => {
   it("persists embedding + chunking + vector store and read-back equals saved values", async () => {
     const m = await loadModule();
     const saved = await m.saveKbDefaults("user1", {
-      embedding: { provider: "openai_compat", apiEndpoint: "https://x/v1", model: "text-embed-3", dimensions: 1536 },
+      embedding: { provider: "openai_compat", apiEndpoint: "https://api.openai.com/v1", model: "text-embed-3", dimensions: 1536 },
       chunking: { strategy: "fixed", maxChunkSize: 500, overlap: 50 },
-      vectorStore: { kind: "qdrant", baseUrl: "http://q:6333", dimensions: 1536 },
+      vectorStore: { kind: "qdrant", baseUrl: "http://127.0.0.1:6333", dimensions: 1536 },
       collectionNameTemplate: "{fileName}-vectors",
     });
     expect(saved.embedding.provider).toBe("openai_compat");
@@ -54,7 +54,7 @@ describe("saveKbDefaults", () => {
     const m2 = await loadModule();
     const loaded = await m2.getKbDefaults("user1");
     expect(loaded.embedding.model).toBe("text-embed-3");
-    expect(loaded.vectorStore.baseUrl).toBe("http://q:6333");
+    expect(loaded.vectorStore.baseUrl).toBe("http://127.0.0.1:6333");
     expect(loaded.collectionNameTemplate).toBe("{fileName}-vectors");
   });
 
@@ -75,7 +75,7 @@ describe("saveKbDefaults", () => {
 
   it("ignores invalid kind and falls back to current", async () => {
     const m = await loadModule();
-    await m.saveKbDefaults("user1", { vectorStore: { kind: "qdrant", baseUrl: "http://q" } });
+    await m.saveKbDefaults("user1", { vectorStore: { kind: "qdrant", baseUrl: "http://localhost:6333" } });
     const after = await m.saveKbDefaults("user1", { vectorStore: { kind: "junk" as never } });
     expect(after.vectorStore.kind).toBe("qdrant");
   });

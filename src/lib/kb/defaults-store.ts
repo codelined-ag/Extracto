@@ -14,6 +14,10 @@ import type {
   EmbeddingProviderConfig,
   EmbeddingProviderKind,
 } from "@/lib/kb/types";
+import {
+  enforceProviderEndpointPolicy,
+  enforceVectorStoreEndpointPolicy,
+} from "@/lib/ocr/endpoint-policy";
 
 export type VectorStoreKind = "chroma" | "qdrant" | "weaviate" | "milvus" | "opensearch" | "pinecone";
 
@@ -39,7 +43,7 @@ const DEFAULT_BASE_URL_BY_KIND: Record<VectorStoreKind, string> = {
   weaviate: "http://127.0.0.1:8080",
   milvus: "http://127.0.0.1:9091",
   opensearch: "http://127.0.0.1:9200",
-  pinecone: "https://INDEX-PROJ.svc.REGION.pinecone.io",
+  pinecone: "",
 };
 
 export interface KbDefaults {
@@ -211,6 +215,16 @@ export async function saveKbDefaults(
 ): Promise<KbDefaults> {
   const safe = sanitizeUserId(userId);
   const current = await getKbDefaults(safe);
+
+  const proposedEmbeddingEndpoint = input.embedding?.apiEndpoint ?? current.embedding.apiEndpoint;
+  const proposedEmbeddingProvider = input.embedding?.provider ?? current.embedding.provider;
+  enforceProviderEndpointPolicy(
+    proposedEmbeddingProvider,
+    proposedEmbeddingEndpoint,
+    proposedEmbeddingEndpoint,
+  );
+  const proposedStoreBaseUrl = input.vectorStore?.baseUrl ?? current.vectorStore.baseUrl;
+  enforceVectorStoreEndpointPolicy(proposedStoreBaseUrl);
 
   const merged: KbDefaults = {
     embedding: {
