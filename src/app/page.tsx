@@ -2186,7 +2186,7 @@ export default function ExtractoPage() {
 )} />
  </span>
  </Label>
- <Input type="number"min={1} max={32768} value={kbDefaultsDraft.embeddingDimensions} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, embeddingDimensions: e.target.value }))}/>
+ <Input type="number"min={1} max={32768} value={kbDefaultsDraft.embeddingDimensions} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, embeddingDimensions: e.target.value }))} placeholder="768"/>
  </div>
  </div>
  <div className="space-y-1.5">
@@ -2240,7 +2240,7 @@ export default function ExtractoPage() {
  <div className="grid grid-cols-3 gap-3">
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Max","Max","Max","Máx","Max")}</Label>
- <Input type="number"min={1} max={10000} value={kbDefaultsDraft.chunkingMaxSize} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMaxSize: e.target.value }))}/>
+ <Input type="number"min={1} max={10000} value={kbDefaultsDraft.chunkingMaxSize} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMaxSize: e.target.value }))} placeholder="1200"/>
  </div>
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
@@ -2255,7 +2255,7 @@ export default function ExtractoPage() {
 )}/>
  </span>
  </Label>
- <Input type="number"min={0} value={kbDefaultsDraft.chunkingOverlap} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingOverlap: e.target.value }))} disabled={kbDefaultsDraft.chunkingStrategy !=="fixed"}/>
+ <Input type="number"min={0} value={kbDefaultsDraft.chunkingOverlap} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingOverlap: e.target.value }))} disabled={kbDefaultsDraft.chunkingStrategy !=="fixed"} placeholder="100"/>
  </div>
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
@@ -2270,7 +2270,7 @@ export default function ExtractoPage() {
 )}/>
  </span>
  </Label>
- <Input type="number"min={0} value={kbDefaultsDraft.chunkingMinSize} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMinSize: e.target.value }))} disabled={kbDefaultsDraft.chunkingStrategy ==="fixed"}/>
+ <Input type="number"min={0} value={kbDefaultsDraft.chunkingMinSize} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMinSize: e.target.value }))} disabled={kbDefaultsDraft.chunkingStrategy ==="fixed"} placeholder="200"/>
  </div>
  </div>
  {kbDefaultsDraft.chunkingStrategy === "semantic" ? (
@@ -2287,7 +2287,7 @@ export default function ExtractoPage() {
 )}/>
  </span>
  </Label>
- <Input type="number"min={0} max={100} step={1} value={kbDefaultsDraft.chunkingBreakpointPercentile} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingBreakpointPercentile: e.target.value }))}/>
+ <Input type="number"min={0} max={100} step={1} value={kbDefaultsDraft.chunkingBreakpointPercentile} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingBreakpointPercentile: e.target.value }))} placeholder="95"/>
  </div>
  ) : null}
  {kbDefaultsDraft.chunkingStrategy === "hierarchical" ? (
@@ -2304,7 +2304,7 @@ export default function ExtractoPage() {
 )}/>
  </span>
  </Label>
- <Input type="number"min={1} max={6} step={1} value={kbDefaultsDraft.chunkingMaxHeadingDepth} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMaxHeadingDepth: e.target.value }))}/>
+ <Input type="number"min={1} max={6} step={1} value={kbDefaultsDraft.chunkingMaxHeadingDepth} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMaxHeadingDepth: e.target.value }))} placeholder="6"/>
  </div>
  ) : null}
  </div>
@@ -2337,7 +2337,7 @@ export default function ExtractoPage() {
  </div>
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Dimensioni","Dimensions","Dimensions","Dimensiones","Dimensionen")}</Label>
- <Input type="number"min={1} max={32768} value={kbDefaultsDraft.storeDimensions} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, storeDimensions: e.target.value }))}/>
+ <Input type="number"min={1} max={32768} value={kbDefaultsDraft.storeDimensions} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, storeDimensions: e.target.value }))} placeholder="768"/>
  </div>
  </div>
  <div className="space-y-1.5">
