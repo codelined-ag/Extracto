@@ -345,7 +345,7 @@ paths:
 
   /api/jobs:
     get:
-      summary: List the caller's OCR jobs
+      summary: List the caller's OCR jobs with optional filters
       operationId: listJobs
       tags: [Jobs]
       parameters:
@@ -357,6 +357,26 @@ paths:
           schema:
             type: string
             enum: [QUEUED, PROCESSING, COMPLETED, FAILED]
+        - name: q
+          in: query
+          description: Substring match on fileName. Case-insensitive for ASCII characters (SQLite default LIKE collation).
+          schema: { type: string }
+        - name: model
+          in: query
+          description: Substring match on the job's model id. Case-insensitive for ASCII.
+          schema: { type: string }
+        - name: from
+          in: query
+          description: Lower bound on createdAt (ISO-8601, inclusive).
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: Upper bound on createdAt (ISO-8601, inclusive). When passed as a bare date (YYYY-MM-DD) the server treats it as inclusive end-of-day UTC.
+          schema: { type: string, format: date-time }
+        - name: tagIds
+          in: query
+          description: Comma-separated tag ids. Matches jobs with at least one of these tags.
+          schema: { type: string }
       responses:
         "200":
           description: Job list

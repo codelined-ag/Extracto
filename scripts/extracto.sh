@@ -449,8 +449,22 @@ cmd_jobs() {
   shift || true
   case "$sub" in
     list)
-      local limit="${1:-20}"
-      api_get "/api/jobs?limit=${limit}"
+      local limit="20"
+      local qs=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --status) qs="${qs}&status=$(printf '%s' "$2" | python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read()))')"; shift 2 ;;
+          --q) qs="${qs}&q=$(printf '%s' "$2" | python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read()))')"; shift 2 ;;
+          --model) qs="${qs}&model=$(printf '%s' "$2" | python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read()))')"; shift 2 ;;
+          --from) qs="${qs}&from=$(printf '%s' "$2" | python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read()))')"; shift 2 ;;
+          --to) qs="${qs}&to=$(printf '%s' "$2" | python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read()))')"; shift 2 ;;
+          --tags) qs="${qs}&tagIds=$(printf '%s' "$2" | python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read()))')"; shift 2 ;;
+          --) shift; break ;;
+          -*) die "unknown flag: $1" ;;
+          *) limit="$1"; shift ;;
+        esac
+      done
+      api_get "/api/jobs?limit=${limit}${qs}"
       ;;
     get)
       [ -n "${1:-}" ] || die "usage: extracto jobs get <job-id>"
@@ -1046,7 +1060,8 @@ Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
                                   [--preset generic|academic|invoice|contract|form]
                                   [--no-text-layer]
                                 Submit a file for OCR (pdf/png/jpg/webp)
-  jobs list [limit]             List recent OCR jobs (default 20)
+  jobs list [limit] [--status S] [--q TEXT] [--model TEXT] [--from DATE] [--to DATE] [--tags id,id]
+                                List recent OCR jobs (default 20). Filters AND-combine; --tags is comma-separated and OR-combines within itself.
   jobs get <id>                 Show one job
   jobs delete <id>              Delete a job
   jobs cancel <id>              Request a job stop

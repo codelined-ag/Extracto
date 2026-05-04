@@ -153,15 +153,31 @@ server.tool(
 
 server.tool(
   "jobs_list",
-  "List the caller's recent OCR jobs (newest first).",
+  "List the caller's recent OCR jobs (newest first). All filters are AND-combined; tagIds is OR-combined within itself.",
   {
     limit: z.number().int().min(1).max(100).optional(),
     status: z.enum(["QUEUED", "PROCESSING", "COMPLETED", "FAILED"]).optional(),
+    q: z.string().optional().describe("Substring match on fileName. Case-insensitive for ASCII characters."),
+    model: z.string().optional().describe("Substring match on the job's model id. Case-insensitive for ASCII."),
+    from: z
+      .string()
+      .optional()
+      .describe("ISO-8601 lower bound on createdAt (inclusive). Examples: 2026-01-01, 2026-01-01T00:00:00Z."),
+    to: z
+      .string()
+      .optional()
+      .describe("ISO-8601 upper bound on createdAt (inclusive). A bare date (YYYY-MM-DD) is treated as inclusive end-of-day UTC."),
+    tagIds: z.array(z.string()).optional().describe("Match jobs that have at least one of these tag ids."),
   },
-  async ({ limit, status }) => {
+  async ({ limit, status, q, model, from, to, tagIds }) => {
     const params = new URLSearchParams();
     if (limit) params.set("limit", String(limit));
     if (status) params.set("status", status);
+    if (q) params.set("q", q);
+    if (model) params.set("model", model);
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    if (tagIds && tagIds.length > 0) params.set("tagIds", tagIds.join(","));
     const query = params.size ? `?${params.toString()}` : "";
     return asTextResult(await call(`/api/jobs${query}`));
   },

@@ -10,6 +10,15 @@ import type {
   Translator,
 } from "@/app/page-components/types";
 
+export interface HistoryFilterParams {
+  q?: string;
+  status?: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "all" | null;
+  from?: string | null;
+  to?: string | null;
+  tagIds?: string[];
+  model?: string;
+}
+
 export interface HistoryState {
   jobs: HistoryJobSummary[];
   selectedId: string | null;
@@ -20,7 +29,7 @@ export interface HistoryState {
   isLoadingJobs: boolean;
   isLoadingDetail: boolean;
   isDeleting: boolean;
-  loadJobs: () => Promise<void>;
+  loadJobs: (filters?: HistoryFilterParams) => Promise<void>;
   loadDetail: (jobId: string) => Promise<void>;
   deleteSelected: () => Promise<void>;
   deleteMany: (ids: string[]) => Promise<void>;
@@ -42,11 +51,22 @@ export function useHistory(t: Translator): HistoryState {
   const [isLoadingJobs, setIsLoadingJobs] = React.useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const lastFiltersRef = React.useRef<HistoryFilterParams | undefined>(undefined);
 
-  const loadJobs = React.useCallback(async () => {
+  const loadJobs = React.useCallback(async (filters?: HistoryFilterParams) => {
+    if (filters !== undefined) lastFiltersRef.current = filters;
+    const effective = filters ?? lastFiltersRef.current;
     setIsLoadingJobs(true);
     try {
-      const response = await fetch("/api/jobs?limit=100", { cache: "no-store" });
+      const params = new URLSearchParams();
+      params.set("limit", "100");
+      if (effective?.q) params.set("q", effective.q);
+      if (effective?.status && effective.status !== "all") params.set("status", effective.status);
+      if (effective?.from) params.set("from", effective.from);
+      if (effective?.to) params.set("to", effective.to);
+      if (effective?.model) params.set("model", effective.model);
+      if (effective?.tagIds && effective.tagIds.length > 0) params.set("tagIds", effective.tagIds.join(","));
+      const response = await fetch(`/api/jobs?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(payload.error || `Failed to load history (${response.status})`);

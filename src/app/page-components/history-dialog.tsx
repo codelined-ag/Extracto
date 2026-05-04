@@ -30,7 +30,9 @@ import { SearchIcon } from "@/components/ui/search";
 
 import { deriveHistoryStatus, formatTimestamp } from "@/app/page-components/page-utils";
 import { TagPicker } from "@/app/page-components/tag-picker";
-import { tagChipClass } from "@/app/page-components/tag-utils";
+import { tagChipClass, tagSwatchClass } from "@/app/page-components/tag-utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Filter as FilterIcon, X as XIcon } from "lucide-react";
 import type {
   HistoryJobDetail,
   HistoryJobSummary,
@@ -39,7 +41,14 @@ import type {
   Translator,
 } from "@/app/page-components/types";
 
-type HistoryFilter = "all" | "completed" | "failed" | "running" | "stopped";
+type HistoryFilter = "all" | "completed" | "failed" | "running";
+
+const STATUS_TO_API: Record<HistoryFilter, "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "all"> = {
+  all: "all",
+  completed: "COMPLETED",
+  failed: "FAILED",
+  running: "PROCESSING",
+};
 
 export interface HistoryDialogProps {
   open: boolean;
@@ -63,6 +72,13 @@ export interface HistoryDialogProps {
   onUpdateTag: (id: string, patch: { name?: string; color?: TagColor }) => Promise<void>;
   onDeleteTag: (id: string) => Promise<void>;
   onUpdateJobTags: (jobId: string, tagIds: string[]) => Promise<void>;
+  onApplyFilters: (filters: {
+    q?: string;
+    status?: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "all";
+    from?: string | null;
+    to?: string | null;
+    tagIds?: string[];
+  }) => void;
 }
 
 export function HistoryDialog({
@@ -87,10 +103,48 @@ export function HistoryDialog({
   onUpdateTag,
   onDeleteTag,
   onUpdateJobTags,
+  onApplyFilters,
 }: HistoryDialogProps) {
   const [search, setSearch] = React.useState("");
   const [filter, setFilter] = React.useState<HistoryFilter>("all");
+  const [from, setFrom] = React.useState("");
+  const [to, setTo] = React.useState("");
+  const [filterTagIds, setFilterTagIds] = React.useState<string[]>([]);
   const [checked, setChecked] = React.useState<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    if (!open) return;
+    const id = window.setTimeout(() => {
+      onApplyFilters({
+        q: search.trim() || undefined,
+        status: STATUS_TO_API[filter],
+        from: from || null,
+        to: to || null,
+        tagIds: filterTagIds,
+      });
+    }, 250);
+    return () => window.clearTimeout(id);
+  }, [open, search, filter, from, to, filterTagIds, onApplyFilters]);
+
+  const filterTags = React.useMemo(
+    () => availableTags.filter((tag) => filterTagIds.includes(tag.id)),
+    [availableTags, filterTagIds],
+  );
+
+  const activeFilterCount =
+    (search.trim() ? 1 : 0) +
+    (filter !== "all" ? 1 : 0) +
+    (from ? 1 : 0) +
+    (to ? 1 : 0) +
+    filterTagIds.length;
+
+  const clearAllFilters = () => {
+    setSearch("");
+    setFilter("all");
+    setFrom("");
+    setTo("");
+    setFilterTagIds([]);
+  };
 
   const toggleChecked = (id: string) => {
     setChecked((prev) => {
@@ -108,36 +162,12 @@ export function HistoryDialog({
     return map;
   }, [jobs]);
 
-  const counts = {
-    all: jobs.length,
-    completed: jobs.filter((j) => derivedById.get(j.id) === "completed").length,
-    failed: jobs.filter((j) => derivedById.get(j.id) === "failed").length,
-    running: jobs.filter((j) => {
-      const d = derivedById.get(j.id);
-      return d === "processing" || d === "queued";
-    }).length,
-    stopped: jobs.filter((j) => derivedById.get(j.id) === "stopped").length,
-  };
-
-  const term = search.trim().toLowerCase();
-  const filtered = jobs.filter((j) => {
-    const matchesText =
-      !term || j.fileName.toLowerCase().includes(term) || (j.model || "").toLowerCase().includes(term);
-    const d = derivedById.get(j.id);
-    const matchesFilter =
-      filter === "all" ||
-      (filter === "completed" && d === "completed") ||
-      (filter === "failed" && d === "failed") ||
-      (filter === "running" && (d === "processing" || d === "queued")) ||
-      (filter === "stopped" && d === "stopped");
-    return matchesText && matchesFilter;
-  });
+  const filtered = jobs;
 
   const handleOpenChange = (next: boolean) => {
     onOpenChange(next);
     if (!next) {
-      setSearch("");
-      setFilter("all");
+      clearAllFilters();
       setChecked(new Set());
     }
   };
@@ -153,71 +183,195 @@ export function HistoryDialog({
               {t("Cronologia", "History", "Historique", "Historial", "Verlauf")}
             </h2>
             <p className="text-sm text-muted-foreground">
-              {counts.all === 0
-                ? t(
-                    "Nessuna estrazione ancora.",
-                    "No extractions yet.",
-                    "Aucune extraction pour l'instant.",
-                    "Aún no hay extracciones.",
-                    "Noch keine Extraktionen.",
-                  )
+              {jobs.length === 0
+                ? activeFilterCount > 0
+                  ? t(
+                      "Nessun risultato per i filtri attivi.",
+                      "No results for the active filters.",
+                      "Aucun résultat pour les filtres actifs.",
+                      "Sin resultados para los filtros activos.",
+                      "Keine Treffer für die aktiven Filter.",
+                    )
+                  : t(
+                      "Nessuna estrazione ancora.",
+                      "No extractions yet.",
+                      "Aucune extraction pour l'instant.",
+                      "Aún no hay extracciones.",
+                      "Noch keine Extraktionen.",
+                    )
                 : t(
-                    `${counts.all} esecuzioni · ${counts.completed} completate · ${counts.failed} fallite`,
-                    `${counts.all} runs · ${counts.completed} completed · ${counts.failed} failed`,
-                    `${counts.all} exécutions · ${counts.completed} terminées · ${counts.failed} échouées`,
-                    `${counts.all} ejecuciones · ${counts.completed} completadas · ${counts.failed} fallidas`,
-                    `${counts.all} Läufe · ${counts.completed} abgeschlossen · ${counts.failed} fehlgeschlagen`,
+                    `${jobs.length} esecuzioni`,
+                    `${jobs.length} runs`,
+                    `${jobs.length} exécutions`,
+                    `${jobs.length} ejecuciones`,
+                    `${jobs.length} Läufe`,
                   )}
             </p>
           </div>
-          {counts.all > 0 ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[14rem]">
-                <SearchIcon
-                  size={14}
-                  className="inline-flex items-center justify-center absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/70 pointer-events-none"
-                />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t(
-                    "Cerca per nome o modello",
-                    "Search by file or model",
-                    "Rechercher par fichier ou modèle",
-                    "Buscar por archivo o modelo",
-                    "Suche nach Datei oder Modell",
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[14rem]">
+              <SearchIcon
+                size={14}
+                className="inline-flex items-center justify-center absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/70 pointer-events-none"
+              />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t(
+                  "Cerca per nome file",
+                  "Search by file name",
+                  "Rechercher par nom de fichier",
+                  "Buscar por nombre de archivo",
+                  "Nach Dateinamen suchen",
+                )}
+                className="pl-9"
+              />
+            </div>
+            <div className="surface-soft rounded-xl p-1 flex items-center gap-0.5">
+              {(
+                [
+                  ["all", t("Tutto", "All", "Tout", "Todo", "Alle")],
+                  ["completed", t("Completate", "Completed", "Terminées", "Completadas", "Abgeschlossen")],
+                  ["failed", t("Fallite", "Failed", "Échouées", "Fallidas", "Fehlgeschlagen")],
+                  ["running", t("In corso", "Running", "En cours", "En curso", "Läuft")],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setFilter(key)}
+                  className={cn(
+                    "px-3 py-1 rounded-lg text-xs font-medium transition-colors",
+                    filter === key
+                      ? "bg-card text-foreground shadow-[var(--shadow-soft)]"
+                      : "text-muted-foreground/80 hover:text-foreground",
                   )}
-                  className="pl-9"
-                />
-              </div>
-              <div className="surface-soft rounded-xl p-1 flex items-center gap-0.5">
-                {(
-                  [
-                    ["all", t("Tutto", "All", "Tout", "Todo", "Alle")],
-                    ["completed", t("Completate", "Completed", "Terminées", "Completadas", "Abgeschlossen")],
-                    ["failed", t("Fallite", "Failed", "Échouées", "Fallidas", "Fehlgeschlagen")],
-                    ["running", t("In corso", "Running", "En cours", "En curso", "Läuft")],
-                    ["stopped", t("Interrotte", "Stopped", "Arrêtées", "Detenidas", "Gestoppt")],
-                  ] as const
-                ).map(([key, label]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setFilter(key)}
-                    className={cn(
-                      "px-3 py-1 rounded-lg text-xs font-medium transition-colors",
-                      filter === key
-                        ? "bg-card text-foreground shadow-[var(--shadow-soft)]"
-                        : "text-muted-foreground/80 hover:text-foreground",
-                    )}
-                  >
-                    {label}
-                    <span className="ml-1.5 text-[10px] tabular text-muted-foreground/70">
-                      {counts[key]}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8">
+                  <FilterIcon className="size-3.5 mr-1.5" />
+                  {t("Filtri", "Filters", "Filtres", "Filtros", "Filter")}
+                  {activeFilterCount > 0 ? (
+                    <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] size-4 tabular">
+                      {activeFilterCount}
                     </span>
+                  ) : null}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 p-3 space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-medium text-muted-foreground">
+                    {t("Intervallo data", "Date range", "Plage de dates", "Rango de fechas", "Datumsbereich")}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="date"
+                      value={from}
+                      onChange={(e) => setFrom(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                    <Input
+                      type="date"
+                      value={to}
+                      onChange={(e) => setTo(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-medium text-muted-foreground">
+                    {t("Tag", "Tags", "Tags", "Etiquetas", "Tags")}
+                  </label>
+                  {availableTags.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      {t(
+                        "Nessun tag ancora. Apri un'esecuzione per crearne uno.",
+                        "No tags yet. Open a run to create one.",
+                        "Aucun tag. Ouvrez une exécution pour en créer.",
+                        "Sin etiquetas. Abre una ejecución para crear una.",
+                        "Noch keine Tags. Öffne einen Lauf, um einen zu erstellen.",
+                      )}
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {availableTags.map((tag) => {
+                        const active = filterTagIds.includes(tag.id);
+                        return (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            onClick={() =>
+                              setFilterTagIds((prev) =>
+                                prev.includes(tag.id)
+                                  ? prev.filter((id) => id !== tag.id)
+                                  : [...prev, tag.id],
+                              )
+                            }
+                            className={cn(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors",
+                              active
+                                ? `${tagChipClass(tag.color)} border-transparent`
+                                : "border-border text-muted-foreground hover:bg-accent",
+                            )}
+                          >
+                            <span className={cn("size-2 rounded-full", tagSwatchClass(tag.color))} />
+                            {tag.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                {activeFilterCount > 0 ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full h-8"
+                    onClick={clearAllFilters}
+                  >
+                    {t("Azzera filtri", "Clear filters", "Effacer les filtres", "Borrar filtros", "Filter zurücksetzen")}
+                  </Button>
+                ) : null}
+              </PopoverContent>
+            </Popover>
+          </div>
+          {(from || to || filterTags.length > 0) ? (
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+              {from ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted">
+                  {t("Da", "From", "Du", "Desde", "Ab")} {from}
+                  <button onClick={() => setFrom("")} className="ml-0.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 p-0.5">
+                    <XIcon className="size-3" />
                   </button>
-                ))}
-              </div>
+                </span>
+              ) : null}
+              {to ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted">
+                  {t("A", "To", "À", "Hasta", "Bis")} {to}
+                  <button onClick={() => setTo("")} className="ml-0.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 p-0.5">
+                    <XIcon className="size-3" />
+                  </button>
+                </span>
+              ) : null}
+              {filterTags.map((tag) => (
+                <span
+                  key={tag.id}
+                  className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full", tagChipClass(tag.color))}
+                >
+                  {tag.name}
+                  <button
+                    onClick={() => setFilterTagIds((prev) => prev.filter((id) => id !== tag.id))}
+                    className="ml-0.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 p-0.5"
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                </span>
+              ))}
             </div>
           ) : null}
         </header>
@@ -269,7 +423,7 @@ export function HistoryDialog({
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="px-5 py-12 text-center text-sm text-muted-foreground">
-                  {counts.all === 0
+                  {activeFilterCount === 0
                     ? t(
                         "Nessuna esecuzione salvata",
                         "Nothing saved yet",

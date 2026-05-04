@@ -59,11 +59,16 @@ extracto ocr ./scan.pdf --model llava:13b --no-text-layer                    # f
 ### List recent jobs
 
 ```bash
-extracto jobs list           # last 20
-extracto jobs list 100       # last 100 (max 100)
+extracto jobs list                                         # last 20
+extracto jobs list 100                                     # last 100 (max 100)
+extracto jobs list --status COMPLETED                      # only completed
+extracto jobs list --q invoice                             # fileName contains "invoice" (case-insensitive)
+extracto jobs list --model qwen                            # model id contains "qwen"
+extracto jobs list --from 2026-01-01 --to 2026-01-31       # createdAt within range (ISO-8601)
+extracto jobs list --tags tagid1,tagid2                    # has at least one of these tags
 ```
 
-Returns a JSON list with id/status/fileName/model/timestamps/preview.
+Filters AND-combine across distinct keys; `--tags` is comma-separated and OR-combines within itself. Returns a JSON list with id/status/fileName/model/timestamps/preview/tags.
 
 ### Inspect or wait on one job
 

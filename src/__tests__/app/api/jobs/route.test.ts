@@ -83,6 +83,49 @@ describe("GET /api/jobs", () => {
     expect(res.status).toBe(400);
     expect(mockedFindMany).not.toHaveBeenCalled();
   });
+
+  it("filters by fileName substring (q)", async () => {
+    mockedFindMany.mockResolvedValueOnce([]);
+    await GET(makeRequest("http://localhost/api/jobs?q=invoice"));
+    expect(mockedFindMany.mock.calls[0][0].where.fileName).toEqual({ contains: "invoice" });
+  });
+
+  it("filters by model substring", async () => {
+    mockedFindMany.mockResolvedValueOnce([]);
+    await GET(makeRequest("http://localhost/api/jobs?model=qwen"));
+    expect(mockedFindMany.mock.calls[0][0].where.model).toEqual({ contains: "qwen" });
+  });
+
+  it("filters by createdAt range", async () => {
+    mockedFindMany.mockResolvedValueOnce([]);
+    await GET(makeRequest("http://localhost/api/jobs?from=2026-01-01&to=2026-01-31"));
+    const where = mockedFindMany.mock.calls[0][0].where;
+    expect(where.createdAt.gte).toBeInstanceOf(Date);
+    expect(where.createdAt.lte).toBeInstanceOf(Date);
+  });
+
+  it("ignores invalid date strings silently", async () => {
+    mockedFindMany.mockResolvedValueOnce([]);
+    await GET(makeRequest("http://localhost/api/jobs?from=not-a-date"));
+    const where = mockedFindMany.mock.calls[0][0].where;
+    expect(where.createdAt).toBeUndefined();
+  });
+
+  it("filters by tagIds (any-of)", async () => {
+    mockedFindMany.mockResolvedValueOnce([]);
+    await GET(makeRequest("http://localhost/api/jobs?tagIds=t1,t2"));
+    const where = mockedFindMany.mock.calls[0][0].where;
+    expect(where.jobTags).toEqual({ some: { tagId: { in: ["t1", "t2"] } } });
+  });
+
+  it("combines multiple filters with AND", async () => {
+    mockedFindMany.mockResolvedValueOnce([]);
+    await GET(makeRequest("http://localhost/api/jobs?status=COMPLETED&q=foo&tagIds=t1"));
+    const where = mockedFindMany.mock.calls[0][0].where;
+    expect(where.status).toBe("COMPLETED");
+    expect(where.fileName).toEqual({ contains: "foo" });
+    expect(where.jobTags).toEqual({ some: { tagId: { in: ["t1"] } } });
+  });
 });
 
 describe("DELETE /api/jobs", () => {

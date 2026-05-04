@@ -634,6 +634,12 @@ export default function ExtractoPage() {
  );
  const history = useHistory(t);
  const tagState = useTags(t);
+ const historyApplyFilters = React.useCallback(
+   (filters: Parameters<typeof history.loadJobs>[0]) => {
+     void history.loadJobs(filters);
+   },
+   [history.loadJobs],
+ );
  const { start: restartTour } = useOnboardingTour(t);
  const openSettingsTab = React.useCallback(
  (tab: SettingsTab) => {
@@ -2980,6 +2986,7 @@ export default function ExtractoPage() {
         onDownload={downloadHistoryResult}
         onBulkDelete={history.deleteMany}
         onBulkExport={history.exportManyAsZip}
+        onApplyFilters={historyApplyFilters}
         availableTags={tagState.tags}
         onCreateTag={tagState.createTag}
         onUpdateTag={async (id, patch) => {
