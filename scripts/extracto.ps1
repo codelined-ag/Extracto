@@ -673,7 +673,7 @@ function Cmd-Kb {
                     default       { Fail "unknown kb test-connection flag: $($rest[$i])" }
                 }
             }
-            if (-not $url) { Fail "usage: extracto kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]" }
+            if (-not $url) { Fail "usage: extracto kb test-connection --store chroma|qdrant|weaviate|milvus|opensearch|pinecone --store-url URL [--store-key KEY]" }
             $body = [ordered]@{ kind = $kind; baseUrl = $url }
             if ($key) { $body.apiKey = $key }
             Write-Info "testing $kind at $url..."
@@ -706,7 +706,7 @@ function Cmd-Help {
     Write-Host "  extracto settings get"
     Write-Host "  extracto kb export <job-id> --collection N --store-url URL --embed-model M"
     Write-Host "                                     export an OCR job's text to a vector store"
-    Write-Host "  extracto kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]"
+    Write-Host "  extracto kb test-connection --store chroma|qdrant|weaviate|milvus|opensearch|pinecone --store-url URL [--store-key KEY]"
     Write-Host "                                     probe a vector store for reachability + auth"
     Write-Host ""
     Write-Host "Environment:" -ForegroundColor DarkGray

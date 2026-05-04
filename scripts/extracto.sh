@@ -761,7 +761,7 @@ print(json.dumps(payload, separators=(",", ":")))
           *) die "unknown kb test-connection flag: $1" ;;
         esac
       done
-      [ -n "$store_url" ] || die "usage: extracto kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]"
+      [ -n "$store_url" ] || die "usage: extracto kb test-connection --store chroma|qdrant|weaviate|milvus|opensearch|pinecone --store-url URL [--store-key KEY]"
       local tc_body
       tc_body="$(python3 -c '
 import json, sys
@@ -832,7 +832,7 @@ Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
   settings get                  Show current API provider settings
   kb export <job-id> --collection N --store-url URL --embed-model M
                                 Export an OCR job's text to a vector store
-  kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]
+  kb test-connection --store chroma|qdrant|weaviate|milvus|opensearch|pinecone --store-url URL [--store-key KEY]
                                 Probe a vector store for reachability + auth
                                 before running an export
 

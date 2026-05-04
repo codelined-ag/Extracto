@@ -15,7 +15,7 @@ import type {
   EmbeddingProviderKind,
 } from "@/lib/kb/types";
 
-export type VectorStoreKind = "chroma" | "qdrant" | "weaviate";
+export type VectorStoreKind = "chroma" | "qdrant" | "weaviate" | "milvus" | "opensearch" | "pinecone";
 
 export interface VectorStoreDefaults {
   kind: VectorStoreKind;
@@ -24,12 +24,22 @@ export interface VectorStoreDefaults {
   dimensions?: number;
 }
 
-const VALID_STORE_KINDS: ReadonlySet<VectorStoreKind> = new Set(["chroma", "qdrant", "weaviate"]);
+const VALID_STORE_KINDS: ReadonlySet<VectorStoreKind> = new Set([
+  "chroma",
+  "qdrant",
+  "weaviate",
+  "milvus",
+  "opensearch",
+  "pinecone",
+]);
 
 const DEFAULT_BASE_URL_BY_KIND: Record<VectorStoreKind, string> = {
   chroma: "http://127.0.0.1:8000",
   qdrant: "http://127.0.0.1:6333",
   weaviate: "http://127.0.0.1:8080",
+  milvus: "http://127.0.0.1:9091",
+  opensearch: "http://127.0.0.1:9200",
+  pinecone: "https://INDEX-PROJ.svc.REGION.pinecone.io",
 };
 
 export interface KbDefaults {

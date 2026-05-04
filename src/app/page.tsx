@@ -107,18 +107,24 @@ import ReactMarkdown from"react-markdown";
 
 type KbEmbeddingProvider ="ollama"|"openrouter"|"openai_compat";
 type KbChunkingStrategy ="fixed"|"sentence"|"paragraph"|"hierarchical"|"semantic";
-type KbStoreKind ="chroma"|"qdrant"|"weaviate";
+type KbStoreKind ="chroma"|"qdrant"|"weaviate"|"milvus"|"opensearch"|"pinecone";
 
 const STORE_DEFAULT_BASE_URLS: Record<KbStoreKind, string> = {
  chroma:"http://127.0.0.1:8000",
  qdrant:"http://127.0.0.1:6333",
  weaviate:"http://127.0.0.1:8080",
+ milvus:"http://127.0.0.1:9091",
+ opensearch:"http://127.0.0.1:9200",
+ pinecone:"https://INDEX-PROJ.svc.REGION.pinecone.io",
 };
 
 const STORE_LABELS: Record<KbStoreKind, string> = {
  chroma:"Chroma",
  qdrant:"Qdrant",
  weaviate:"Weaviate",
+ milvus:"Milvus",
+ opensearch:"OpenSearch",
+ pinecone:"Pinecone",
 };
 
 interface KbDefaultsForm {
@@ -2399,6 +2405,9 @@ export default function ExtractoPage() {
  <SelectItem value="chroma">Chroma</SelectItem>
  <SelectItem value="qdrant">Qdrant</SelectItem>
  <SelectItem value="weaviate">Weaviate</SelectItem>
+ <SelectItem value="milvus">Milvus</SelectItem>
+ <SelectItem value="opensearch">OpenSearch</SelectItem>
+ <SelectItem value="pinecone">Pinecone</SelectItem>
  </SelectContent>
  </Select>
  </div>

@@ -208,7 +208,7 @@ server.tool(
     jobId: z.string(),
     collectionName: z.string(),
     vectorStore: z.object({
-      kind: z.enum(["chroma", "qdrant", "weaviate"]),
+      kind: z.enum(["chroma", "qdrant", "weaviate", "milvus", "opensearch", "pinecone"]),
       baseUrl: z.string().url(),
       apiKey: z.string().optional(),
       dimensions: z.number().int().positive().optional(),
