@@ -175,7 +175,11 @@ Return ONLY valid JSON with this exact shape:
 }
 
 Rules:
-- "markdown" is required and must contain the extracted OCR content.
+- "markdown" is required and must contain the extracted OCR content as proper Markdown.
+- Use # for the document title, ## for major section headings, ### for sub-sections. Do not invent headings that aren't visually distinct in the source.
+- Use blank lines between paragraphs. Use - or * for bullet lists, 1. for numbered lists.
+- Use **bold** and *italic* only when they're clearly emphasized in the source.
+- Use markdown tables for tabular content with proper column alignment.
 - "fields" is optional but if present must be a JSON object.
 - Do not wrap JSON in markdown code fences.`;
   const presetPrompt = applyDocumentPresetToPrompt(base, settings.documentPreset);

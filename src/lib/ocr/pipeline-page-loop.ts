@@ -225,12 +225,38 @@ export async function runOcrPages(
     const indices: number[] = [];
     for (let i = batchStart; i < batchEnd; i++) indices.push(i);
 
+    const startPageNum = (deps.pageNumbers?.[batchStart] ?? batchStart + 1);
+    const endPageNum = (deps.pageNumbers?.[batchEnd - 1] ?? batchEnd);
+    const batchLabel = startPageNum === endPageNum
+      ? `Running OCR on page ${startPageNum} of ${inputPreviews.length}`
+      : `Running OCR on pages ${startPageNum} to ${endPageNum} of ${inputPreviews.length}`;
+    state.latestMetadata = deps.snapshot({
+      stage: "ocr",
+      message: batchLabel,
+      progressPct: deps.ocrPct(),
+      currentPage: startPageNum,
+      etaSeconds: state.latestMetadata.etaSeconds,
+    });
+    await db.ocrJob.update({
+      where: { id: deps.jobId },
+      data: {
+        metadata: toJsonValue({ ...state.latestMetadata, pageRecords: state.pageRecords }),
+      },
+    });
+
     const settled = await Promise.allSettled(indices.map((i) => runOnePage(state, deps, i)));
 
     for (let pos = 0; pos < settled.length; pos++) {
       const result = settled[pos];
       if (result.status === "fulfilled") {
         applyCompletedPage(state, deps, result.value);
+        await db.ocrJob.update({
+          where: { id: deps.jobId },
+          data: {
+            extractedText: state.extractedTextSoFar,
+            metadata: toJsonValue({ ...state.latestMetadata, pageRecords: state.pageRecords }),
+          },
+        });
         continue;
       }
       const err = result.reason;
@@ -243,14 +269,6 @@ export async function runOcrPages(
       }
       throw err;
     }
-
-    await db.ocrJob.update({
-      where: { id: deps.jobId },
-      data: {
-        extractedText: state.extractedTextSoFar,
-        metadata: toJsonValue({ ...state.latestMetadata, pageRecords: state.pageRecords }),
-      },
-    });
 
     nextIndex = batchEnd;
   }

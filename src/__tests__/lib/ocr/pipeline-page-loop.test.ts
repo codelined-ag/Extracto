@@ -107,7 +107,7 @@ describe("runOcrPages", () => {
     expect(state.extractedTextSoFar).toContain("page 1");
     expect(state.extractedTextSoFar).toContain("page 2");
     expect(state.totalDurationMs).toBeGreaterThanOrEqual(0);
-    expect(mockedDbUpdate).toHaveBeenCalledTimes(2);
+    expect(mockedDbUpdate).toHaveBeenCalledTimes(4);
   });
 
   it("pauses and returns early when stop is requested before a page starts", async () => {
