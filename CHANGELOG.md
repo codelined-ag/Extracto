@@ -6,6 +6,17 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-04
+
+### Added
+- Tags for OCR jobs, with create, rename, recolor, delete, and per-job apply via REST, MCP, CLI, and the History dialog.
+- Smart History filters: free-text file-name search, model substring, date range, and tag filter, all backend-driven.
+- Bulk-tag action on the History selection toolbar that applies a tag set to up to 200 jobs at once.
+- Saved History searches: persist a filter set under a name and recall it later via REST, MCP, CLI, or the dialog.
+
+### Changed
+- The list endpoint for saved searches strips deleted tag ids from returned filters so saved searches self-heal as tags churn.
+
 ## [0.7.0] - 2026-05-04
 
 ### Added
