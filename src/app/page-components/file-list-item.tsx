@@ -77,7 +77,7 @@ export function FileListItem({
       </button>
       <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
         {file.preview ? (
-          <img src={file.preview} alt={file.name} className="w-full h-full object-cover" />
+          <img src={file.preview} alt={file.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
         ) : (
           <FileTextIcon size={20} className="inline-flex items-center justify-center text-muted-foreground" />
         )}
