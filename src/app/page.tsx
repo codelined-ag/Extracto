@@ -146,6 +146,7 @@ interface KbDefaultsForm {
  storeHasApiKey: boolean;
  storeDimensions: string;
  collectionTemplate: string;
+ embeddingConcurrency: string;
 }
 
 const DEFAULT_KB_FORM: KbDefaultsForm = {
@@ -167,6 +168,7 @@ const DEFAULT_KB_FORM: KbDefaultsForm = {
  storeHasApiKey: false,
  storeDimensions:"768",
  collectionTemplate:"extracto-{jobId}",
+ embeddingConcurrency:"1",
 };
 
 
@@ -1046,6 +1048,7 @@ export default function ExtractoPage() {
  chunking?: { strategy?: KbChunkingStrategy; maxChunkSize?: number; overlap?: number; minChunkSize?: number; breakpointPercentile?: number; maxHeadingDepth?: number };
  vectorStore?: { kind?: KbStoreKind; baseUrl?: string; dimensions?: number; hasApiKey?: boolean };
  collectionNameTemplate?: string;
+ embeddingConcurrency?: number;
  };
  const next: KbDefaultsForm = {
  embeddingProvider: payload.embedding?.provider ?? DEFAULT_KB_FORM.embeddingProvider,
@@ -1066,6 +1069,7 @@ export default function ExtractoPage() {
  storeHasApiKey: payload.vectorStore?.hasApiKey === true,
  storeDimensions: String(payload.vectorStore?.dimensions ?? DEFAULT_KB_FORM.storeDimensions),
  collectionTemplate: payload.collectionNameTemplate ?? DEFAULT_KB_FORM.collectionTemplate,
+ embeddingConcurrency: String(payload.embeddingConcurrency ?? DEFAULT_KB_FORM.embeddingConcurrency),
  };
  setKbDefaults(next);
  setKbDefaultsDraft(next);
@@ -1109,6 +1113,7 @@ export default function ExtractoPage() {
  ...(kbStoreKeyDirty ? { apiKey: kbDefaultsDraft.storeApiKey, replaceApiKey: true } : {}),
  },
  collectionNameTemplate: kbDefaultsDraft.collectionTemplate.trim(),
+ embeddingConcurrency: Math.max(1, Math.min(16, parseInt10(kbDefaultsDraft.embeddingConcurrency) ?? 1)),
  };
  const resp = await fetch("/api/kb/defaults", {
  method:"PUT",
@@ -1917,7 +1922,7 @@ export default function ExtractoPage() {
  return pollJobUntilStopped(file.id, startPayload.jobId);
  };
 
- const processFiles = async () => {
+ const processFiles = async (filterIds?: Set<string>) => {
  if (files.length === 0) return;
  if (!selectedModel.trim()) {
  toast({
@@ -1939,7 +1944,7 @@ export default function ExtractoPage() {
  }
 
  setIsProcessing(true);
- const filesToProcess = files.filter((f) => f.status ==="pending");
+ const filesToProcess = files.filter((f) => f.status ==="pending"&& (!filterIds || filterIds.has(f.id)));
  let completedInRun = 0;
 
  for (const file of filesToProcess) {
@@ -2292,6 +2297,30 @@ export default function ExtractoPage() {
  placeholder={!kbEmbeddingKeyDirty && kbDefaultsDraft.embeddingHasApiKey ? t("Salvata (nascosta)","Saved (hidden)","Enregistrée (masquée)","Guardada (oculta)","Gespeichert (verborgen)") :"sk-..."}
  />
  </div>
+ <div className="space-y-1.5">
+ <Label htmlFor="embedding-concurrency" className="text-xs uppercase tracking-wider text-muted-foreground/80">
+ {t("Parallelismo","Parallelism","Parallélisme","Paralelismo","Parallelität")}
+ </Label>
+ <Input
+ id="embedding-concurrency"
+ type="number"
+ min={1}
+ max={16}
+ value={kbDefaultsDraft.embeddingConcurrency}
+ onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, embeddingConcurrency: e.target.value }))}
+ placeholder="1"
+ className="max-w-[6rem]"
+ />
+ <p className="text-[11px] text-muted-foreground/70">
+ {t(
+"Quante richieste di embedding lanciare in parallelo per export. 1 = una sola batch (default).",
+"How many embedding requests to fan out in parallel per export. 1 = single batch (default).",
+"Combien de requêtes d'embedding lancer en parallèle par export. 1 = une seule batch (défaut).",
+"Cuántas solicitudes de embedding en paralelo por export. 1 = un solo batch (por defecto).",
+"Wie viele Embedding-Anfragen parallel pro Export. 1 = eine einzelne Batch (Standard).",
+ )}
+ </p>
+ </div>
  </div>
  </SettingsSection>
 
@@ -2643,6 +2672,9 @@ export default function ExtractoPage() {
               onToggleBulk={toggleBulkSelected}
               onClearBulk={() => setBulkSelectedIds(new Set())}
               onBulkRemove={removeBulkSelected}
+              onBulkRun={() => { void processFiles(bulkSelectedIds); }}
+              bulkRunReady={Boolean(selectedModel.trim()) && isRunReady}
+              bulkRunPendingCount={files.filter((f) => bulkSelectedIds.has(f.id) && f.status === "pending").length}
               t={t}
               uiLanguage={uiLanguage}
               footer={
@@ -2662,7 +2694,7 @@ export default function ExtractoPage() {
                   ) : (
                     <Button
                       className="w-full group"
-                      onClick={processFiles}
+                      onClick={() => { void processFiles(); }}
                       disabled={isProcessing || pendingCount === 0 || !selectedModel.trim() || !isRunReady}
                     >
                       {isProcessing ? (
@@ -2799,6 +2831,35 @@ export default function ExtractoPage() {
  <p className="text-[11px] text-muted-foreground">{t("Per i PDF nativi salta il modello di visione e usa direttamente il testo embedded (più veloce, gratis, senza errori OCR).","For born-digital PDFs, skip the vision model and use the embedded text directly (faster, free, no OCR errors).","Pour les PDF nativement digitaux, contourne le modèle de vision (plus rapide, gratuit, sans erreurs OCR).","Para PDF nativos, omite el modelo de visión y usa el texto embebido directamente (más rápido, gratis, sin errores OCR).","Bei born-digital PDFs überspringt das Vision-Modell und nutzt direkt die eingebettete Textebene (schneller, kostenfrei, ohne OCR-Fehler).")}</p>
  </div>
  <Switch checked={settings.preferTextLayer} onCheckedChange={(v) => setSettings((s) => ({ ...s, preferTextLayer: v }))} />
+ </div>
+
+ <div className="space-y-1.5 surface-soft rounded-xl px-3.5 py-3">
+ <Label htmlFor="page-concurrency" className="text-sm font-medium">
+ {t("Pagine in parallelo","Pages in parallel","Pages en parallèle","Páginas en paralelo","Seiten parallel")}
+ </Label>
+ <p className="text-[11px] text-muted-foreground">
+ {t(
+"Numero di pagine OCR contemporanee per ogni job. 0 = automatico (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Massimo 16.",
+"How many OCR pages run in parallel per job. 0 = auto (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max 16.",
+"Nombre de pages OCR exécutées en parallèle par job. 0 = auto (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max 16.",
+"Cuántas páginas OCR se ejecutan en paralelo por trabajo. 0 = automático (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Máximo 16.",
+"Wie viele OCR-Seiten parallel pro Job laufen. 0 = automatisch (Ollama 1, Mistral 4, OpenRouter 4, OpenAI-compat 2). Max. 16.",
+ )}
+ </p>
+ <Input
+ id="page-concurrency"
+ type="number"
+ min={0}
+ max={16}
+ value={settings.pageConcurrency}
+ onChange={(e) => {
+ const raw = Number(e.target.value);
+ const next = Number.isFinite(raw) ? Math.max(0, Math.min(16, Math.trunc(raw))) : 0;
+ setSettings((s) => ({ ...s, pageConcurrency: next }));
+ }}
+ placeholder="0"
+ className="max-w-[6rem]"
+ />
  </div>
 
  <div className="space-y-1.5">

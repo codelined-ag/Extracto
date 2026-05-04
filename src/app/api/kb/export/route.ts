@@ -121,10 +121,11 @@ export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { 
     : renderCollectionName(defaults.collectionNameTemplate, job.id, job.fileName);
 
   const rawConcurrency = body?.embeddingConcurrency;
-  const embeddingConcurrency =
+  const requestedConcurrency =
     typeof rawConcurrency === "number" && Number.isFinite(rawConcurrency) && rawConcurrency >= 1
       ? Math.min(16, Math.trunc(rawConcurrency))
       : undefined;
+  const embeddingConcurrency = requestedConcurrency ?? defaults.embeddingConcurrency;
 
   const language = pickLanguage(job.metadata);
 

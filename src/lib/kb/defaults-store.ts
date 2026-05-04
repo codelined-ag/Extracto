@@ -52,11 +52,14 @@ export interface KbDefaults {
   vectorStore: VectorStoreDefaults;
   /** Default collection name template — `{jobId}` and `{fileName}` are substituted at export time. */
   collectionNameTemplate: string;
+  /** How many embedding-batch requests to fan out in parallel during a KB export. Stored as 1..16; missing/<=0 falls back to 1 (single batch). */
+  embeddingConcurrency: number;
 }
 
 export type ClientKbDefaults = Omit<KbDefaults, "embedding" | "vectorStore"> & {
   embedding: Omit<EmbeddingProviderConfig, "apiKey"> & { hasApiKey: boolean };
   vectorStore: Omit<VectorStoreDefaults, "apiKey"> & { hasApiKey: boolean };
+  embeddingConcurrency: number;
 };
 
 const VALID_STRATEGIES: ReadonlySet<ChunkingStrategy> = new Set([
@@ -91,6 +94,7 @@ const DEFAULTS: KbDefaults = {
     dimensions: 768,
   },
   collectionNameTemplate: "extracto-{jobId}",
+  embeddingConcurrency: 1,
 };
 
 const cache = new Map<string, KbDefaults>();
@@ -174,6 +178,7 @@ function normalize(raw: Partial<KbDefaults>): KbDefaults {
       typeof raw.collectionNameTemplate === "string" && raw.collectionNameTemplate.trim()
         ? raw.collectionNameTemplate.trim().slice(0, 200)
         : DEFAULTS.collectionNameTemplate,
+    embeddingConcurrency: intOrUndef(raw.embeddingConcurrency, 1, 16) ?? DEFAULTS.embeddingConcurrency,
   };
 }
 
@@ -207,6 +212,7 @@ export interface SaveKbDefaultsInput extends Record<string, unknown> {
   chunking?: Partial<ChunkingOptions>;
   vectorStore?: Partial<VectorStoreDefaults> & { replaceApiKey?: boolean };
   collectionNameTemplate?: string;
+  embeddingConcurrency?: number;
 }
 
 export async function saveKbDefaults(
@@ -248,6 +254,7 @@ export async function saveKbDefaults(
         : current.vectorStore.apiKey,
     },
     collectionNameTemplate: input.collectionNameTemplate ?? current.collectionNameTemplate,
+    embeddingConcurrency: input.embeddingConcurrency ?? current.embeddingConcurrency,
   };
 
   const normalized = normalize(merged);
@@ -265,6 +272,7 @@ export function toClientKbDefaults(d: KbDefaults): ClientKbDefaults {
     chunking: d.chunking,
     vectorStore: { ...storeRest, hasApiKey: Boolean((sKey ?? "").trim()) },
     collectionNameTemplate: d.collectionNameTemplate,
+    embeddingConcurrency: d.embeddingConcurrency,
   };
 }
 
