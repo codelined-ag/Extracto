@@ -6,6 +6,18 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-04
+
+### Added
+- First-run guided tour anchored to upload, queue, page picker, Settings, Account, and History; restartable from the Account dialog.
+- Setup wizard that runs once on the very first sign-in to pick provider, paste an API key, and hand off to the tour.
+- OpenAPI 3.1 spec served at `/api/v1/openapi.yaml` and a Scalar API reference at `/api/v1/docs`, both public.
+- `scripts/quickstart.sh` for a single-`docker run` install path that finishes inside the healthcheck window.
+
+### Changed
+- The remaining English-only user strings (model-discovery toast, embedding hint, push notification errors) are now translated into all five languages.
+- README documents the new fast-path install alongside the existing compose-based installer.
+
 ## [0.6.0] - 2026-05-04
 
 ### Added
