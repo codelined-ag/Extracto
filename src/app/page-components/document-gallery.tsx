@@ -184,6 +184,7 @@ export function DocumentGallery({
 
   return (
     <div
+      data-tour="page-picker"
       className="flex flex-col h-full min-h-0 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
       tabIndex={0}
       onKeyDown={handleKey}

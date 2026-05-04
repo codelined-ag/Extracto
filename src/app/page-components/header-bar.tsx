@@ -68,6 +68,7 @@ export function HeaderBar({
                 transition={{ duration: 0.16 }}
               >
                 <Button
+                  data-tour="header-settings"
                   variant="ghost"
                   size="icon"
                   className="group"
@@ -102,6 +103,7 @@ export function HeaderBar({
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
                   <Button
+                    data-tour="header-account"
                     variant="ghost"
                     size="icon"
                     className="group"

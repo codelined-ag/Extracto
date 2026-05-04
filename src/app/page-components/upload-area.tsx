@@ -31,6 +31,7 @@ export function UploadArea({
   return (
     <>
       <Card
+        data-tour="upload-zone"
         className={cn(
           "transition-all duration-300 cursor-pointer",
           isDragOver ? "bg-primary/5 scale-[1.02]" : "",

@@ -26,9 +26,10 @@ export interface AccountDialogProps {
   t: Translator;
   uiLanguage: UiLanguage;
   setUiLanguage: (lang: UiLanguage) => void;
+  onRestartTour?: () => void;
 }
 
-export function AccountDialog({ open, onOpenChange, t, uiLanguage, setUiLanguage }: AccountDialogProps) {
+export function AccountDialog({ open, onOpenChange, t, uiLanguage, setUiLanguage, onRestartTour }: AccountDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[96vw] !max-w-2xl max-h-[92vh] flex flex-col overflow-hidden p-0">
@@ -128,7 +129,12 @@ export function AccountDialog({ open, onOpenChange, t, uiLanguage, setUiLanguage
           </div>
         </ScrollArea>
 
-        <DialogFooter className="px-6 py-4 hairline-t">
+        <DialogFooter className="px-6 py-4 hairline-t flex flex-row sm:flex-row sm:justify-between gap-2">
+          {onRestartTour ? (
+            <Button variant="ghost" onClick={onRestartTour}>
+              {t("Rivedi il tour", "Replay tour", "Revoir la visite", "Repetir el tour", "Tour wiederholen")}
+            </Button>
+          ) : <span />}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t("Chiudi", "Close", "Fermer", "Cerrar", "Schließen")}
           </Button>

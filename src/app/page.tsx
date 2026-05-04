@@ -89,6 +89,7 @@ import { AccountDialog } from "@/app/page-components/account-dialog";
 import { SettingsAccordion, SettingsAccordionItem, readPersistedOpen } from "@/app/page-components/settings-accordion";
 import { isUiLanguage } from "@/app/page-components/ui-language";
 import { MarkdownView } from "@/app/page-components/markdown-view";
+import { OnboardingTour, useOnboardingTour } from "@/app/page-components/onboarding-tour";
 import { S3SettingsSection } from "@/app/page-components/s3-settings-section";
 import { WatchersSection } from "@/app/page-components/watchers-section";
 import { TemplatesSection } from "@/app/page-components/templates-section";
@@ -628,6 +629,7 @@ export default function ExtractoPage() {
  [uiLanguage]
  );
  const history = useHistory(t);
+ const { start: restartTour } = useOnboardingTour(t);
  const openSettingsTab = React.useCallback(
  (tab: SettingsTab) => {
  if (tab === "ocr") {
@@ -2275,7 +2277,10 @@ export default function ExtractoPage() {
         t={t}
         uiLanguage={uiLanguage}
         setUiLanguage={setUiLanguage}
+        onRestartTour={() => { setAccountDialogOpen(false); void restartTour(); }}
       />
+
+      <OnboardingTour t={t} />
 
  <Dialog
  open={apiSettingsOpen}
@@ -3136,6 +3141,7 @@ export default function ExtractoPage() {
  </Collapsible>
 
  <button
+ data-tour="history-btn"
  type="button"
  onClick={openHistoryModal}
  className="group flex items-center justify-between gap-2 px-4 py-3 rounded-2xl bg-card text-left shadow-[var(--shadow-soft)] transition-[transform,box-shadow] duration-200 ease-[cubic-bezier(0.2,0.7,0.2,1)] hover:-translate-y-px hover:shadow-[var(--shadow-lift)]"

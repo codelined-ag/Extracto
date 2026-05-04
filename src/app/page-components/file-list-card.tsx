@@ -65,7 +65,7 @@ export function FileListCard({
 }: FileListCardProps) {
   const [queueView, setQueueView] = React.useState<QueueView>("list");
   return (
-    <Card className="min-h-[220px] overflow-hidden">
+    <Card data-tour="file-queue" className="min-h-[220px] overflow-hidden">
       <CardContent className="p-0 flex flex-col">
         <div className="flex items-center justify-between p-3">
           <div className="flex items-center gap-2">
