@@ -23,12 +23,6 @@
   <a href="https://github.com/codelined-ag/Extracto/stargazers"><img src="https://img.shields.io/github/stars/codelined-ag/Extracto?style=flat&color=ffb000" alt="Stars"></a>
 </p>
 
-<!--
-  Drop the demo gif here once recorded. Suggested flow:
-    drop a PDF → page-by-page progress → clean markdown out → one click "send to KB" → ask Claude a question against the new vector chunks.
-  6 to 10 seconds. Loops. Replaces the screenshot below.
--->
-
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/main-dark.png">
@@ -36,32 +30,32 @@
   </picture>
 </p>
 
-> **v0.7.0**: first-run guided tour and setup wizard for new operators, OpenAPI spec served at `/api/v1/openapi.yaml` with a Scalar API reference at `/api/v1/docs`, single-command `quickstart.sh` install path that finishes inside the healthcheck window, and the last user-visible English-only strings translated end-to-end. See the [changelog](./CHANGELOG.md).
+<!--
+  Replace the screenshot above with docs/demo.gif once recorded.
+  Run: ./scripts/demo/record.sh   (see scripts/demo/README.md)
+-->
+
+> **v0.7.0**: first-run guided tour and setup wizard, OpenAPI spec at `/api/v1/openapi.yaml` with a [Scalar reference](https://extracto.help/api/overview) at `/api/v1/docs`, single-command `quickstart.sh` install path that finishes inside the healthcheck window, and the last user-visible English-only strings translated end-to-end. See the [changelog](./CHANGELOG.md).
 
 ---
 
 ## Why
 
-Most document-to-AI tools are SaaS. They cost per page, they see your documents, and they lock you into one provider. Extracto is the opposite: one Docker container, your machine, any vision model (local or hosted), output goes wherever you want it. Browser, code, agent, vector store. You pick.
+Most document-to-AI tools are SaaS. They cost per page, they see your documents, they lock you into one provider. Extracto is the opposite: one Docker container, your machine, any vision model (local or hosted), output goes wherever you want it. Browser, code, agent, vector store. You pick.
 
 ---
 
 ## What you get
 
-A **complete pipeline** from raw document to retrievable knowledge, in one container:
+A complete pipeline from raw document to retrievable knowledge, in one container:
 
 1. **Ingest** any PDF, image, or watched folder.
 2. **Extract** with the vision model of your choice (Ollama, Mistral OCR, OpenRouter, any OpenAI-compatible endpoint).
 3. **Post-process** with a second LLM pass (clean to markdown or strict JSON, with your own instruction).
-4. **Chunk + embed + store** into Chroma, Qdrant, or Weaviate. Five chunking strategies including semantic (sentence-embed + topic-shift split) and hierarchical (preserves heading breadcrumbs).
-5. **Retrieve** through a stable v1 REST API, an OpenAI-Chat-Completions adapter, an MCP server (Claude/Cursor/Codex/OpenClaw/Hermes), a typed CLI, or the browser UI.
+4. **Chunk + embed + store** into Chroma, Qdrant, Weaviate, Milvus, OpenSearch, Pinecone, or Typesense.
+5. **Retrieve** through a stable v1 REST API, an OpenAI-Chat-Completions adapter, an MCP server, a typed CLI, or the browser UI.
 
-Other things you don't need to bolt on:
-
-- Per-user accounts, scoped API keys with rate limits, signed webhooks.
-- Resumable jobs, page-by-page progress, searchable history.
-- Optional S3/MinIO blob offload, Prometheus metrics, healthcheck.
-- Five UI languages (English, Italian, French, Spanish, German).
+Everything else (per-user accounts, scoped API keys, rate limits, signed webhooks, S3/MinIO offload, Prometheus metrics, multi-language UI) is documented at [extracto.help](https://extracto.help).
 
 ---
 
@@ -69,91 +63,33 @@ Other things you don't need to bolt on:
 
 You need Docker. That's it.
 
-### Fastest install (under a minute)
-
 ```bash
 curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/codelined-ag/Extracto/v0.7.0/scripts/quickstart.sh | bash
 ```
 
-Pulls the prebuilt multi-arch image, runs a single container with an auto-generated `AUTH_SECRET` and a persistent SQLite volume, waits for the healthcheck, and prints the URL. No clone, no compose, no Ollama install. Open <http://localhost:3000>, sign up, and you're in.
+Pulls the prebuilt multi-arch image, runs a single container with an auto-generated `AUTH_SECRET` and a persistent SQLite volume, waits for the healthcheck, and prints the URL. Open <http://localhost:3000>, sign up, follow the tour.
 
-### Full install (clone + compose stack + `extracto` CLI on PATH)
-
-```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/codelined-ag/Extracto/v0.7.0/scripts/install.sh | bash
-```
-
-```powershell
-iwr -UseBasicParsing https://raw.githubusercontent.com/codelined-ag/Extracto/v0.7.0/scripts/install.ps1 | iex
-```
-
-The installer clones the repo at the pinned tag to `~/.local/share/extracto` (or `%LOCALAPPDATA%\Extracto`), sets up Docker + Ollama if missing, writes localhost-safe overrides to `.extracto.env`, drops an `extracto` launcher on PATH, and starts the stack.
-
-> The full installer wraps `install-extracto.sh`, which on a fresh machine runs vendor scripts from `https://get.docker.com` and `https://ollama.com/install.sh` as **root** to provision Docker + Ollama. Skip Docker provisioning with `EXTRACTO_INSTALL_DOCKER=0` when Docker + Compose are already installed; skip Ollama install/startup with `EXTRACTO_INSTALL_OLLAMA=0` if you use hosted models or manage Ollama yourself. Set `EXTRACTO_REPO_REF=main` to track the bleeding edge instead of the pinned tag.
-
-### S3-compatible storage (any provider)
-
-Settings → Storage takes any S3-compatible endpoint: AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, Wasabi, Linode Object Storage, GCS, MinIO, Garage, Ceph RGW, SeaweedFS, on-prem appliances, etc. The endpoint URL is validated for SSRF (cloud-metadata IPs and link-local always blocked); private/loopback hosts (RFC1918, 127.0.0.1, host.docker.internal) require either `S3_ALLOW_LOOPBACK=1` for global opt-in or `S3_ALLOWED_HOSTS=minio.internal.corp,*.objects.internal` for granular access.
-
-The launcher wraps the full API: `extracto ocr ./invoice.pdf`, `extracto jobs list`, `extracto kb export`, `extracto api-key create ...`. Full reference at [extracto.help/cli/overview](https://extracto.help/cli/overview).
-
-<details>
-<summary>Manual paths</summary>
-
-**From source:**
-```bash
-git clone https://github.com/codelined-ag/Extracto.git
-cd Extracto
-./install-extracto.sh   # Linux/macOS
-# or: .\scripts\extracto.ps1 install   # Windows (Docker Desktop + WSL2)
-extracto on
-```
-
-**Single `docker run` (no launcher):**
-```bash
-docker run -d --name extracto -p 3000:3000 -v extracto-data:/app/data -e AUTH_SECRET="$(openssl rand -hex 32)" -e COOKIE_SECURE=false -e ALLOW_SIGNUP=1 ghcr.io/codelined-ag/extracto:v0.7.0
-```
-
-Multi-arch (`linux/amd64` + `linux/arm64`); pin a release tag instead of `:latest`. The checked-in compose defaults are production-biased (`COOKIE_SECURE=true`, bridge networking, signup disabled); the installer writes `.extracto.env` overrides for localhost onboarding.
-
-</details>
+For the full install (compose stack, Docker + Ollama provisioning, `extracto` CLI on PATH, Windows path), see [extracto.help/install](https://extracto.help/install).
 
 ---
 
 ## Plug everywhere
 
-Same backend, four surfaces. Pick what fits.
+Same backend, five surfaces. Pick what fits.
 
 | Surface | Use it when | Read |
 |---|---|---|
 | **Browser UI** | You're a human with a stack of PDFs | [How it works](https://extracto.help/how-it-works) |
 | **REST API** (`/api/v1/*`) | You're building a document-intake pipeline | [API reference](https://extracto.help/api/overview) |
 | **MCP server** | Your agent speaks MCP (Claude Desktop, Cursor, Codex, OpenClaw, Hermes) | [Agents](https://extracto.help/agents/overview) |
-| **CLI + [`SKILL.md`](./SKILL.md)** | Your agent only has a shell tool (Claude Code, shell-based runners) | [Skill file](./SKILL.md) |
-| **OpenAI-Chat adapter** | You already have OpenAI-SDK code; just point it at Extracto | [OpenAI compat](https://extracto.help/api/openai-compat) |
+| **CLI + [`SKILL.md`](./SKILL.md)** | Your agent only has a shell tool | [Skill file](./SKILL.md) |
+| **OpenAI-Chat adapter** | You already have OpenAI-SDK code; point it at Extracto | [OpenAI compat](https://extracto.help/api/openai-compat) |
 
-Agents get two first-class paths. The **MCP server** exposes seven tools (`ocr_submit`, `ocr_get`, `jobs_list`, `job_stop`, `kb_search`, `kb_export`, `presets_list`). The **`SKILL.md`** + typed CLI path is for agents that don't speak MCP: drop the skill file into the agent's context and it knows when to call `extracto ocr`, `extracto kb search`, `extracto jobs ...` from a shell.
-
----
-
-## Documentation
-
-Everything beyond a five-minute install lives at **[extracto.help](https://extracto.help)** in five languages:
-
-- Configuration reference (every env var)
-- Full v1 API guide (auth, OCR, jobs, presets, webhooks, KB export, search, metrics)
-- CLI reference
-- MCP setup for every supported client
-- Knowledge-base export (chunking strategies, embedding providers, vector stores)
-- Production checklist (auth secret, HTTPS, signup gate, rate limits, allowlists)
-- Troubleshooting + ops (logs, metrics, retention, S3 offload, watched folders)
-- Architecture tour
-
-OpenAPI 3.1 spec at [`openapi.yaml`](./openapi.yaml). Import into Bruno, Postman, Insomnia, or any client generator.
+OpenAPI 3.1 spec at [`openapi.yaml`](./openapi.yaml). Live Scalar reference at `/api/v1/docs` on every running instance.
 
 ---
 
-## Star History
+## Star history
 
 <a href="https://star-history.com/#codelined-ag/Extracto&Date">
   <img src="https://api.star-history.com/svg?repos=codelined-ag/Extracto&type=Date" alt="Star History" width="600"/>
