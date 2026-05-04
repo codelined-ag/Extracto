@@ -7,6 +7,7 @@ import {
  AlertCircle,
  ScanLine,
  ImageOff,
+ KeyRoundIcon,
 } from"lucide-react";
 
 import { ArchiveIcon } from"@/components/ui/archive";
@@ -85,6 +86,7 @@ import { FileListCard } from "@/app/page-components/file-list-card";
 import { Footer } from "@/app/page-components/footer";
 import { HeaderBar } from "@/app/page-components/header-bar";
 import { ChangePasswordDialog } from "@/app/page-components/change-password-dialog";
+import { ApiKeysSection } from "@/app/page-components/api-keys-section";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { useHistory } from "@/app/page-components/use-history";
 import { PreviewHeader } from "@/app/page-components/preview-header";
@@ -2037,11 +2039,11 @@ export default function ExtractoPage() {
  <DialogTitle>{t("Impostazioni","Settings","Paramètres","Configuración","Einstellungen")}</DialogTitle>
  <DialogDescription>
  {t(
-"Modello, parametri OCR, knowledge base e provider.",
-"Model, OCR parameters, knowledge base and provider.",
-"Modèle, paramètres OCR, base de connaissances et fournisseur.",
-"Modelo, parámetros OCR, base de conocimiento y proveedor.",
-"Modell, OCR-Parameter, Wissensdatenbank und Provider.",
+"Modello, parametri OCR, knowledge base, provider e chiavi API.",
+"Model, OCR parameters, knowledge base, provider, and API keys.",
+"Modèle, paramètres OCR, base de connaissances, fournisseur et clés API.",
+"Modelo, parámetros OCR, base de conocimiento, proveedor y claves API.",
+"Modell, OCR-Parameter, Wissensdatenbank, Provider und API-Schlüssel.",
  )}
  </DialogDescription>
  </DialogHeader>
@@ -2054,6 +2056,7 @@ export default function ExtractoPage() {
  <TabsTrigger value="kb"className="gap-1.5"><DatabaseBackupIcon size={14} className="inline-flex items-center justify-center"/>{t("Knowledge base","Knowledge base","Base de connaissances","Base de conocimiento","Wissensdatenbank")}</TabsTrigger>
  <TabsTrigger value="provider"className="gap-1.5"><SettingsIcon size={14} className="inline-flex items-center justify-center"/>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</TabsTrigger>
  <TabsTrigger value="general"className="gap-1.5"><LanguagesIcon size={14} className="inline-flex items-center justify-center"/>{t("Generale","General","Général","General","Allgemein")}</TabsTrigger>
+ <TabsTrigger value="keys"className="gap-1.5"><KeyRoundIcon size={14} className="inline-flex items-center justify-center"/>{t("Chiavi API","API keys","Clés API","Claves API","API-Schlüssel")}</TabsTrigger>
  </TabsList>
  </div>
 
@@ -2484,6 +2487,10 @@ export default function ExtractoPage() {
  </Select>
  </SettingsSection>
 
+ </TabsContent>
+
+ <TabsContent value="keys"className="space-y-5 mt-4">
+ <ApiKeysSection t={t} />
  </TabsContent>
 
  </ScrollArea>

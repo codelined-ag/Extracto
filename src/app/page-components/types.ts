@@ -6,7 +6,7 @@ export type Translator = (
   de?: string,
 ) => string;
 
-export type SettingsTab = "model" | "provider" | "kb" | "general";
+export type SettingsTab = "model" | "provider" | "kb" | "general" | "keys";
 
 export type ResultViewMode = "preview" | "split" | "result";
 
