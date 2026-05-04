@@ -424,9 +424,9 @@ server.tool(
 
 server.tool(
   "kb_test_connection",
-  "Probe a vector store (Chroma/Qdrant/Weaviate) for reachability and auth before running a KB export. Returns latency, server version when available, and the probed endpoint path. Use this to surface connection errors fast instead of after embedding. No data is written; safe to call repeatedly.",
+  "Probe any supported vector store (Chroma, Qdrant, Weaviate, Milvus, OpenSearch, Pinecone, Typesense) for reachability and auth before running a KB export. Returns latency, server version when available, and the probed endpoint path. No data is written; safe to call repeatedly.",
   {
-    kind: z.enum(["chroma", "qdrant", "weaviate"]),
+    kind: z.enum(["chroma", "qdrant", "weaviate", "milvus", "opensearch", "pinecone", "typesense"]),
     baseUrl: z.string().url(),
     apiKey: z.string().optional(),
   },

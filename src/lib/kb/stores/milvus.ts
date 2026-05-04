@@ -58,8 +58,17 @@ export class MilvusAdapter implements VectorStoreAdapter {
       primaryFieldName: "id",
       idType: "VarChar",
       vectorFieldName: "vector",
+      params: { max_length: 512 },
     });
     if (!resp.ok && resp.status !== 409) throw await this.parseError(resp, "create_collection");
+    const json = (await resp.json().catch(() => null)) as { code?: number; message?: string } | null;
+    if (json && typeof json.code === "number" && json.code !== 0) {
+      throw new VectorStoreError(
+        "milvus",
+        `create_collection failed: ${json.message ?? `code ${json.code}`}`,
+        resp.status,
+      );
+    }
   }
 
   private async req(path: string, body: unknown): Promise<Response> {

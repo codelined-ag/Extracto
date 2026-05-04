@@ -991,7 +991,7 @@ cmd_kb() {
       local body
       body="$(python3 -c '
 import json, sys
-parts = sys.stdin.read().split("\x1f")
+parts = sys.stdin.read().rstrip("\n").split("\x1f")
 (job_id, collection, store_kind, store_url, store_key,
  embed_provider, embed_endpoint, embed_key, embed_model,
  strategy, chunk_size, overlap, min_chunk_size,

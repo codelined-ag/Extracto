@@ -81,6 +81,14 @@ describe.each([
     expect(resp.status).toBe(400);
   });
 
+  it("accepts every supported kind through validation", async () => {
+    for (const kind of ["chroma", "qdrant", "weaviate", "milvus", "opensearch", "pinecone", "typesense"]) {
+      mockedProbe.mockResolvedValueOnce({ ok: true, latencyMs: 1, endpoint: "/x", status: 200 });
+      const resp = await post(makeRequest({ kind, baseUrl: "http://chroma.test" }));
+      expect(resp.status, `kind=${kind}`).toBe(200);
+    }
+  });
+
   it("rejects missing baseUrl", async () => {
     const resp = await post(makeRequest({ kind: "chroma" }));
     expect(resp.status).toBe(400);
