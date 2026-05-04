@@ -37,7 +37,7 @@ export function Footer({ t }: FooterProps) {
           </a>
         </p>
         <a
-          href="https://github.com/codelined-ag"
+          href="https://github.com/codelined-ag/Extracto"
           target="_blank"
           rel="noopener noreferrer"
           className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70 hover:text-primary transition-colors"
