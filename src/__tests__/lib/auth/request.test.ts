@@ -10,6 +10,9 @@ vi.mock("@/lib/db", () => ({
     apiKey: {
       findUnique: vi.fn(),
     },
+    authUser: {
+      findUnique: vi.fn(),
+    },
     $executeRaw: vi.fn().mockResolvedValue(0),
   },
 }));
@@ -61,6 +64,7 @@ import {
 
 const mockDb = db as unknown as {
   apiKey: { findUnique: ReturnType<typeof vi.fn> };
+  authUser: { findUnique: ReturnType<typeof vi.fn> };
   $executeRaw: ReturnType<typeof vi.fn>;
 };
 const mockVerifySessionToken = verifySessionToken as ReturnType<typeof vi.fn>;
@@ -128,6 +132,7 @@ beforeEach(() => {
   mockVerifySessionToken.mockResolvedValue(null);
   mockIsTrustedMutationRequest.mockReturnValue(true);
   mockDb.apiKey.findUnique.mockResolvedValue(null);
+  mockDb.authUser.findUnique.mockResolvedValue({ passwordChangedAt: new Date(0) });
   mockHashApiKey.mockReturnValue("deadbeef");
   mockCompareKeyHashes.mockReturnValue(true);
   mockDb.$executeRaw.mockResolvedValue(0);
@@ -261,6 +266,72 @@ describe("authenticateRequest with valid session cookie", () => {
     expect(ctx!.apiKeyId).toBeNull();
     expect(ctx!.scopes).toEqual(["*"]);
     expect(ctx!.rateLimitPerMinute).toBeNull();
+  });
+
+  it("does NOT query authUser when token has no pv claim (legacy token grandfathered)", async () => {
+    mockVerifySessionToken.mockResolvedValue({
+      userId: "session-user-1",
+      email: "user@example.com",
+      exp: 9999999999,
+    });
+    const req = makeRequest({ cookieName: "estracto_session", cookieValue: "legacy.token" });
+    const ctx = await authenticateRequest(req);
+
+    expect(ctx).not.toBeNull();
+    expect(mockDb.authUser.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("returns null when token's pv is older than the user's passwordChangedAt", async () => {
+    const issuedAt = new Date("2026-01-01T00:00:00Z").getTime();
+    const changedAt = new Date("2026-02-01T00:00:00Z");
+    mockVerifySessionToken.mockResolvedValue({
+      userId: "session-user-1",
+      email: "user@example.com",
+      pv: issuedAt,
+      exp: 9999999999,
+    });
+    mockDb.authUser.findUnique.mockResolvedValue({ passwordChangedAt: changedAt });
+
+    const req = makeRequest({ cookieName: "estracto_session", cookieValue: "stale.token" });
+    const ctx = await authenticateRequest(req);
+
+    expect(ctx).toBeNull();
+    expect(mockDb.authUser.findUnique).toHaveBeenCalledWith({
+      where: { id: "session-user-1" },
+      select: { passwordChangedAt: true },
+    });
+  });
+
+  it("returns AuthContext when token's pv matches the user's passwordChangedAt", async () => {
+    const matchedAt = new Date("2026-02-01T00:00:00Z");
+    mockVerifySessionToken.mockResolvedValue({
+      userId: "session-user-1",
+      email: "user@example.com",
+      pv: matchedAt.getTime(),
+      exp: 9999999999,
+    });
+    mockDb.authUser.findUnique.mockResolvedValue({ passwordChangedAt: matchedAt });
+
+    const req = makeRequest({ cookieName: "estracto_session", cookieValue: "fresh.token" });
+    const ctx = await authenticateRequest(req);
+
+    expect(ctx).not.toBeNull();
+    expect(ctx!.userId).toBe("session-user-1");
+  });
+
+  it("returns null when the session-bound user no longer exists", async () => {
+    mockVerifySessionToken.mockResolvedValue({
+      userId: "deleted-user",
+      email: "x@y.z",
+      pv: 1,
+      exp: 9999999999,
+    });
+    mockDb.authUser.findUnique.mockResolvedValue(null);
+
+    const req = makeRequest({ cookieName: "estracto_session", cookieValue: "tok" });
+    const ctx = await authenticateRequest(req);
+
+    expect(ctx).toBeNull();
   });
 });
 

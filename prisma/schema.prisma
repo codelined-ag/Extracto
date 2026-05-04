@@ -21,17 +21,18 @@ enum OcrJobStatus {
 }
 
 model AuthUser {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  passwordHash  String
-  name          String?
-  jobs          OcrJob[]
-  apiKeys       ApiKey[]
-  webhooks      Webhook[]
-  outputPresets OutputPreset[]
-  ocrSettings   OcrSetting[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                 String         @id @default(cuid())
+  email              String         @unique
+  passwordHash       String
+  passwordChangedAt  DateTime       @default(now())
+  name               String?
+  jobs               OcrJob[]
+  apiKeys            ApiKey[]
+  webhooks           Webhook[]
+  outputPresets      OutputPreset[]
+  ocrSettings        OcrSetting[]
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 }
 
 model ApiKey {

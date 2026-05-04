@@ -3,7 +3,6 @@
 import { motion } from "motion/react";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { SparklesIcon } from "@/components/ui/sparkles";
 
 import type { Translator } from "@/app/page-components/types";
 
@@ -20,10 +19,15 @@ export function NoSelectionCard({ t }: NoSelectionCardProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
         >
-          <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center text-primary">
-            <SparklesIcon size={48} className="inline-flex items-center justify-center" />
+          <div className="w-24 h-24 mx-auto flex items-end justify-center">
+            <img
+              src="/document.gif"
+              alt=""
+              aria-hidden="true"
+              className="max-w-full max-h-full object-contain"
+            />
           </div>
-          <h3 className="text-lg font-semibold mb-2">
+          <h3 className="text-lg font-semibold mt-1 mb-2">
             {t(
               "Seleziona un documento",
               "Select a document",

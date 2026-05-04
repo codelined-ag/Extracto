@@ -81,7 +81,7 @@ describe("POST /api/auth/signup", () => {
 
   it("creates the user and issues a session cookie on success", async () => {
     mockedFind.mockResolvedValueOnce(null);
-    mockedCreate.mockResolvedValueOnce({ id: "u1", email: "a@b.co", name: "A" });
+    mockedCreate.mockResolvedValueOnce({ id: "u1", email: "a@b.co", name: "A", passwordChangedAt: new Date() });
     const res = await POST(makeReq({ email: "a@b.co", password: "longpass1234", name: "A" }) as never);
     expect(res.status).toBe(200);
     expect(res.headers.get("set-cookie")).toContain("estracto_session=");

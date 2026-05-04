@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       email: user.email,
       name: user.name,
+      pv: user.passwordChangedAt.getTime(),
     });
 
     const response = NextResponse.json({ user: toSafeUser(user) });

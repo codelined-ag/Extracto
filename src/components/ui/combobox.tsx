@@ -54,7 +54,7 @@ export function Combobox({
   const display = selected?.label ?? (value && allowCustom ? value : "")
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -131,10 +131,10 @@ export function Combobox({
                     setSearch("")
                   }}
                   className={cn(
-                    "relative flex cursor-default items-start gap-2 rounded-lg px-2.5 py-2 text-sm",
+                    "relative flex cursor-pointer items-start gap-2 rounded-lg px-2.5 py-2 text-sm",
                     "outline-hidden select-none transition-colors duration-150",
                     "data-[selected=true]:bg-[color-mix(in_oklab,var(--secondary),var(--primary)_18%)] data-[selected=true]:text-foreground",
-                    "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+                    "data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
                   )}
                 >
                   <span className="size-4 shrink-0 mt-0.5 inline-flex items-center justify-center text-primary">

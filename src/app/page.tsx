@@ -19,7 +19,6 @@ import { FileTextIcon } from"@/components/ui/file-text";
 import { HistoryIcon } from"@/components/ui/history";
 import { LanguagesIcon } from"@/components/ui/languages";
 import { LoaderCircleIcon } from"@/components/ui/loader-circle";
-import { LogoutIcon } from"@/components/ui/logout";
 import { PauseIcon } from"@/components/ui/pause";
 import { PlayIcon } from"@/components/ui/play";
 import { SettingsIcon } from"@/components/ui/settings";
@@ -85,6 +84,7 @@ import {
 import { FileListCard } from "@/app/page-components/file-list-card";
 import { Footer } from "@/app/page-components/footer";
 import { HeaderBar } from "@/app/page-components/header-bar";
+import { ChangePasswordDialog } from "@/app/page-components/change-password-dialog";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { useHistory } from "@/app/page-components/use-history";
 import { PreviewHeader } from "@/app/page-components/preview-header";
@@ -237,15 +237,36 @@ const DEFAULT_API_SETTINGS: ApiSettingsForm = {
  hasApiKey: false,
 };
 
-// Fallback list before first model fetch (Ollama only; Mistral is dynamic).
 const OLLAMA_FALLBACK_MODELS: Model[] = [
  { id:"llama3.2-vision:latest", name:"Llama 3.2 Vision", provider:"ollama"},
  { id:"llava:latest", name:"LLaVA", provider:"ollama"},
  { id:"minicpm-v:latest", name:"MiniCPM-V", provider:"ollama"},
 ];
+const MISTRAL_FALLBACK_MODELS: Model[] = [
+ { id:"mistral-ocr-latest", name:"mistral-ocr-latest", provider:"mistral"},
+ { id:"mistral-ocr", name:"mistral-ocr", provider:"mistral"},
+ { id:"pixtral-12b", name:"pixtral-12b", provider:"mistral"},
+];
+const OPENROUTER_FALLBACK_MODELS_UI: Model[] = [
+ { id:"anthropic/claude-3.5-sonnet", name:"anthropic/claude-3.5-sonnet", provider:"openrouter"},
+ { id:"openai/gpt-4o", name:"openai/gpt-4o", provider:"openrouter"},
+ { id:"openai/gpt-4o-mini", name:"openai/gpt-4o-mini", provider:"openrouter"},
+ { id:"google/gemini-2.0-flash-001", name:"google/gemini-2.0-flash-001", provider:"openrouter"},
+ { id:"qwen/qwen-2-vl-72b-instruct", name:"qwen/qwen-2-vl-72b-instruct", provider:"openrouter"},
+];
+const OPENAI_COMPAT_FALLBACK_MODELS: Model[] = [
+ { id:"gpt-4o", name:"gpt-4o", provider:"openai_compat"},
+ { id:"gpt-4o-mini", name:"gpt-4o-mini", provider:"openai_compat"},
+];
 
 function getFallbackModelsForProvider(provider: ProviderKind): Model[] {
- return provider ==="ollama"? OLLAMA_FALLBACK_MODELS : [];
+ switch (provider) {
+ case"ollama": return OLLAMA_FALLBACK_MODELS;
+ case"mistral": return MISTRAL_FALLBACK_MODELS;
+ case"openrouter": return OPENROUTER_FALLBACK_MODELS_UI;
+ case"openai_compat": return OPENAI_COMPAT_FALLBACK_MODELS;
+ default: return [];
+ }
 }
 
 // Languages (OCR-detectable; not the UI language)
@@ -489,7 +510,7 @@ export default function ExtractoPage() {
  const [selectedFileId, setSelectedFileId] = React.useState<string | null>(null);
  const [copied, setCopied] = React.useState<"md"|"json"| null>(null);
  const [apiSettingsOpen, setApiSettingsOpen] = React.useState(false);
- const [settingsTab, setSettingsTab] = React.useState<"model"|"provider"|"kb"|"general"|"account">("model");
+ const [settingsTab, setSettingsTab] = React.useState<SettingsTab>("model");
  const [viewMode, setViewMode] = React.useState<"preview"|"split"|"result">("split");
  const pdfPagePreviewCacheRef = React.useRef<Record<string, string[]>>({});
  const modelSelectionsRef = React.useRef<ProviderModelSelections>({});
@@ -498,6 +519,7 @@ export default function ExtractoPage() {
  const [isLoadingModels, setIsLoadingModels] = React.useState(false);
  const [isSavingApiSettings, setIsSavingApiSettings] = React.useState(false);
  const [isSigningOut, setIsSigningOut] = React.useState(false);
+ const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
  const [modelError, setModelError] = React.useState("");
  const [historyOpen, setHistoryOpen] = React.useState(false);
 
@@ -1985,8 +2007,15 @@ export default function ExtractoPage() {
       <HeaderBar
         t={t}
         onOpenSettings={openSettingsTab}
+        onChangePassword={() => setChangePasswordOpen(true)}
         onSignOut={signOut}
         isSigningOut={isSigningOut}
+      />
+
+      <ChangePasswordDialog
+        open={changePasswordOpen}
+        onOpenChange={setChangePasswordOpen}
+        t={t}
       />
 
  <Dialog
@@ -2008,11 +2037,11 @@ export default function ExtractoPage() {
  <DialogTitle>{t("Impostazioni","Settings","Paramètres","Configuración","Einstellungen")}</DialogTitle>
  <DialogDescription>
  {t(
-"Modello, parametri OCR, knowledge base, provider e account.",
-"Model, OCR parameters, knowledge base, provider and account.",
-"Modèle, paramètres OCR, base de connaissances, fournisseur et compte.",
-"Modelo, parámetros OCR, base de conocimiento, proveedor y cuenta.",
-"Modell, OCR-Parameter, Wissensdatenbank, Provider und Konto.",
+"Modello, parametri OCR, knowledge base e provider.",
+"Model, OCR parameters, knowledge base and provider.",
+"Modèle, paramètres OCR, base de connaissances et fournisseur.",
+"Modelo, parámetros OCR, base de conocimiento y proveedor.",
+"Modell, OCR-Parameter, Wissensdatenbank und Provider.",
  )}
  </DialogDescription>
  </DialogHeader>
@@ -2025,7 +2054,6 @@ export default function ExtractoPage() {
  <TabsTrigger value="kb"className="gap-1.5"><DatabaseBackupIcon size={14} className="inline-flex items-center justify-center"/>{t("Knowledge base","Knowledge base","Base de connaissances","Base de conocimiento","Wissensdatenbank")}</TabsTrigger>
  <TabsTrigger value="provider"className="gap-1.5"><SettingsIcon size={14} className="inline-flex items-center justify-center"/>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</TabsTrigger>
  <TabsTrigger value="general"className="gap-1.5"><LanguagesIcon size={14} className="inline-flex items-center justify-center"/>{t("Generale","General","Général","General","Allgemein")}</TabsTrigger>
- <TabsTrigger value="account"className="gap-1.5"><LogoutIcon size={14} className="inline-flex items-center justify-center"/>{t("Account","Account","Compte","Cuenta","Konto")}</TabsTrigger>
  </TabsList>
  </div>
 
@@ -2051,7 +2079,6 @@ export default function ExtractoPage() {
  loading={isLoadingModels}
  onRefresh={() => { void fetchAvailableModels(apiSettings); }}
  refreshLabel={t("AGGIORNA","REFRESH","ACTUALISER","ACTUALIZAR","AKTUALISIEREN")}
- disabled={models.length === 0 && !isLoadingModels}
  allowCustom
  ariaLabel={t("Modello OCR","OCR model","Modèle OCR","Modelo OCR","OCR-Modell")}
  />
@@ -2124,11 +2151,11 @@ export default function ExtractoPage() {
  <TabsContent value="kb"className="space-y-5 mt-4">
  <p className="text-xs text-muted-foreground">
  {t(
-"Configura embedding, chunking e vector store. Imposta KB_EXPORT_ENABLED=1 nel container per abilitare l'esportazione.",
-"Configure embedding, chunking, and vector store. Set KB_EXPORT_ENABLED=1 on the container to enable export.",
-"Configurez embedding, découpage et vector store. Activez KB_EXPORT_ENABLED=1 sur le conteneur pour activer l'export.",
-"Configura embedding, chunking y vector store. Activa KB_EXPORT_ENABLED=1 en el contenedor para habilitar la exportación.",
-"Konfigurieren Sie Embedding, Chunking und Vektor-Store. KB_EXPORT_ENABLED=1 setzen, um Export zu aktivieren.",
+"Configura embedding, chunking e vector store.",
+"Configure embedding, chunking, and vector store.",
+"Configurez embedding, découpage et vector store.",
+"Configura embedding, chunking y vector store.",
+"Konfigurieren Sie Embedding, Chunking und Vektor-Store.",
  )}
  </p>
 
@@ -2159,7 +2186,7 @@ export default function ExtractoPage() {
 )} />
  </span>
  </Label>
- <Input type="number"min={1} max={32768} value={kbDefaultsDraft.embeddingDimensions} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, embeddingDimensions: e.target.value }))}/>
+ <Input type="number"min={1} max={32768} value={kbDefaultsDraft.embeddingDimensions} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, embeddingDimensions: e.target.value }))} placeholder="768"/>
  </div>
  </div>
  <div className="space-y-1.5">
@@ -2213,7 +2240,7 @@ export default function ExtractoPage() {
  <div className="grid grid-cols-3 gap-3">
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Max","Max","Max","Máx","Max")}</Label>
- <Input type="number"min={1} max={10000} value={kbDefaultsDraft.chunkingMaxSize} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMaxSize: e.target.value }))}/>
+ <Input type="number"min={1} max={10000} value={kbDefaultsDraft.chunkingMaxSize} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMaxSize: e.target.value }))} placeholder="1200"/>
  </div>
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
@@ -2228,7 +2255,7 @@ export default function ExtractoPage() {
 )}/>
  </span>
  </Label>
- <Input type="number"min={0} value={kbDefaultsDraft.chunkingOverlap} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingOverlap: e.target.value }))} disabled={kbDefaultsDraft.chunkingStrategy !=="fixed"}/>
+ <Input type="number"min={0} value={kbDefaultsDraft.chunkingOverlap} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingOverlap: e.target.value }))} disabled={kbDefaultsDraft.chunkingStrategy !=="fixed"} placeholder="100"/>
  </div>
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
@@ -2243,7 +2270,7 @@ export default function ExtractoPage() {
 )}/>
  </span>
  </Label>
- <Input type="number"min={0} value={kbDefaultsDraft.chunkingMinSize} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMinSize: e.target.value }))} disabled={kbDefaultsDraft.chunkingStrategy ==="fixed"}/>
+ <Input type="number"min={0} value={kbDefaultsDraft.chunkingMinSize} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMinSize: e.target.value }))} disabled={kbDefaultsDraft.chunkingStrategy ==="fixed"} placeholder="200"/>
  </div>
  </div>
  {kbDefaultsDraft.chunkingStrategy === "semantic" ? (
@@ -2260,7 +2287,7 @@ export default function ExtractoPage() {
 )}/>
  </span>
  </Label>
- <Input type="number"min={0} max={100} step={1} value={kbDefaultsDraft.chunkingBreakpointPercentile} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingBreakpointPercentile: e.target.value }))}/>
+ <Input type="number"min={0} max={100} step={1} value={kbDefaultsDraft.chunkingBreakpointPercentile} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingBreakpointPercentile: e.target.value }))} placeholder="95"/>
  </div>
  ) : null}
  {kbDefaultsDraft.chunkingStrategy === "hierarchical" ? (
@@ -2277,7 +2304,7 @@ export default function ExtractoPage() {
 )}/>
  </span>
  </Label>
- <Input type="number"min={1} max={6} step={1} value={kbDefaultsDraft.chunkingMaxHeadingDepth} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMaxHeadingDepth: e.target.value }))}/>
+ <Input type="number"min={1} max={6} step={1} value={kbDefaultsDraft.chunkingMaxHeadingDepth} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMaxHeadingDepth: e.target.value }))} placeholder="6"/>
  </div>
  ) : null}
  </div>
@@ -2310,7 +2337,7 @@ export default function ExtractoPage() {
  </div>
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Dimensioni","Dimensions","Dimensions","Dimensiones","Dimensionen")}</Label>
- <Input type="number"min={1} max={32768} value={kbDefaultsDraft.storeDimensions} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, storeDimensions: e.target.value }))}/>
+ <Input type="number"min={1} max={32768} value={kbDefaultsDraft.storeDimensions} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, storeDimensions: e.target.value }))} placeholder="768"/>
  </div>
  </div>
  <div className="space-y-1.5">
@@ -2459,14 +2486,6 @@ export default function ExtractoPage() {
 
  </TabsContent>
 
- <TabsContent value="account"className="space-y-5 mt-4">
- <SettingsSection title={t("Account","Account","Compte","Cuenta","Konto")}>
- <Button variant="outline"className="w-full justify-start group"onClick={signOut} disabled={isSigningOut}>
- {isSigningOut ? <LoaderCircleIcon size={16} className="inline-flex items-center justify-center mr-2 animate-spin"/> : <LogoutIcon size={16} className="inline-flex items-center justify-center mr-2 text-destructive transition-transform duration-200 group-hover:translate-x-0.5"/>}
- {t("Esci","Sign out","Se déconnecter","Cerrar sesión","Abmelden")}
- </Button>
- </SettingsSection>
- </TabsContent>
  </ScrollArea>
  </Tabs>
 

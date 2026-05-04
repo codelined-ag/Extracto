@@ -2,10 +2,11 @@ const AUTH_COOKIE_NAME = "estracto_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const MIN_AUTH_SECRET_LENGTH = 32;
 
-interface AuthSessionPayload {
+export interface AuthSessionPayload {
   userId: string;
   email: string;
   name?: string | null;
+  pv?: number;
   exp: number;
 }
 

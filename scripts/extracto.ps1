@@ -156,9 +156,24 @@ function Invoke-Api {
     }
 }
 
+function Remove-StaleContainers {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return }
+    $ids = & docker ps -a --filter 'name=^extracto$' --format '{{.ID}}' 2>$null
+    if (-not $ids) { return }
+    foreach ($id in $ids) {
+        if (-not $id) { continue }
+        $proj = & docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' $id 2>$null
+        if (-not $proj -or $proj -eq '<no value>') {
+            Write-Warn "Removing stale container 'extracto' (created by 'docker run', conflicts with compose stack)"
+            & docker rm -f $id 2>$null | Out-Null
+        }
+    }
+}
+
 function Cmd-On {
     Assert-Project
     Ensure-AuthSecret
+    Remove-StaleContainers
     $buildLocally = $RemainingArguments -contains "--build"
     if ($buildLocally) {
         Invoke-Step "Building Extracto from source" { Invoke-Compose @("build") }
@@ -189,6 +204,7 @@ function Cmd-Status {
 
 function Cmd-Upgrade {
     Assert-Project
+    Remove-StaleContainers
     Invoke-Step "Pulling latest Extracto image from ghcr.io" { Invoke-Compose @("pull") }
     Invoke-Step "Recreating Extracto container" { Invoke-Compose @("up", "-d", "--force-recreate") }
     Write-Ok "Extracto upgraded and running at http://localhost:3000"
@@ -670,7 +686,6 @@ function Cmd-Help {
     Write-Host "  extracto settings get"
     Write-Host "  extracto kb export <job-id> --collection N --store-url URL --embed-model M"
     Write-Host "                                     export an OCR job's text to a vector store"
-    Write-Host "                                     (requires KB_EXPORT_ENABLED=1 on the server)"
     Write-Host "  extracto kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]"
     Write-Host "                                     probe a vector store for reachability + auth"
     Write-Host ""

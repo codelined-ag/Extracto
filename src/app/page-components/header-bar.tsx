@@ -7,10 +7,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
+import { KeyRoundIcon } from "lucide-react";
 import { LogoutIcon } from "@/components/ui/logout";
 import { SettingsIcon } from "@/components/ui/settings";
 import { UserIcon } from "@/components/ui/user";
@@ -22,11 +24,18 @@ import type { SettingsTab, Translator } from "@/app/page-components/types";
 export interface HeaderBarProps {
   t: Translator;
   onOpenSettings: (tab: SettingsTab) => void;
+  onChangePassword: () => void;
   onSignOut: () => void;
   isSigningOut: boolean;
 }
 
-export function HeaderBar({ t, onOpenSettings, onSignOut, isSigningOut }: HeaderBarProps) {
+export function HeaderBar({
+  t,
+  onOpenSettings,
+  onChangePassword,
+  onSignOut,
+  isSigningOut,
+}: HeaderBarProps) {
   return (
     <motion.header
       initial={{ y: -16, opacity: 0 }}
@@ -106,6 +115,19 @@ export function HeaderBar({ t, onOpenSettings, onSignOut, isSigningOut }: Header
               <TooltipContent>{t("Account", "Account", "Compte", "Cuenta", "Konto")}</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" className="min-w-[12rem]">
+              <DropdownMenuItem onSelect={onChangePassword}>
+                <KeyRoundIcon size={16} className="inline-flex" />
+                <span>
+                  {t(
+                    "Cambia password",
+                    "Change password",
+                    "Changer le mot de passe",
+                    "Cambiar contraseña",
+                    "Passwort ändern",
+                  )}
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={onSignOut} disabled={isSigningOut}>
                 <LogoutIcon size={16} className="inline-flex" />
                 <span>{t("Esci", "Sign out", "Se déconnecter", "Cerrar sesión", "Abmelden")}</span>

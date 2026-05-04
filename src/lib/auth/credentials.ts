@@ -6,6 +6,7 @@ interface AuthUserRecord {
   id: string;
   email: string;
   passwordHash: string;
+  passwordChangedAt: Date;
   name: string | null;
 }
 
@@ -46,6 +47,7 @@ export async function findUserByEmail(email: string): Promise<AuthUserRecord | n
       id: true,
       email: true,
       passwordHash: true,
+      passwordChangedAt: true,
       name: true,
     },
   });
@@ -71,9 +73,33 @@ export async function createUser(input: {
       id: true,
       email: true,
       passwordHash: true,
+      passwordChangedAt: true,
       name: true,
     },
   });
+}
+
+export async function findUserById(userId: string): Promise<AuthUserRecord | null> {
+  return await db.authUser.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      passwordHash: true,
+      passwordChangedAt: true,
+      name: true,
+    },
+  });
+}
+
+export async function updateUserPassword(userId: string, newPassword: string): Promise<Date> {
+  const passwordHash = hashPassword(newPassword);
+  const passwordChangedAt = new Date();
+  await db.authUser.update({
+    where: { id: userId },
+    data: { passwordHash, passwordChangedAt },
+  });
+  return passwordChangedAt;
 }
 
 export function toSafeUser(user: AuthUserRecord): { id: string; email: string; name: string | null } {

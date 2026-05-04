@@ -69,7 +69,7 @@ interface KbExportRequest extends Record<string, unknown> {
 export const POST = withMutationAuth("kb:write", async (request: NextRequest, { auth }) => {
   if (!isKbExportEnabled()) {
     throw new ApiRouteError(
-      "KB export is disabled. Set KB_EXPORT_ENABLED=1 in your env to enable it.",
+      "KB export is disabled on this instance.",
       503,
     );
   }

@@ -199,9 +199,30 @@ run_step() {
   return "$rc"
 }
 
+cleanup_stale_containers() {
+  command -v docker >/dev/null 2>&1 || return 0
+  local stale
+  stale="$(docker ps -a \
+    --filter 'name=^extracto$' \
+    --filter 'label=com.docker.compose.project' \
+    --format '{{.ID}}|{{.Label "com.docker.compose.project"}}' 2>/dev/null || true)"
+  local plain
+  plain="$(docker ps -a --filter 'name=^extracto$' --format '{{.ID}}' 2>/dev/null || true)"
+  local id
+  for id in $plain; do
+    local proj
+    proj="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$id" 2>/dev/null || true)"
+    if [ -z "$proj" ] || [ "$proj" = "<no value>" ]; then
+      warn "Removing stale container 'extracto' (created by 'docker run', conflicts with compose stack)"
+      docker rm -f "$id" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 cmd_on() {
   ensure_project
   ensure_auth_secret
+  cleanup_stale_containers
   local build_locally=0
   for arg in "$@"; do
     case "$arg" in
@@ -228,6 +249,7 @@ cmd_off() {
 
 cmd_upgrade() {
   ensure_project
+  cleanup_stale_containers
   run_step "Pulling latest Extracto image from ghcr.io..." compose pull
   run_step "Recreating Extracto container..." compose up -d --force-recreate
   run_step "Checking Extracto health..." compose ps
@@ -784,7 +806,6 @@ Headless API (requires EXTRACTO_TOKEN env or ~/.extracto/config):
   settings get                  Show current API provider settings
   kb export <job-id> --collection N --store-url URL --embed-model M
                                 Export an OCR job's text to a vector store
-                                (requires KB_EXPORT_ENABLED=1 on the server)
   kb test-connection --store chroma|qdrant|weaviate --store-url URL [--store-key KEY]
                                 Probe a vector store for reachability + auth
                                 before running an export
