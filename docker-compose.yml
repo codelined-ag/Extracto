@@ -11,7 +11,7 @@ services:
       APP_NETWORK_MODE: ${APP_NETWORK_MODE:-bridge}
       AUTH_SECRET: ${AUTH_SECRET:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
-      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-0}
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-1}
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -73,7 +73,7 @@ Older minor versions are best-effort.
   `OPENROUTER_ALLOWED_HOSTS`, `OPENAI_COMPAT_ALLOWED_HOSTS` to the
   exact endpoints you use. Don't run with the defaults open in a
   multi-tenant deployment.
-- Keep `ALLOW_SIGNUP=0` after bootstrapping the operator account.
+- `ALLOW_SIGNUP=1` ships as the default so the first user can claim a fresh install. Set it to `0` once your operator account exists to lock the door behind you.
 - Set `METRICS_TOKEN` to gate the Prometheus surface.
 
 ## PGP
