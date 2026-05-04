@@ -36,7 +36,7 @@
   </picture>
 </p>
 
-> **v0.4.0**: per-page selection, document anchoring, hybrid text-layer fast-path, and 5 document-type presets. See the [changelog](./CHANGELOG.md) and [extraction quality docs](https://extracto.help/extraction-quality).
+> **v0.5.4**: any S3-compatible storage (AWS, R2, Backblaze, MinIO, Garage, Ceph, SeaweedFS, ...) with hardened SSRF policy and rate limits, Typesense vector store, history GFM rendering with stopped-job state, and a curl|sh / iwr|iex one-liner installer pinned to the release tag. See the [changelog](./CHANGELOG.md).
 
 ---
 
