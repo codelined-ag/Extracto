@@ -190,6 +190,13 @@ export function ChangePasswordDialog({ open, onOpenChange, t }: ChangePasswordDi
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
               disabled={isSubmitting}
+              placeholder={t(
+                "La tua password attuale",
+                "Your current password",
+                "Votre mot de passe actuel",
+                "Tu contraseña actual",
+                "Dein aktuelles Passwort",
+              )}
             />
           </div>
           <div className="space-y-1.5">
@@ -211,6 +218,13 @@ export function ChangePasswordDialog({ open, onOpenChange, t }: ChangePasswordDi
               onChange={(e) => setNewPassword(e.target.value)}
               required
               disabled={isSubmitting}
+              placeholder={t(
+                "Almeno 12 caratteri",
+                "At least 12 characters",
+                "Au moins 12 caractères",
+                "Al menos 12 caracteres",
+                "Mindestens 12 Zeichen",
+              )}
             />
           </div>
           <div className="space-y-1.5">
@@ -232,6 +246,13 @@ export function ChangePasswordDialog({ open, onOpenChange, t }: ChangePasswordDi
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               disabled={isSubmitting}
+              placeholder={t(
+                "Ripeti la nuova password",
+                "Repeat new password",
+                "Répétez le nouveau mot de passe",
+                "Repite la nueva contraseña",
+                "Neues Passwort wiederholen",
+              )}
             />
           </div>
           <DialogFooter className="gap-2">
