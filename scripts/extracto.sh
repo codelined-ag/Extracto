@@ -444,6 +444,121 @@ cmd_logs() {
   compose logs -f app
 }
 
+cmd_estimate() {
+  command -v python3 >/dev/null 2>&1 || die "python3 is required by 'extracto estimate' for safe JSON construction"
+  local file="" pages="" model="" provider="" endpoint="" pp_model="" pp_format="" out_tokens="" in_tokens=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --pages)            pages="${2:-}"; shift 2 ;;
+      --model)            model="${2:-}"; shift 2 ;;
+      --provider)         provider="${2:-}"; shift 2 ;;
+      --api-endpoint)     endpoint="${2:-}"; shift 2 ;;
+      --post-model)       pp_model="${2:-}"; shift 2 ;;
+      --post-format)      pp_format="${2:-}"; shift 2 ;;
+      --output-tokens)    out_tokens="${2:-}"; shift 2 ;;
+      --input-tokens)     in_tokens="${2:-}"; shift 2 ;;
+      -h|--help)
+        cat <<EOF
+usage:
+  extracto estimate <file> --model NAME [--provider P] [--api-endpoint URL] [--post-model NAME] [--post-format markdown|json] [--output-tokens N] [--input-tokens N]
+  extracto estimate --pages N --model NAME [...]
+
+Returns dollar cost for OCR'ing the supplied file (page count auto-detected
+for PDFs via pdfinfo; images count as 1 page) or a flat --pages count.
+Pricing source is shown per provider. Self-hosted endpoints with no mirror
+entry return \$0 plus a warning.
+EOF
+        return 0
+        ;;
+      *)
+        if [ -z "$file" ] && [ -z "$pages" ] && [ -f "$1" ]; then
+          file="$1"; shift
+        else
+          die "unknown estimate flag or argument: $1"
+        fi
+        ;;
+    esac
+  done
+
+  [ -n "$model" ] || die "--model is required (e.g. --model mistral-ocr-latest)"
+  if [ -z "$pages" ] && [ -z "$file" ]; then
+    die "supply either a file path or --pages N"
+  fi
+
+  if [ -n "$file" ]; then
+    [ -f "$file" ] || die "file not found: $file"
+    case "${file##*.}" in
+      pdf|PDF)
+        command -v pdfinfo >/dev/null 2>&1 || die "pdfinfo (poppler-utils) required for PDF page count. Install poppler-utils, or pass --pages N to override."
+        pages="$(pdfinfo "$file" 2>/dev/null | awk '/^Pages:/ {print $2}')"
+        [ -n "$pages" ] || die "could not read page count from PDF"
+        ;;
+      png|PNG|jpg|jpeg|JPG|JPEG|webp|WEBP)
+        pages="${pages:-1}"
+        ;;
+      *)
+        die "unsupported file type: ${file##*.}"
+        ;;
+    esac
+  fi
+  case "$pages" in ''|*[!0-9]*) die "--pages must be a positive integer (got '${pages}')" ;; esac
+  [ "$pages" -ge 1 ] || die "--pages must be >= 1"
+
+  if [ -n "$provider" ]; then
+    case "$provider" in
+      ollama|mistral|openrouter|openai_compat) ;;
+      *) die "--provider must be one of: ollama, mistral, openrouter, openai_compat" ;;
+    esac
+  fi
+
+  if [ -n "$pp_format" ]; then
+    case "$pp_format" in
+      markdown|json) ;;
+      *) die "--post-format must be 'markdown' or 'json'" ;;
+    esac
+  fi
+
+  if [ -n "$out_tokens" ]; then
+    case "$out_tokens" in ''|*[!0-9]*) die "--output-tokens must be a non-negative integer" ;; esac
+  fi
+  if [ -n "$in_tokens" ]; then
+    case "$in_tokens" in ''|*[!0-9]*) die "--input-tokens must be a non-negative integer" ;; esac
+  fi
+
+  local file_basename=""
+  if [ -n "$file" ]; then
+    file_basename="$(basename "$file")"
+  fi
+
+  local body
+  body="$(EXTRACTO_PAGES="$pages" EXTRACTO_MODEL="$model" EXTRACTO_PROVIDER="$provider" \
+       EXTRACTO_ENDPOINT="$endpoint" EXTRACTO_FILE="$file_basename" EXTRACTO_PP_MODEL="$pp_model" \
+       EXTRACTO_PP_FORMAT="$pp_format" EXTRACTO_OUT="$out_tokens" EXTRACTO_IN="$in_tokens" \
+       python3 -c '
+import json, os
+file_entry = {"pageCount": int(os.environ["EXTRACTO_PAGES"])}
+if os.environ.get("EXTRACTO_FILE"):
+    file_entry["fileName"] = os.environ["EXTRACTO_FILE"]
+out = {"files": [file_entry], "model": os.environ["EXTRACTO_MODEL"]}
+if os.environ.get("EXTRACTO_PROVIDER"):
+    out["provider"] = os.environ["EXTRACTO_PROVIDER"]
+if os.environ.get("EXTRACTO_ENDPOINT"):
+    out["apiEndpoint"] = os.environ["EXTRACTO_ENDPOINT"]
+if os.environ.get("EXTRACTO_PP_MODEL"):
+    pp = {"enabled": True, "model": os.environ["EXTRACTO_PP_MODEL"]}
+    if os.environ.get("EXTRACTO_PP_FORMAT"):
+        pp["outputFormat"] = os.environ["EXTRACTO_PP_FORMAT"]
+    out["postProcessing"] = pp
+if os.environ.get("EXTRACTO_OUT"):
+    out["outputTokensPerPage"] = int(os.environ["EXTRACTO_OUT"])
+if os.environ.get("EXTRACTO_IN"):
+    out["inputTokensPerPage"] = int(os.environ["EXTRACTO_IN"])
+print(json.dumps(out))
+')"
+
+  api_post_json "/api/v1/ocr/estimate" "$body"
+}
+
 cmd_jobs() {
   local sub="${1:-list}"
   shift || true
@@ -1218,6 +1333,7 @@ main() {
     api-key)   shift; cmd_api_key "$@" ;;
     uninstall) cmd_uninstall ;;
     ocr)       shift; cmd_ocr "$@" ;;
+    estimate)  shift; cmd_estimate "$@" ;;
     jobs)      shift; cmd_jobs "$@" ;;
     tags)      shift; cmd_tags "$@" ;;
     presets)   shift; cmd_presets "$@" ;;

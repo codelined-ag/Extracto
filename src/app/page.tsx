@@ -82,6 +82,7 @@ import {
   HintInfo,
 } from "@/app/page-components/settings-primitives";
 import { FileListCard } from "@/app/page-components/file-list-card";
+import { CostEstimate } from "@/app/page-components/cost-estimate";
 import { Footer } from "@/app/page-components/footer";
 import { HeaderBar } from "@/app/page-components/header-bar";
 import { ChangePasswordDialog } from "@/app/page-components/change-password-dialog";
@@ -3127,6 +3128,14 @@ export default function ExtractoPage() {
               uiLanguage={uiLanguage}
               footer={
                 <div className="p-3 space-y-2 bg-card">
+                  <CostEstimate
+                    pendingFiles={files}
+                    model={selectedModel}
+                    postProcessingEnabled={postProcessing.enabled}
+                    postProcessingModel={postProcessing.model}
+                    postProcessingFormat={postProcessing.outputFormat}
+                    t={t}
+                  />
                   {activeProcessingFile ? (
                     <Button
                       variant="destructive"

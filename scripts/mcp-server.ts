@@ -145,6 +145,52 @@ server.tool(
 );
 
 server.tool(
+  "ocr_estimate",
+  "Estimate the dollar cost of running OCR on a set of pages before submitting. Pricing is fetched live (OpenRouter, LiteLLM mirror), static (Mistral OCR per-page rates), or $0 (Ollama, unknown self-hosted). Returns a breakdown with per-page rate, total, and warnings about pricing-source confidence.",
+  {
+    files: z
+      .array(
+        z.object({
+          fileName: z.string().optional(),
+          pageCount: z.number().int().min(1).max(5000),
+        }),
+      )
+      .min(1)
+      .max(200)
+      .describe("One entry per file. pageCount is the number of pages to OCR."),
+    model: z.string().describe("Model id that will run the OCR (e.g. 'mistral-ocr-latest', 'anthropic/claude-3.5-sonnet')."),
+    provider: z
+      .enum(["ollama", "mistral", "openrouter", "openai_compat"])
+      .optional()
+      .describe("Defaults to the caller's saved provider if omitted."),
+    apiEndpoint: z.string().optional().describe("Defaults to the caller's saved endpoint if omitted."),
+    postProcessing: z
+      .object({
+        enabled: z.boolean().optional(),
+        model: z.string().optional(),
+        outputFormat: z.enum(["markdown", "json"]).optional(),
+      })
+      .partial()
+      .optional()
+      .describe("Optional post-processing pass added to the estimate."),
+    outputTokensPerPage: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe("Override the 800 tokens/page output heuristic."),
+    inputTokensPerPage: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe("Override the 1445 tokens/page input heuristic (only used when the model has no flat per-image rate)."),
+  },
+  async (input) =>
+    asTextResult(await call("/api/v1/ocr/estimate", { method: "POST", body: input })),
+);
+
+server.tool(
   "ocr_get",
   "Fetch a single OCR job (id, status, extractedText, structured result).",
   { jobId: z.string() },

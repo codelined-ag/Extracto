@@ -6,6 +6,9 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Pre-run cost estimator on REST, MCP, CLI, and the workspace badge, pulling live per-token pricing from OpenRouter and the LiteLLM mirror, the static per-page rate from Mistral OCR, and $0 with a heads-up for local Ollama and self-hosted endpoints with no mirror entry.
+
 ## [0.10.0] - 2026-05-05
 
 ### Added

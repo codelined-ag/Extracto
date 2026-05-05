@@ -56,6 +56,17 @@ extracto ocr ./scan.pdf --model llava:13b --no-text-layer                    # f
 
 `--preset` accepts `generic`, `academic`, `invoice`, `contract`, `form`. The default is `generic`. Born-digital PDFs use the text-layer fast-path automatically (no VLM call) unless you pass `--no-text-layer`.
 
+### Estimate cost before running
+
+```bash
+extracto estimate ./report.pdf --model anthropic/claude-3.5-sonnet
+extracto estimate ./scan.png --model mistral-ocr-latest
+extracto estimate --pages 50 --model openai/gpt-4o
+extracto estimate ./report.pdf --model openai/gpt-4o --post-model anthropic/claude-3.5-sonnet --post-format json
+```
+
+`extracto estimate` calls `POST /api/v1/ocr/estimate` and returns the dollar total before you commit. Page counts are auto-detected (PDFs via `pdfinfo`, images = 1 page) or you can pass `--pages N` directly. Pricing sources: OpenRouter live API, LiteLLM community mirror for OpenAI-compatible models, static table for Mistral OCR (per-page billed; Mistral has no pricing API), $0 for Ollama. Self-hosted OpenAI-compatible endpoints with no mirror entry return $0 plus a warning so you know the estimate excludes provider cost. Pass `--post-model NAME` to add a post-processing pass to the estimate.
+
 ### List recent jobs
 
 ```bash

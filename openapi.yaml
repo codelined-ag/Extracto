@@ -104,6 +104,102 @@ components:
         createdAt: { type: string, format: date-time }
         jobCount: { type: integer, description: "Only present in tags list responses" }
 
+    OcrEstimateRequest:
+      type: object
+      required: [files, model]
+      properties:
+        files:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required: [pageCount]
+            properties:
+              fileName: { type: string }
+              pageCount: { type: integer, minimum: 1, maximum: 5000 }
+        model: { type: string, description: "Model id used for OCR." }
+        provider:
+          type: string
+          enum: [ollama, mistral, openrouter, openai_compat]
+          description: "Defaults to the caller's saved provider if omitted."
+        apiEndpoint:
+          type: string
+          description: "Defaults to the caller's saved endpoint if omitted."
+        postProcessing:
+          type: object
+          properties:
+            enabled: { type: boolean }
+            model: { type: string }
+            outputFormat: { type: string, enum: [markdown, json] }
+        outputTokensPerPage:
+          type: integer
+          minimum: 0
+          description: "Override the 800 tokens/page output heuristic."
+        inputTokensPerPage:
+          type: integer
+          minimum: 0
+          description: "Override the 1445 tokens/page input heuristic (used only when the model has no flat per-image rate)."
+
+    OcrCostBreakdown:
+      type: object
+      properties:
+        inputCost: { type: number }
+        outputCost: { type: number }
+        imageCost: { type: number }
+        flatRequestCost: { type: number }
+        perPageRate: { type: number }
+        totalCost: { type: number }
+        pageCount: { type: integer }
+        inputTokensPerPage: { type: integer }
+        outputTokensPerPage: { type: integer }
+        pricing:
+          type: object
+          properties:
+            inputCostPerToken: { type: number }
+            outputCostPerToken: { type: number }
+            inputCostPerImage: { type: number }
+            inputCostPerPage: { type: number }
+            flatPerRequest: { type: number }
+            source:
+              type: string
+              enum: [openrouter-live, mistral-static, litellm-mirror, ollama-local, user-override, unknown]
+            lastVerified: { type: string }
+            warnings:
+              type: array
+              items: { type: string }
+
+    OcrEstimateResponse:
+      type: object
+      required: [currency, totalPages, total, perPage, ocr, files, assumptions, warnings]
+      properties:
+        currency: { type: string, enum: [USD] }
+        totalPages: { type: integer }
+        total: { type: number }
+        perPage: { type: number }
+        ocr: { $ref: "#/components/schemas/OcrCostBreakdown" }
+        postProcessing:
+          oneOf:
+            - { $ref: "#/components/schemas/OcrCostBreakdown" }
+            - { type: "null" }
+        files:
+          type: array
+          items:
+            type: object
+            properties:
+              fileName: { type: string }
+              pageCount: { type: integer }
+              cost: { $ref: "#/components/schemas/OcrCostBreakdown" }
+        assumptions:
+          type: object
+          properties:
+            outputTokensPerPage: { type: integer }
+            inputTokensPerPage: { type: integer }
+            postProcessingOutputTokensPerPage: { type: integer }
+        warnings:
+          type: array
+          items: { type: string }
+
     BatchSubmission:
       type: object
       required: [files]
@@ -339,6 +435,38 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BatchResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/ocr/estimate:
+    post:
+      summary: Estimate OCR cost for a batch before running it
+      operationId: estimateOcrCost
+      tags: [OCR]
+      description: |
+        Returns a dollar estimate for running OCR on the supplied page
+        counts with a given provider + model. Pricing is fetched live
+        from OpenRouter for OpenRouter models, the LiteLLM community
+        registry for OpenAI-compatible models, and a static table for
+        Mistral OCR (which has no pricing API). Ollama always returns
+        $0. Self-hosted endpoints with no mirror entry return $0 plus a
+        warning so the caller knows the estimate excludes provider cost.
+
+        The response includes per-file breakdowns, ocr/postProcessing
+        sub-totals, and the assumed input/output tokens per page so
+        callers can override the heuristic when they have better data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OcrEstimateRequest" }
+      responses:
+        "200":
+          description: Estimate computed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OcrEstimateResponse" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
