@@ -4,7 +4,7 @@ import { ApiRouteError } from "@/lib/api-error";
 import { withAuth } from "@/lib/auth/request";
 import { listDropboxFolder } from "@/lib/integrations/dropbox";
 
-export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) => {
+export const GET = withAuth("integrations:read", async (request: NextRequest, { auth }) => {
   const url = new URL(request.url);
   const path = url.searchParams.get("path") ?? "";
   try {

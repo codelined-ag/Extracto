@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { ApiRouteError } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
+import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
 import { redactPii } from "@/lib/pii/redact";
+import { getClientIpAddress } from "@/lib/request-security";
 
 const MAX_TEXT_BYTES = 5 * 1024 * 1024;
 
-export const POST = withMutationAuth("ocr:submit", async (request: NextRequest) => {
+export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { auth }) => {
+  const limited = await enforceOcrSubmitRateLimit(auth, getClientIpAddress(request));
+  if (limited) return limited;
   const raw = await request.json().catch(() => null);
   if (!raw || typeof raw !== "object") {
     throw new ApiRouteError("Invalid JSON payload", 400);

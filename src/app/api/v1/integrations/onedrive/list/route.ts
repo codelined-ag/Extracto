@@ -4,7 +4,7 @@ import { ApiRouteError } from "@/lib/api-error";
 import { withAuth } from "@/lib/auth/request";
 import { listOneDriveFolder } from "@/lib/integrations/onedrive";
 
-export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) => {
+export const GET = withAuth("integrations:read", async (request: NextRequest, { auth }) => {
   const url = new URL(request.url);
   const folderId = (url.searchParams.get("folderId") ?? "").trim();
   try {

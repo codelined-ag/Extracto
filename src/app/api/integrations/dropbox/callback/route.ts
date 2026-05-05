@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getAuthCookieName } from "@/lib/auth/token";
+import { verifyActiveSession } from "@/lib/auth/session";
 import { exchangeAuthorizationCode } from "@/lib/integrations/dropbox";
 import {
   OAUTH_STATE_COOKIE,
@@ -29,6 +31,10 @@ export async function GET(request: NextRequest): Promise<Response> {
   const payload = unpackOAuthState(cookieState);
   if (!payload || payload.provider !== "dropbox") {
     return errorPage("OAuth state expired or tampered with. Please retry from Settings.", 400);
+  }
+  const session = await verifyActiveSession(request.cookies.get(getAuthCookieName())?.value);
+  if (!session || session.userId !== payload.userId) {
+    return errorPage("Sign in as the user who started the Dropbox connect flow, then retry.", 401);
   }
 
   try {

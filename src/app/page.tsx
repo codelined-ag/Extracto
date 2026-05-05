@@ -2489,7 +2489,12 @@ export default function ExtractoPage() {
  <div className="space-y-3">
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</Label>
- <Select value={apiSettingsDraft.provider} onValueChange={(value) => setApiSettingsDraft((prev) => { const nextProvider = normalizeProvider(value); return { ...prev, provider: nextProvider, apiEndpoint: defaultEndpointForProvider(nextProvider) }; })}>
+ <Select value={apiSettingsDraft.provider} onValueChange={(value) => setApiSettingsDraft((prev) => {
+   const nextProvider = normalizeProvider(value);
+   if (nextProvider === prev.provider) return prev;
+   setApiKeyDirty(true);
+   return { ...prev, provider: nextProvider, apiEndpoint: defaultEndpointForProvider(nextProvider), apiKey: "", hasApiKey: false };
+ })}>
  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
  <SelectContent>
  <SelectItem value="ollama">Ollama</SelectItem>

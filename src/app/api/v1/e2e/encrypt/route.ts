@@ -4,10 +4,14 @@ import { ApiRouteError } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import { encryptForUser } from "@/lib/e2e/envelope";
+import { enforceOcrSubmitRateLimit } from "@/lib/ocr/rate-limit";
+import { getClientIpAddress } from "@/lib/request-security";
 
 const MAX_TEXT_BYTES = 5 * 1024 * 1024;
 
-export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, { auth }) => {
+export const POST = withMutationAuth("ocr:read", async (request: NextRequest, { auth }) => {
+  const limited = await enforceOcrSubmitRateLimit(auth, getClientIpAddress(request));
+  if (limited) return limited;
   const raw = await request.json().catch(() => null);
   if (!raw || typeof raw !== "object") {
     throw new ApiRouteError("Invalid JSON payload", 400);

@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/token", () => ({
   getAuthCookieName: () => "estracto_session",
-  verifySessionToken: vi.fn(),
+}));
+
+vi.mock("@/lib/auth/session", () => ({
+  verifyActiveSession: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/api-key-shared", () => ({
@@ -11,11 +14,11 @@ vi.mock("@/lib/auth/api-key-shared", () => ({
   isLikelyApiKey: (value: string) => value.startsWith("extr_"),
 }));
 
-import { verifySessionToken } from "@/lib/auth/token";
+import { verifyActiveSession } from "@/lib/auth/session";
 import { middleware } from "@/middleware";
 import { NextRequest } from "next/server";
 
-const mockedVerify = verifySessionToken as ReturnType<typeof vi.fn>;
+const mockedVerify = verifyActiveSession as ReturnType<typeof vi.fn>;
 
 function makeRequest(pathname: string, init: { cookie?: string; auth?: string } = {}): NextRequest {
   const headers = new Headers();
@@ -37,7 +40,12 @@ describe("middleware PUBLIC_PATHS allowlist", () => {
     "/api/auth",
     "/api/auth/session",
     "/api/health",
+    "/api/integrations/dropbox/callback",
+    "/api/integrations/google_drive/callback",
+    "/api/integrations/onedrive/callback",
     "/api/v1/metrics",
+    "/api/v1/docs",
+    "/api/v1/openapi.yaml",
     "/manifest.webmanifest",
     "/sw.js",
     "/extracto-favicon.svg",
@@ -63,7 +71,7 @@ describe("middleware PUBLIC_PATHS allowlist", () => {
 
 describe("middleware authenticated session", () => {
   it("forwards an authenticated request with valid cookie", async () => {
-    mockedVerify.mockResolvedValueOnce({ userId: "u1" });
+    mockedVerify.mockResolvedValueOnce({ userId: "u1", email: "u@x", name: "u", pv: 1, exp: 9999999999 });
     const res = await middleware(
       makeRequest("/dashboard", { cookie: "estracto_session=valid-token" }),
     );
