@@ -160,4 +160,97 @@ describe("runPostProcessingStage", () => {
       latencyMs: 50,
     });
   });
+
+  it("hands a translation instruction to the provider when template is 'translate'", async () => {
+    mockedRun.mockResolvedValueOnce({ text: "Bonjour le monde", metadata: {} });
+    const state = freshState();
+    await runPostProcessingStage(
+      state,
+      makeDeps({
+        postProcessingPayload: {
+          enabled: true,
+          outputFormat: "markdown",
+          instruction:
+            "Translate the OCR'd document into French. Preserve every heading, list, table, and code block in the same place. Do not add commentary or summarize. Output the translation only.",
+          model: "openai/gpt-4o",
+          template: "translate",
+          targetLanguage: "French",
+        },
+        postProcessingModel: "openai/gpt-4o",
+      }),
+    );
+    const call = mockedRun.mock.calls[0];
+    const systemPrompt = call[3] as string;
+    const userPrompt = call[4] as string;
+    expect(systemPrompt).toMatch(/precise post-processing assistant/);
+    expect(userPrompt).toContain("French");
+    expect(userPrompt).toContain("Translate the OCR'd document");
+    expect(userPrompt).toContain("Preserve every heading");
+    expect(userPrompt).toContain("Output the translation only.");
+  });
+
+  it("hands a 3-sentence summary instruction when template is 'summarize-3sentence'", async () => {
+    mockedRun.mockResolvedValueOnce({ text: "Three sentences.", metadata: {} });
+    await runPostProcessingStage(
+      freshState(),
+      makeDeps({
+        postProcessingPayload: {
+          enabled: true,
+          outputFormat: "markdown",
+          instruction:
+            "Summarize the OCR'd document in three sentences. Capture the main point, the supporting evidence, and any next steps the document calls for. Output the summary only.",
+          model: "openai/gpt-4o",
+          template: "summarize-3sentence",
+          targetLanguage: "",
+        },
+        postProcessingModel: "openai/gpt-4o",
+      }),
+    );
+    const userPrompt = mockedRun.mock.calls[0][4] as string;
+    expect(userPrompt).toContain("three sentences");
+    expect(userPrompt).toContain("main point");
+  });
+
+  it("hands an extract-actions instruction when template is 'extract-actions'", async () => {
+    mockedRun.mockResolvedValueOnce({ text: "- do thing", metadata: {} });
+    await runPostProcessingStage(
+      freshState(),
+      makeDeps({
+        postProcessingPayload: {
+          enabled: true,
+          outputFormat: "markdown",
+          instruction:
+            "Extract all action items from the OCR'd document. Output as a markdown list. Each item starts with the verb, names the owner if mentioned, and includes the deadline if mentioned. If the document has no action items, output the single line: No action items found.",
+          model: "openai/gpt-4o",
+          template: "extract-actions",
+          targetLanguage: "",
+        },
+        postProcessingModel: "openai/gpt-4o",
+      }),
+    );
+    const userPrompt = mockedRun.mock.calls[0][4] as string;
+    expect(userPrompt).toContain("action items");
+    expect(userPrompt).toContain("No action items found");
+  });
+
+  it("uses the user's free-form instruction when template is 'custom'", async () => {
+    mockedRun.mockResolvedValueOnce({ text: "anything", metadata: {} });
+    await runPostProcessingStage(
+      freshState(),
+      makeDeps({
+        postProcessingPayload: {
+          enabled: true,
+          outputFormat: "markdown",
+          instruction: "Reformat as a CSV table",
+          model: "openai/gpt-4o",
+          template: "custom",
+          targetLanguage: "",
+        },
+        postProcessingModel: "openai/gpt-4o",
+      }),
+    );
+    const userPrompt = mockedRun.mock.calls[0][4] as string;
+    expect(userPrompt).toContain("Reformat as a CSV table");
+    expect(userPrompt).not.toContain("Translate");
+  });
 });

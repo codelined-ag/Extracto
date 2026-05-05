@@ -405,31 +405,38 @@
   .tg-dialog-body,
   .tg-dialog-footer,
   .tg-step-counter,
-  .tg-prev-btn,
-  .tg-next-btn,
-  .tg-finish-btn,
-  .tg-x-btn {
+  .tg-dialog-btn,
+  .tg-dialog-close-btn {
     color: var(--card-foreground) !important;
   }
-  .tg-prev-btn,
-  .tg-next-btn,
-  .tg-finish-btn {
+  .tg-dialog-btn {
     background-color: var(--primary) !important;
     color: var(--primary-foreground) !important;
     border-radius: 9999px !important;
     padding: 0.4rem 0.9rem !important;
     border: none !important;
+    cursor: pointer;
   }
-  .tg-prev-btn {
+  .tg-dialog-btn.disabled,
+  .tg-dialog-btn:disabled {
     background-color: color-mix(in oklab, var(--card-foreground), transparent 88%) !important;
-    color: var(--card-foreground) !important;
+    color: color-mix(in oklab, var(--card-foreground), transparent 50%) !important;
+    cursor: not-allowed;
   }
+  .tg-dialog-close-btn,
   .tg-x-btn {
     background: transparent !important;
     border: none !important;
     opacity: 0.7;
   }
+  .tg-dialog-close-btn:hover,
   .tg-x-btn:hover { opacity: 1; }
+  .tg-step-progress-active {
+    background-color: var(--primary) !important;
+  }
+  .tg-step-progress {
+    background-color: color-mix(in oklab, var(--card-foreground), transparent 80%) !important;
+  }
   .tg-arrow {
     border-color: var(--card) transparent !important;
   }
