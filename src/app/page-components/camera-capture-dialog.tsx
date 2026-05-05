@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Camera, RotateCcw, Check, X, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { Camera, RotateCcw, Check, X, Loader2, Sparkles, Trash2, Crop } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,13 @@ import {
   enhanceForOcr,
   type CaptureMode,
 } from "@/lib/image/enhance";
+import {
+  detectDocumentQuad,
+  quadOutputSize,
+  scaleQuad,
+  type Quad,
+} from "@/lib/image/document-detect";
+import { warpPerspective } from "@/lib/image/perspective-warp";
 
 import type { Translator } from "@/app/page-components/types";
 
@@ -67,8 +74,17 @@ export function CameraCaptureDialog({
   const [mode, setMode] = React.useState<CaptureMode>("document");
   const [shots, setShots] = React.useState<BatchShot[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
+  const [autoCrop, setAutoCrop] = React.useState(false);
+  const [liveQuad, setLiveQuad] = React.useState<Quad | null>(null);
+  const [liveDetectSize, setLiveDetectSize] = React.useState<{ width: number; height: number } | null>(null);
   const submittingRef = React.useRef(false);
+  const autoCropRef = React.useRef(false);
+  const detectLoopRef = React.useRef<number | null>(null);
+  const detectCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const shotsRef = React.useRef<BatchShot[]>([]);
+  React.useEffect(() => {
+    autoCropRef.current = autoCrop;
+  }, [autoCrop]);
   React.useEffect(() => {
     shotsRef.current = shots;
   }, [shots]);
@@ -109,11 +125,58 @@ export function CameraCaptureDialog({
       setShots([]);
       setMode("document");
       setEnhance(true);
+      setAutoCrop(false);
+      setLiveQuad(null);
+      setLiveDetectSize(null);
       return;
     }
     void startStream();
     return () => stopStream();
   }, [open, startStream, stopStream]);
+
+  React.useEffect(() => {
+    if (!open || status !== "ready") {
+      if (detectLoopRef.current !== null) {
+        window.clearInterval(detectLoopRef.current);
+        detectLoopRef.current = null;
+      }
+      return;
+    }
+    const tick = () => {
+      if (!autoCropRef.current) {
+        setLiveQuad((prev) => (prev === null ? prev : null));
+        return;
+      }
+      const video = videoRef.current;
+      if (!video || video.readyState < 2) return;
+      const sw = video.videoWidth;
+      const sh = video.videoHeight;
+      if (!sw || !sh) return;
+      const targetW = 240;
+      const targetH = Math.max(1, Math.round((sh / sw) * targetW));
+      const work = detectCanvasRef.current ?? document.createElement("canvas");
+      detectCanvasRef.current = work;
+      if (work.width !== targetW || work.height !== targetH) {
+        work.width = targetW;
+        work.height = targetH;
+      }
+      const ctx = work.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, targetW, targetH);
+      const image = ctx.getImageData(0, 0, targetW, targetH);
+      const detection = detectDocumentQuad({ data: image.data, width: targetW, height: targetH });
+      setLiveDetectSize({ width: targetW, height: targetH });
+      setLiveQuad(detection ? detection.quad : null);
+    };
+    detectLoopRef.current = window.setInterval(tick, 250);
+    tick();
+    return () => {
+      if (detectLoopRef.current !== null) {
+        window.clearInterval(detectLoopRef.current);
+        detectLoopRef.current = null;
+      }
+    };
+  }, [open, status]);
 
   const renderFromRaw = React.useCallback(
     (useEnhance: boolean, captureMode: CaptureMode) => {
@@ -147,7 +210,14 @@ export function CameraCaptureDialog({
     const rawCtx = raw.getContext("2d");
     if (!rawCtx) return;
     rawCtx.drawImage(video, 0, 0, w, h);
-    rawCanvasRef.current = raw;
+    let source: HTMLCanvasElement = raw;
+    if (autoCrop && liveQuad && liveDetectSize) {
+      const fullQuad = scaleQuad(liveQuad, w / liveDetectSize.width, h / liveDetectSize.height);
+      const out = quadOutputSize(fullQuad);
+      const warped = warpPerspective(raw, w, h, fullQuad, out.width, out.height);
+      if (warped) source = warped;
+    }
+    rawCanvasRef.current = source;
     const canvas = renderFromRaw(enhance, mode);
     if (!canvas) return;
     setSnapshot(canvas.toDataURL("image/jpeg", 0.92));
@@ -316,6 +386,22 @@ export function CameraCaptureDialog({
             muted
             className={`w-full h-full object-contain ${snapshot ? "invisible" : ""}`}
           />
+          {!snapshot && autoCrop && liveQuad && liveDetectSize ? (
+            <svg
+              viewBox={`0 0 ${liveDetectSize.width} ${liveDetectSize.height}`}
+              preserveAspectRatio="xMidYMid meet"
+              className="absolute inset-0 w-full h-full pointer-events-none"
+              data-testid="quad-overlay"
+            >
+              <polygon
+                points={liveQuad.map((p) => `${p[0]},${p[1]}`).join(" ")}
+                fill="rgba(34,197,94,0.18)"
+                stroke="rgb(34,197,94)"
+                strokeWidth={2}
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+          ) : null}
           {snapshot ? (
             <img
               src={snapshot}
@@ -353,6 +439,18 @@ export function CameraCaptureDialog({
             {enhance
               ? t("Migliora attivo", "Enhance on", "Amélioration activée", "Mejora activada", "Verbesserung aktiv")
               : t("Migliora disattivo", "Enhance off", "Amélioration désactivée", "Mejora desactivada", "Verbesserung aus")}
+          </Button>
+          <Button
+            type="button"
+            variant={autoCrop ? "default" : "outline"}
+            size="sm"
+            onClick={() => setAutoCrop((v) => !v)}
+            data-testid="autocrop-toggle"
+          >
+            <Crop className="size-3.5 mr-1.5" />
+            {autoCrop
+              ? t("Ritaglio auto attivo", "Auto-crop on", "Recadrage auto activé", "Recorte auto activado", "Auto-Zuschnitt aktiv")
+              : t("Ritaglio auto disattivo", "Auto-crop off", "Recadrage auto désactivé", "Recorte auto desactivado", "Auto-Zuschnitt aus")}
           </Button>
           <span className="text-xs text-muted-foreground">
             {t(
