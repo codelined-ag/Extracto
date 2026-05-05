@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApiKeysSection } from "@/app/page-components/api-keys-section";
+import { EmailChangeSection } from "@/app/page-components/email-change-section";
 import { NotificationsSection } from "@/app/page-components/notifications-section";
 import { SecuritySection } from "@/app/page-components/security-section";
 import { UsageSection } from "@/app/page-components/usage-section";
@@ -111,6 +112,20 @@ export function AccountDialog({ open, onOpenChange, t, uiLanguage, setUiLanguage
                 )}
               >
                 <NotificationsSection t={t} />
+              </SettingsAccordionItem>
+
+              <SettingsAccordionItem
+                value="email"
+                title={t("Email", "Email", "Email", "Email", "E-Mail")}
+                hint={t(
+                  "Cambia l'indirizzo email del tuo account.",
+                  "Change your account email.",
+                  "Modifie l'email du compte.",
+                  "Cambia el email de la cuenta.",
+                  "E-Mail-Adresse des Kontos ändern.",
+                )}
+              >
+                <EmailChangeSection t={t} />
               </SettingsAccordionItem>
 
               <SettingsAccordionItem

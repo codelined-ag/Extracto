@@ -28,6 +28,9 @@ model AuthUser {
   totpSecret            String?
   totpEnabled           Boolean        @default(false)
   totpRecoveryCodesHash Json?
+  pendingEmail          String?
+  emailChangeTokenHash  String?
+  emailChangeExpiresAt  DateTime?
   name                  String?
   jobs               OcrJob[]
   apiKeys            ApiKey[]
