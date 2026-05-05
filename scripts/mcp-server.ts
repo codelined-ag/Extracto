@@ -599,5 +599,42 @@ server.tool(
     ),
 );
 
+server.tool(
+  "google_drive_list_folder",
+  "List a Google Drive folder. Pass an empty string or 'root' to list the My Drive root. Returns each entry's id, name, mimeType, kind (file/folder), size, and modified timestamp.",
+  { folderId: z.string().default("root") },
+  async ({ folderId }) =>
+    asTextResult(
+      await call(`/api/v1/integrations/google_drive/list?folderId=${encodeURIComponent(folderId)}`),
+    ),
+);
+
+server.tool(
+  "google_drive_import",
+  "Download a file from the user's Google Drive (by file id) and submit it for OCR. Returns a jobId. Supports pdf, png, jpg, webp up to 32 MiB.",
+  {
+    fileId: z.string().describe("Google Drive file id."),
+    model: z.string(),
+  },
+  async (input) =>
+    asTextResult(
+      await call("/api/v1/integrations/google_drive/import", { method: "POST", body: input }),
+    ),
+);
+
+server.tool(
+  "google_drive_push",
+  "Push a COMPLETED job's text back into Google Drive in the chosen format. Pass `parentId` to control the destination folder (empty falls back to My Drive root).",
+  {
+    jobId: z.string(),
+    parentId: z.string().default(""),
+    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx", "obsidian"]).default("md"),
+  },
+  async (input) =>
+    asTextResult(
+      await call("/api/v1/integrations/google_drive/push", { method: "POST", body: input }),
+    ),
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);

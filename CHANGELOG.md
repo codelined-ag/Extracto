@@ -13,6 +13,7 @@ follows [SemVer](https://semver.org/).
 - Post-processing template for translation: pick a target language and the server builds the right instruction; available on REST, MCP, and CLI.
 - Post-processing templates for summarization: 3-sentence, executive, and extract-actions, each with a server-built instruction; available on REST, MCP, and CLI.
 - Dropbox bidirectional integration: per-user OAuth (PKCE), encrypted token store, list folder, import a file straight into the OCR queue, and push results back into a chosen path; available on REST, MCP, and CLI.
+- Google Drive bidirectional integration: per-user OAuth (PKCE) on the least-privilege `drive.file` scope, list folder, import a Drive file into the OCR queue, push results back to a chosen folder; available on REST, MCP, and CLI.
 
 ## [0.10.0] - 2026-05-05
 

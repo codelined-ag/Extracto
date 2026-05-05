@@ -222,6 +222,16 @@ extracto dropbox disconnect
 
 Import downloads the file from Dropbox, queues it for OCR, and returns the `jobId`. Push renders a COMPLETED job to the chosen format and uploads it back to the chosen folder. Same surface is exposed on `POST /api/v1/integrations/dropbox/{import,push}` and the `dropbox_*` MCP tools.
 
+```bash
+extracto gdrive list                                         # list root of My Drive
+extracto gdrive list <folder-id>                             # list a folder by Drive id
+extracto gdrive import --file <file-id> --model openai/gpt-4o
+extracto gdrive push --job <job-id> --parent <folder-id> --format docx
+extracto gdrive disconnect
+```
+
+Google Drive uses the least-privilege `drive.file` scope: the app can only see files the user picks via the connected app or files the app itself created. While the operator's OAuth project is in Google's "Testing" status, refresh tokens expire after 7 days; submit the project for Basic Verification (no security audit) to remove that limit. Same surface on `POST /api/v1/integrations/google_drive/{import,push}` and the `google_drive_*` MCP tools.
+
 ## Lifecycle commands (no token required)
 
 ```bash
