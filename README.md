@@ -30,7 +30,7 @@
   </picture>
 </p>
 
-> **v0.9.0**: per-page language detection, first-page document metadata (title, date, authors, keywords), document-type classification, auto re-OCR on degenerate output, inline page editing with version history, and page-pip jumping in the History dialog. See the [changelog](./CHANGELOG.md).
+> **v0.11.0**: pre-run cost estimator with live per-token pricing from OpenRouter and the LiteLLM mirror, DOCX/RTF/CSV/XLSX/HTML export formats, Obsidian vault export with frontmatter and per-page notes, translation and summarization post-processing templates, and bidirectional Dropbox / Google Drive / OneDrive integration on least-privilege OAuth scopes. See the [changelog](./CHANGELOG.md).
 
 ---
 
