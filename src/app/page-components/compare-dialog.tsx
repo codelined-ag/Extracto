@@ -143,6 +143,9 @@ export function CompareDialog({
   React.useEffect(() => {
     if (!comparisonId) return;
     let cancelled = false;
+    let delay = 2000;
+    const startedAt = Date.now();
+    const MAX_RUN_MS = 12 * 60 * 1000;
     const tick = async () => {
       try {
         const res = await fetch(`/api/ocr/compare?id=${encodeURIComponent(comparisonId)}`);
@@ -156,11 +159,22 @@ export function CompareDialog({
           return;
         }
       } catch { /* keep polling */ }
-      if (!cancelled) setTimeout(tick, 2000);
+      if (cancelled) return;
+      if (Date.now() - startedAt > MAX_RUN_MS) {
+        setRunning(false);
+        toast({
+          title: t("Confronto interrotto", "Compare timed out", "Comparaison interrompue", "Comparación caducada", "Vergleich abgebrochen"),
+          description: t("Le esecuzioni hanno superato il tempo massimo. Apri History per controllare i job rimasti in coda.", "Runs exceeded the time budget. Open History to check on the queued jobs.", "Les exécutions ont dépassé le budget de temps. Ouvre l'historique pour vérifier les jobs en file.", "Las ejecuciones superaron el límite. Abre el historial para revisar los trabajos pendientes.", "Die Läufe haben das Zeitbudget überschritten. Öffne den Verlauf, um die wartenden Jobs zu prüfen."),
+          variant: "destructive",
+        });
+        return;
+      }
+      delay = Math.min(30_000, Math.round(delay * 1.4));
+      setTimeout(tick, delay);
     };
     void tick();
     return () => { cancelled = true; };
-  }, [comparisonId]);
+  }, [comparisonId, t, toast]);
 
   const baselineId = data?.jobs[0]?.id;
 

@@ -135,12 +135,17 @@ export function RecommendationsDialog({ open, onOpenChange, t }: Recommendations
                     ) : null}
                   </div>
                   {rec.best ? (
-                    <div className="flex items-center gap-2 text-sm">
+                    <div className="flex items-center gap-2 text-sm flex-wrap">
                       <Badge variant="secondary">{rec.best.model}</Badge>
                       <span className="text-xs text-muted-foreground">
                         {Math.round(rec.best.successRate * 100)}% · {rec.best.attempts} runs
                         {rec.best.meanMs ? ` · avg ${(rec.best.meanMs / 1000).toFixed(1)}s` : ""}
                       </span>
+                      {rec.best.attempts < 10 ? (
+                        <Badge variant="outline" className="text-[10px] py-0 px-1">
+                          {t("bassa fiducia", "low confidence", "faible confiance", "baja confianza", "geringe Sicherheit")}
+                        </Badge>
+                      ) : null}
                     </div>
                   ) : null}
                   {rec.alternatives.length > 0 ? (
