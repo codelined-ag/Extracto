@@ -114,6 +114,17 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   return refreshed.accessToken;
 }
 
+export async function revokeDropboxToken(accessToken: string): Promise<void> {
+  const res = await fetch("https://api.dropboxapi.com/2/auth/token/revoke", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!res.ok) {
+    console.warn(`[dropbox] token revoke returned ${res.status}`);
+  }
+}
+
 async function refreshAccessToken(refreshToken: string, userId: string): Promise<{ accessToken: string; expiresAt?: number }> {
   const creds = await requireDropboxCredentials(userId);
   const body = new URLSearchParams({

@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
 import { withSessionAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-import { isWatcherProvider } from "@/lib/integrations/dispatch";
+import { isCloudProvider, isWatcherProvider } from "@/lib/integrations/dispatch";
 
 const MIN_INTERVAL = 60;
 const MAX_INTERVAL = 86400;
@@ -64,6 +64,18 @@ export const POST = withSessionAuth(
   async (request: NextRequest, { auth }) => {
     const body = await parseJsonBody<WatcherInput>(request);
     const data = normalize(body);
+    if (isCloudProvider(data.provider)) {
+      const connection = await db.integrationConnection.findUnique({
+        where: { userId_provider: { userId: auth.userId, provider: data.provider } },
+        select: { provider: true },
+      });
+      if (!connection) {
+        throw new ApiRouteError(
+          `Connect ${data.provider} before creating a watcher for it`,
+          400,
+        );
+      }
+    }
     try {
       const created = await db.watchedCloudFolder.create({
         data: { ...data, userId: auth.userId },

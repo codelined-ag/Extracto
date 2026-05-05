@@ -4,6 +4,7 @@ import path from "node:path";
 import type { CloudEntry } from "@/lib/integrations/dispatch";
 
 const SUPPORTED_EXTS = [".pdf", ".png", ".jpg", ".jpeg", ".webp"];
+const MIN_FILE_AGE_MS = 5_000;
 
 function defaultRoot(): string {
   const explicit = process.env.LOCAL_WATCH_ROOT?.trim();
@@ -72,6 +73,7 @@ export async function listLocalFolder(userId: string, sub: string): Promise<Clou
     const ext = path.extname(entry.name).toLowerCase();
     if (!SUPPORTED_EXTS.includes(ext)) continue;
     const info = await stat(full).catch(() => null);
+    if (info && Date.now() - info.mtimeMs < MIN_FILE_AGE_MS) continue;
     out.push({
       kind: "file",
       id: rel,

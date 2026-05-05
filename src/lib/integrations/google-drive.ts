@@ -109,6 +109,19 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   return refreshed.accessToken;
 }
 
+export async function revokeGoogleToken(token: string): Promise<void> {
+  const body = new URLSearchParams({ token });
+  const res = await fetch("https://oauth2.googleapis.com/revoke", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!res.ok) {
+    console.warn(`[google-drive] token revoke returned ${res.status}`);
+  }
+}
+
 async function refreshAccessToken(refreshToken: string, userId: string): Promise<{ accessToken: string; expiresAt?: number }> {
   const creds = await requireGoogleDriveCredentials(userId);
   const body = new URLSearchParams({

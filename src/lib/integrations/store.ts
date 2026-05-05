@@ -3,6 +3,8 @@ import {
   decryptIntegrationTokens,
   encryptIntegrationTokens,
 } from "@/lib/integrations/crypto";
+import { revokeDropboxToken } from "@/lib/integrations/dropbox";
+import { revokeGoogleToken } from "@/lib/integrations/google-drive";
 import type { IntegrationProvider, IntegrationTokenBlob } from "@/lib/integrations/types";
 
 export async function saveIntegrationConnection(input: {
@@ -62,18 +64,35 @@ export async function listIntegrationConnections(userId: string) {
   return rows;
 }
 
+async function revokeProviderToken(
+  provider: IntegrationProvider,
+  tokens: IntegrationTokenBlob,
+): Promise<void> {
+  try {
+    if (provider === "dropbox") {
+      await revokeDropboxToken(tokens.accessToken);
+    } else if (provider === "google_drive") {
+      await revokeGoogleToken(tokens.refreshToken || tokens.accessToken);
+    }
+  } catch (err) {
+    console.warn(`[integrations] ${provider} token revoke failed:`, err);
+  }
+}
+
 export async function deleteIntegrationConnection(
   userId: string,
   provider: IntegrationProvider,
 ): Promise<boolean> {
+  const tokens = await loadIntegrationConnection(userId, provider);
   try {
     await db.integrationConnection.delete({
       where: { userId_provider: { userId, provider } },
     });
-    return true;
   } catch {
     return false;
   }
+  if (tokens) await revokeProviderToken(provider, tokens);
+  return true;
 }
 
 export async function updateIntegrationTokens(
