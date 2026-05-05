@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { db } from "@/lib/db";
 import { normalizeProvider } from "@/lib/api-types";
+import { dispatchUserWebhooks } from "@/lib/background/webhooks";
 import { normalizePreviewForHistory } from "@/lib/ocr/job-input-helpers";
 import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
 import { submitOcrJob } from "@/lib/ocr/job-submit";
@@ -106,6 +107,11 @@ async function ingestFile(filePath: string, user: UserRef): Promise<void> {
     "utf8"
   );
   console.log(`[watched-folder] queued ${fileName} → ${jobId}`);
+
+  void dispatchUserWebhooks(user.id, "watcher.ingested", {
+    source: { kind: "local", folder: cfg.folder, fileName },
+    jobId,
+  }).catch((err) => console.warn("[watched-folder] webhook dispatch failed:", err));
 }
 
 async function pollOnce(): Promise<void> {

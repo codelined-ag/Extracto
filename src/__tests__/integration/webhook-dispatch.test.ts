@@ -178,6 +178,7 @@ describe("dispatchJobWebhooks integration", () => {
     expect(mUpdateWebhook).toHaveBeenCalledWith({
       where: { id: "wh-unsafe-redirect" },
       data: { failureCount: { increment: 1 } },
+      select: { failureCount: true, active: true },
     });
   });
 
@@ -198,6 +199,7 @@ describe("dispatchJobWebhooks integration", () => {
     expect(mUpdateWebhook).toHaveBeenCalledWith({
       where: { id: "wh-private" },
       data: { failureCount: { increment: 1 } },
+      select: { failureCount: true, active: true },
     });
   });
 
@@ -217,7 +219,46 @@ describe("dispatchJobWebhooks integration", () => {
     expect(mUpdateWebhook).toHaveBeenCalledWith({
       where: { id: "wh-fail" },
       data: { failureCount: { increment: 1 } },
+      select: { failureCount: true, active: true },
     });
+  });
+
+  it("auto-disables a webhook once consecutive failures cross the threshold", async () => {
+    mFindWebhooks.mockResolvedValueOnce([
+      {
+        id: "wh-disable",
+        url: "https://example.test/hook",
+        secret: SECRET,
+        events: serializeEventList(["job.completed"]),
+      },
+    ]);
+    mockedFetch.mockResolvedValueOnce(new Response("nope", { status: 503 }));
+    mUpdateWebhook.mockResolvedValueOnce({ failureCount: 20, active: true });
+
+    await dispatchJobWebhooks("job-1", "job.completed");
+
+    expect(mUpdateWebhook).toHaveBeenCalledTimes(2);
+    expect(mUpdateWebhook).toHaveBeenLastCalledWith({
+      where: { id: "wh-disable" },
+      data: { active: false },
+    });
+  });
+
+  it("does not auto-disable while failureCount stays under the threshold", async () => {
+    mFindWebhooks.mockResolvedValueOnce([
+      {
+        id: "wh-still-on",
+        url: "https://example.test/hook",
+        secret: SECRET,
+        events: serializeEventList(["job.completed"]),
+      },
+    ]);
+    mockedFetch.mockResolvedValueOnce(new Response("nope", { status: 503 }));
+    mUpdateWebhook.mockResolvedValueOnce({ failureCount: 5, active: true });
+
+    await dispatchJobWebhooks("job-1", "job.completed");
+
+    expect(mUpdateWebhook).toHaveBeenCalledTimes(1);
   });
 
   it("delivers to multiple matching webhooks in parallel with distinct signatures", async () => {

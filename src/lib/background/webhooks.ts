@@ -20,6 +20,7 @@ const WEBHOOK_TIMEOUT_MS = 5_000;
 const WEBHOOK_USER_AGENT = "Extracto-Webhook/1.0";
 const WEBHOOK_MAX_REDIRECTS = 5;
 export const WEBHOOK_SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
+export const WEBHOOK_AUTO_DISABLE_THRESHOLD = 20;
 
 export function isSupportedWebhookEvent(value: string): value is WebhookEvent {
   return (SUPPORTED_EVENTS as readonly string[]).includes(value);
@@ -284,63 +285,7 @@ export async function dispatchJobWebhooks(
   });
 
   await Promise.all(
-    matching.map(async (webhook) => {
-      const signature = signPayload(webhook.secret, body, timestamp);
-      const controller = new AbortController();
-      const timeoutHandle = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
-      const startedAt = Date.now();
-      let statusCode: number | null = null;
-      let ok = false;
-      let errorMessage: string | null = null;
-      try {
-        const response = await fetchWebhookWithValidatedRedirects(webhook.url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "User-Agent": WEBHOOK_USER_AGENT,
-            "X-Extracto-Event": event,
-            "X-Extracto-Signature": `t=${timestamp},v1=${signature}`,
-          },
-          body,
-          signal: controller.signal,
-        }, parseAllowlist(process.env.WEBHOOK_ALLOWED_HOSTS));
-        statusCode = response.status;
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        ok = true;
-        await db.webhook
-          .update({
-            where: { id: webhook.id },
-            data: { lastFiredAt: new Date(), failureCount: 0 },
-          })
-          .catch(() => undefined);
-      } catch (error) {
-        errorMessage = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
-        console.error(`Webhook ${webhook.id} delivery failed:`, error);
-        await db.webhook
-          .update({
-            where: { id: webhook.id },
-            data: { failureCount: { increment: 1 } },
-          })
-          .catch(() => undefined);
-      } finally {
-        clearTimeout(timeoutHandle);
-        await db.webhookDelivery
-          .create({
-            data: {
-              webhookId: webhook.id,
-              event,
-              url: webhook.url,
-              statusCode: statusCode ?? null,
-              ok,
-              durationMs: Date.now() - startedAt,
-              errorMessage,
-            },
-          })
-          .catch(() => undefined);
-      }
-    })
+    matching.map((webhook) => attemptWebhookDelivery({ webhook, event, body, timestamp })),
   );
 }
 
@@ -365,47 +310,81 @@ export async function dispatchUserWebhooks(
   const body = JSON.stringify({ event, occurredAt: new Date().toISOString(), ...payload });
 
   await Promise.all(
-    matching.map(async (webhook) => {
-      const signature = signPayload(webhook.secret, body, timestamp);
-      const controller = new AbortController();
-      const timeoutHandle = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
-      const startedAt = Date.now();
-      let statusCode: number | null = null;
-      let ok = false;
-      let errorMessage: string | null = null;
-      try {
-        const response = await fetchWebhookWithValidatedRedirects(webhook.url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "User-Agent": WEBHOOK_USER_AGENT,
-            "X-Extracto-Event": event,
-            "X-Extracto-Signature": `t=${timestamp},v1=${signature}`,
-          },
-          body,
-          signal: controller.signal,
-        }, parseAllowlist(process.env.WEBHOOK_ALLOWED_HOSTS));
-        statusCode = response.status;
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        ok = true;
-      } catch (error) {
-        errorMessage = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
-      } finally {
-        clearTimeout(timeoutHandle);
-        await db.webhookDelivery
-          .create({
-            data: {
-              webhookId: webhook.id,
-              event,
-              url: webhook.url,
-              statusCode: statusCode ?? null,
-              ok,
-              durationMs: Date.now() - startedAt,
-              errorMessage,
-            },
-          })
-          .catch(() => undefined);
-      }
-    }),
+    matching.map((webhook) => attemptWebhookDelivery({ webhook, event, body, timestamp })),
   );
+}
+
+interface AttemptInput {
+  webhook: { id: string; url: string; secret: string };
+  event: WebhookEvent;
+  body: string;
+  timestamp: number;
+}
+
+async function attemptWebhookDelivery({ webhook, event, body, timestamp }: AttemptInput): Promise<void> {
+  const signature = signPayload(webhook.secret, body, timestamp);
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+  const startedAt = Date.now();
+  let statusCode: number | null = null;
+  let ok = false;
+  let errorMessage: string | null = null;
+  try {
+    const response = await fetchWebhookWithValidatedRedirects(webhook.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": WEBHOOK_USER_AGENT,
+        "X-Extracto-Event": event,
+        "X-Extracto-Signature": `t=${timestamp},v1=${signature}`,
+      },
+      body,
+      signal: controller.signal,
+    }, parseAllowlist(process.env.WEBHOOK_ALLOWED_HOSTS));
+    statusCode = response.status;
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    ok = true;
+    await db.webhook
+      .update({
+        where: { id: webhook.id },
+        data: { lastFiredAt: new Date(), failureCount: 0 },
+      })
+      .catch(() => undefined);
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
+    console.error(`Webhook ${webhook.id} delivery failed:`, error);
+    const updated = await db.webhook
+      .update({
+        where: { id: webhook.id },
+        data: { failureCount: { increment: 1 } },
+        select: { failureCount: true, active: true },
+      })
+      .catch(() => null);
+    if (
+      updated &&
+      updated.active === true &&
+      typeof updated.failureCount === "number" &&
+      updated.failureCount >= WEBHOOK_AUTO_DISABLE_THRESHOLD
+    ) {
+      await db.webhook
+        .update({ where: { id: webhook.id }, data: { active: false } })
+        .catch(() => undefined);
+      console.warn(`Webhook ${webhook.id} auto-disabled after ${updated.failureCount} consecutive failures`);
+    }
+  } finally {
+    clearTimeout(timeoutHandle);
+    await db.webhookDelivery
+      .create({
+        data: {
+          webhookId: webhook.id,
+          event,
+          url: webhook.url,
+          statusCode: statusCode ?? null,
+          ok,
+          durationMs: Date.now() - startedAt,
+          errorMessage,
+        },
+      })
+      .catch(() => undefined);
+  }
 }

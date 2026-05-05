@@ -15,6 +15,7 @@ import {
 import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
 import { submitOcrJob } from "@/lib/ocr/job-submit";
 import { getApiSettings } from "@/lib/ocr/settings-store";
+import { dispatchUserWebhooks } from "@/lib/background/webhooks";
 
 const MIN_INTERVAL_SECONDS = 60;
 const MAX_BYTES_PER_OBJECT = 64 * 1024 * 1024;
@@ -114,6 +115,11 @@ async function ingestEntry(
     where: { sourceId_remoteId: { sourceId: source.id, remoteId } },
     data: { jobId },
   });
+
+  void dispatchUserWebhooks(source.userId, "watcher.ingested", {
+    source: { id: source.id, provider: source.provider, remoteId, name },
+    jobId,
+  }).catch((err) => console.warn("[cloud-watcher] webhook dispatch failed:", err));
 
   return { skipped: false };
 }
