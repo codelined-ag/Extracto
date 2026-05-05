@@ -6,7 +6,27 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-05-06
+
+Hardening pass over the v1.3.0 surface after a 5-agent gap audit.
+
 - Wire up the previously REST-only v1.0 features that never got browser UI: form-fields and equations panels on completed jobs, RSA SPKI public-key registration in Account → End-to-end encryption, webhooks list / create / pause / delete / delivery history in Account → Webhooks, and the post-processing template picker (`custom`, `translate`, `summarize-3sentence`, `summarize-executive`, `extract-actions`) plus a target-language input.
+- Post-processing templates other than custom now actually submit; the run-readiness gate respected only the custom-instruction field. Translate without a target language surfaces a dedicated toast.
+- Webhook deliveries retry with exponential backoff (1m, 5m, 30m, 2h, 12h) and auto-disable after 20 consecutive failures.
+- Local and DB-backed watchers fire watcher.ingested on every successful submission; previously only the S3 watcher emitted it.
+- Disconnecting Dropbox or Google Drive now revokes the OAuth token at the provider before deleting the local row.
+- DB-backed local watcher skips files younger than 5s so partial copies cannot be ingested mid-write.
+- Watcher creation rejects cloud providers that have no integration connection.
+- PII detection: phone regex tightened, ISO and DD/MM/YYYY date formats added with the year capped at 2019 to avoid catching transaction dates, and a "PII redacted (N)" badge appears on results when the audit reports applied.
+- Equation extraction: display offsets anchored to source text, inline matches require a LaTeX hint or letter-with-operator, escaped dollar pairs are ignored.
+- Form-fields endpoint falls back to invoice / receipt / contract / id / academic wrappers and to a flat fields object so non-form presets surface their data.
+- Job extras panel retries up to three times for the brief race between job COMPLETED and metadata being readable.
+- Compare polling backs off to a 30s ceiling and aborts after 12 minutes.
+- Recommendations dialog flags low-confidence picks (fewer than 10 runs).
+- Webhook PATCH accepts url and events; new POST /api/v1/webhooks/{id}/test fires a synthetic signed delivery.
+- Webhooks parity: list, create, update, delete, test, deliveries on MCP and CLI; full SKILL section.
+- Cloud disconnect parity: integration_disconnect on MCP, the v1 DELETE routes are now bearer-auth.
+- E2E section copy clarifies that only /api/v1/e2e/encrypt responses are sealed; cloud Connect button walks users into the OAuth-app form when no credentials exist; OneDrive watcher input warns about the AppFolder scope.
 
 ## [1.3.0] - 2026-05-05
 
