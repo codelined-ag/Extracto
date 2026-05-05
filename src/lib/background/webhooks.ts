@@ -21,6 +21,8 @@ const WEBHOOK_USER_AGENT = "Extracto-Webhook/1.0";
 const WEBHOOK_MAX_REDIRECTS = 5;
 export const WEBHOOK_SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
 export const WEBHOOK_AUTO_DISABLE_THRESHOLD = 20;
+export const WEBHOOK_RETRY_BACKOFF_SECONDS = [60, 300, 1800, 7200, 43200] as const;
+export const WEBHOOK_MAX_ATTEMPTS = WEBHOOK_RETRY_BACKOFF_SECONDS.length + 1;
 
 export function isSupportedWebhookEvent(value: string): value is WebhookEvent {
   return (SUPPORTED_EVENTS as readonly string[]).includes(value);
@@ -367,7 +369,7 @@ export async function dispatchTestWebhook(
   };
 }
 
-async function attemptWebhookDelivery({ webhook, event, body, timestamp }: AttemptInput): Promise<void> {
+async function attemptWebhookDelivery({ webhook, event, body, timestamp, deliveryId, attempt = 0 }: AttemptInput & { deliveryId?: string; attempt?: number }): Promise<void> {
   const signature = signPayload(webhook.secret, body, timestamp);
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
@@ -398,7 +400,7 @@ async function attemptWebhookDelivery({ webhook, event, body, timestamp }: Attem
       .catch(() => undefined);
   } catch (error) {
     errorMessage = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
-    console.error(`Webhook ${webhook.id} delivery failed:`, error);
+    console.error(`Webhook ${webhook.id} delivery failed (attempt ${attempt + 1}):`, error);
     const updated = await db.webhook
       .update({
         where: { id: webhook.id },
@@ -419,18 +421,100 @@ async function attemptWebhookDelivery({ webhook, event, body, timestamp }: Attem
     }
   } finally {
     clearTimeout(timeoutHandle);
-    await db.webhookDelivery
-      .create({
-        data: {
-          webhookId: webhook.id,
-          event,
-          url: webhook.url,
-          statusCode: statusCode ?? null,
-          ok,
-          durationMs: Date.now() - startedAt,
-          errorMessage,
-        },
-      })
-      .catch(() => undefined);
+    const nextAttempt = attempt + 1;
+    const status = ok
+      ? "delivered"
+      : nextAttempt >= WEBHOOK_MAX_ATTEMPTS
+        ? "exhausted"
+        : "pending";
+    const backoffSlot = Math.min(attempt, WEBHOOK_RETRY_BACKOFF_SECONDS.length - 1);
+    const nextRetryAt = status === "pending"
+      ? new Date(Date.now() + WEBHOOK_RETRY_BACKOFF_SECONDS[backoffSlot] * 1000)
+      : null;
+    const data = {
+      event,
+      url: webhook.url,
+      statusCode: statusCode ?? null,
+      ok,
+      durationMs: Date.now() - startedAt,
+      errorMessage,
+      attempt: nextAttempt,
+      status,
+      nextRetryAt,
+      attemptedAt: new Date(),
+      ...(status !== "delivered" ? { body } : { body: null }),
+    };
+    if (deliveryId) {
+      await db.webhookDelivery
+        .update({ where: { id: deliveryId }, data })
+        .catch(() => undefined);
+    } else {
+      await db.webhookDelivery
+        .create({ data: { webhookId: webhook.id, ...data } })
+        .catch(() => undefined);
+    }
   }
+}
+
+const RETRY_SWEEP_MS = 60_000;
+const RETRY_BATCH_SIZE = 50;
+let retrySweepStarted = false;
+let sweepInFlight = false;
+
+export async function sweepDueWebhookRetries(now: Date = new Date()): Promise<{ retried: number }> {
+  if (sweepInFlight) return { retried: 0 };
+  sweepInFlight = true;
+  try {
+    const due = await db.webhookDelivery.findMany({
+      where: { status: "pending", nextRetryAt: { lte: now } },
+      orderBy: { nextRetryAt: "asc" },
+      take: RETRY_BATCH_SIZE,
+      select: {
+        id: true,
+        event: true,
+        body: true,
+        attempt: true,
+        webhook: { select: { id: true, url: true, secret: true, active: true } },
+      },
+    });
+    let retried = 0;
+    for (const row of due) {
+      if (!row.webhook.active) {
+        await db.webhookDelivery
+          .update({ where: { id: row.id }, data: { status: "exhausted", nextRetryAt: null } })
+          .catch(() => undefined);
+        continue;
+      }
+      if (!row.body) {
+        console.warn(`[webhook-retry] delivery ${row.id} has no body, exhausting`);
+        await db.webhookDelivery
+          .update({ where: { id: row.id }, data: { status: "exhausted", nextRetryAt: null } })
+          .catch(() => undefined);
+        continue;
+      }
+      if (!isSupportedWebhookEvent(row.event)) continue;
+      const timestamp = Math.floor(Date.now() / 1000);
+      await attemptWebhookDelivery({
+        webhook: { id: row.webhook.id, url: row.webhook.url, secret: row.webhook.secret },
+        event: row.event,
+        body: row.body,
+        timestamp,
+        deliveryId: row.id,
+        attempt: row.attempt,
+      });
+      retried += 1;
+    }
+    return { retried };
+  } finally {
+    sweepInFlight = false;
+  }
+}
+
+export function startWebhookRetrySweep(): void {
+  if (retrySweepStarted) return;
+  retrySweepStarted = true;
+  void sweepDueWebhookRetries().catch((err) => console.error("[webhook-retry] initial sweep failed", err));
+  setInterval(() => {
+    void sweepDueWebhookRetries().catch((err) => console.error("[webhook-retry] sweep failed", err));
+  }, RETRY_SWEEP_MS).unref?.();
 }

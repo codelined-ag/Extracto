@@ -168,8 +168,13 @@ model WebhookDelivery {
   durationMs   Int?
   errorMessage String?
   attemptedAt  DateTime @default(now())
+  attempt      Int      @default(0)
+  nextRetryAt  DateTime?
+  status       String   @default("delivered")
+  body         String?
 
   @@index([webhookId, attemptedAt(sort: Desc)])
+  @@index([status, nextRetryAt])
 }
 
 model RateLimitBucket {
