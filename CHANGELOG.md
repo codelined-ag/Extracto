@@ -6,6 +6,17 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-05-05
+
+### Added
+- ZIP export: GET /api/v1/jobs/{id}/export?format=zip returns a flat archive with index.md, pages/page-NNN.md per page, and all-pages.md; mirrored on MCP, CLI, and the workspace download menu.
+
+### Changed
+- Workspace upload area: Take-a-photo is centered behind an Or divider.
+- Run-OCR buttons relabelled to Run.
+- Result actions menu shows just the 3-dot icon with no Actions text.
+- KB and S3 export errors prompt with a Configure toast that opens the right Settings tab.
+
 ## [1.0.0] - 2026-05-05
 
 ### Added
