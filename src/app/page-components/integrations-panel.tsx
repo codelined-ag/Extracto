@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Cloud, Plug, Trash2, Plus, Pause, Play, RefreshCw } from "lucide-react";
+import { Cloud, Folder, Plug, Trash2, Plus, Pause, Play, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { FolderPickerDialog } from "@/app/page-components/folder-picker-dialog";
 import type { Translator } from "@/app/page-components/types";
 
 export type CloudProvider = "dropbox" | "google_drive" | "onedrive";
@@ -363,6 +364,7 @@ function CreateWatcherForm({
   const [intervalSeconds, setIntervalSeconds] = React.useState(300);
   const [active, setActive] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -432,7 +434,14 @@ function CreateWatcherForm({
                     ? t("Sotto-cartella in LOCAL_WATCH_ROOT", "Sub-folder under LOCAL_WATCH_ROOT", "Sous-dossier sous LOCAL_WATCH_ROOT", "Subcarpeta bajo LOCAL_WATCH_ROOT", "Unterordner unter LOCAL_WATCH_ROOT")
                     : t("ID cartella", "Folder ID", "ID dossier", "ID de carpeta", "Ordner-ID")}
               </Label>
-              <Input value={folderPath} onChange={(e) => setFolderPath(e.target.value)} placeholder={provider === "dropbox" ? "/Inbox" : provider === "local" ? "inbox" : "root"} />
+              <div className="flex gap-1.5">
+                <Input value={folderPath} onChange={(e) => setFolderPath(e.target.value)} placeholder={provider === "dropbox" ? "/Inbox" : provider === "local" ? "inbox" : "root"} />
+                {provider === "google_drive" || provider === "onedrive" || provider === "dropbox" ? (
+                  <Button type="button" size="icon" variant="ghost" onClick={() => setPickerOpen(true)} aria-label={t("Sfoglia cartelle", "Browse folders", "Parcourir", "Explorar", "Durchsuchen")} className="shrink-0">
+                    <Folder className="size-3.5" />
+                  </Button>
+                ) : null}
+              </div>
               {provider === "onedrive" ? (
                 <p className="text-[10px] text-muted-foreground mt-1">
                   {t(
@@ -478,6 +487,16 @@ function CreateWatcherForm({
           </div>
         </form>
       </CardContent>
+      {provider === "google_drive" || provider === "onedrive" || provider === "dropbox" ? (
+        <FolderPickerDialog
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          provider={provider as CloudProvider}
+          initialPath={folderPath || undefined}
+          onSelect={(picked) => setFolderPath(picked)}
+          t={t}
+        />
+      ) : null}
     </Card>
   );
 }
