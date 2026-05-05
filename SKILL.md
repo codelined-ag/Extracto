@@ -107,6 +107,16 @@ extracto redact --file ./meeting-notes.md
 
 You can also turn on redaction per OCR job (settings field `piiRedaction: true`); the pipeline applies redaction to the final markdown and persists the audit on the job's `metadata.piiAudit`.
 
+### End-to-end encrypt a result with your registered public key
+
+```bash
+extracto e2e status
+extracto e2e encrypt --text "secret OCR result"
+extracto e2e encrypt --file ./result.md
+```
+
+Register an RSA-2048+ public key first (browser-only via `PUT /api/v1/e2e/key` with `{publicKeyPem}`); the server then accepts encryption requests and returns the sealed envelope (`encryptedKey`, `iv`, `authTag`, `ciphertext`, `publicKeyFingerprint`). Decrypt client-side with your private key. Pipeline auto-encryption of OCR results is scaffolded but disabled by default in v1.0; the user is responsible for key generation, escrow, and rotation.
+
 ### List recent jobs
 
 ```bash

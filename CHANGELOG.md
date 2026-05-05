@@ -12,6 +12,7 @@ follows [SemVer](https://semver.org/).
 - PII auto-redaction with audit trail: POST /api/v1/pii/redact masks emails, phones, Luhn-valid cards, IBANs, IPs, URLs, dates of birth, and SSNs in arbitrary text; OCR jobs can opt in via settings.piiRedaction and the audit (kinds + offsets, no values) lives on metadata.piiAudit.
 - Form field extraction: GET /api/v1/jobs/{id}/form-fields surfaces a flat fieldName-to-value map from form-shaped jobs (best results with documentPreset=form); available on REST, MCP, and CLI.
 - Equation / LaTeX extraction: GET /api/v1/jobs/{id}/equations parses the OCR markdown for `$..$` and `$$..$$` blocks, ignoring code spans, and returns each match with its char offsets; best results with documentPreset=academic; available on REST, MCP, and CLI.
+- E2E encryption scaffold: register an RSA SPKI public key via PUT /api/v1/e2e/key, then POST /api/v1/e2e/encrypt seals text with AES-256-GCM + RSA-OAEP-SHA256; the server never sees the plaintext after encrypt returns. Pipeline auto-encryption of OCR results is scaffolded but disabled by default; key generation, escrow, and rotation are user-owned.
 
 ## [0.11.0] - 2026-05-05
 

@@ -742,6 +742,41 @@ print(json.dumps(out))
   api_post_json "/api/v1/ocr/estimate" "$body"
 }
 
+cmd_e2e() {
+  local sub="${1:-status}"
+  shift || true
+  case "$sub" in
+    status)
+      api_get "/api/v1/e2e/key"
+      ;;
+    encrypt)
+      command -v python3 >/dev/null 2>&1 || die "python3 is required by 'extracto e2e encrypt'"
+      local file="" text=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --file) file="${2:-}"; shift 2 ;;
+          --text) text="${2:-}"; shift 2 ;;
+          *) die "unknown e2e encrypt flag: $1" ;;
+        esac
+      done
+      if [ -n "$file" ]; then
+        [ -f "$file" ] || die "file not found: $file"
+        text="$(cat "$file")"
+      fi
+      [ -n "$text" ] || die "usage: extracto e2e encrypt (--text \"...\" | --file PATH)"
+      local body
+      body="$(EXTRACTO_E2E_TEXT="$text" python3 -c '
+import json, os
+print(json.dumps({"text": os.environ["EXTRACTO_E2E_TEXT"]}))
+')"
+      api_post_json "/api/v1/e2e/encrypt" "$body"
+      ;;
+    *)
+      die "usage: extracto e2e {status|encrypt --text ...}"
+      ;;
+  esac
+}
+
 cmd_redact() {
   command -v python3 >/dev/null 2>&1 || die "python3 is required by 'extracto redact'"
   local file="" text=""
@@ -1707,6 +1742,7 @@ main() {
     compare)   shift; cmd_compare "$@" ;;
     recommend) shift; cmd_recommend "$@" ;;
     redact)    shift; cmd_redact "$@" ;;
+    e2e)       shift; cmd_e2e "$@" ;;
     jobs)      shift; cmd_jobs "$@" ;;
     tags)      shift; cmd_tags "$@" ;;
     presets)   shift; cmd_presets "$@" ;;

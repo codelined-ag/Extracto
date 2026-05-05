@@ -33,6 +33,9 @@ model AuthUser {
   emailChangeExpiresAt  DateTime?
   passwordResetTokenHash String?
   passwordResetExpiresAt DateTime?
+  e2ePublicKeyPem        String?
+  e2ePublicKeyFingerprint String?
+  e2ePublicKeyRegisteredAt DateTime?
   name                  String?
   jobs               OcrJob[]
   apiKeys            ApiKey[]

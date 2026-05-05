@@ -203,6 +203,21 @@ server.tool(
 );
 
 server.tool(
+  "e2e_status",
+  "Get the user's current E2E key registration status: whether a public key is registered, its fingerprint, and when it was registered.",
+  {},
+  async () => asTextResult(await call("/api/v1/e2e/key")),
+);
+
+server.tool(
+  "e2e_encrypt",
+  "Encrypt a chunk of text with the user's registered RSA public key using AES-256-GCM + RSA-OAEP-SHA256 envelope encryption. Returns the sealed envelope. The user must decrypt client-side with their private key; the server never sees the plaintext after this call returns. Requires a previously registered public key (via PUT /api/v1/e2e/key from the browser).",
+  { text: z.string().min(1) },
+  async ({ text }) =>
+    asTextResult(await call("/api/v1/e2e/encrypt", { method: "POST", body: { text } })),
+);
+
+server.tool(
   "pii_redact",
   "Run server-side PII redaction over a chunk of text. Replaces emails, phones (>=7 digits), Luhn-valid credit cards, IBAN-shaped strings, IPv4 addresses, URLs, dates of birth, and SSNs with [REDACTED:KIND:N] placeholders. Returns the redacted text plus the audit (kind + char offsets only, no original values).",
   { text: z.string().min(1) },

@@ -582,6 +582,102 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /api/v1/e2e/key:
+    get:
+      summary: Get the user's E2E key registration status
+      operationId: getE2eKey
+      tags: [Security]
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+                  fingerprint: { type: string, nullable: true }
+                  registeredAt: { type: string, nullable: true, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    put:
+      summary: Register an RSA SPKI PEM public key for E2E encryption
+      operationId: putE2eKey
+      tags: [Security]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [publicKeyPem]
+              properties:
+                publicKeyPem: { type: string }
+      responses:
+        "200":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+                  fingerprint: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+    delete:
+      summary: Clear the user's registered E2E public key
+      operationId: deleteE2eKey
+      tags: [Security]
+      responses:
+        "200":
+          description: Cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+
+  /api/v1/e2e/encrypt:
+    post:
+      summary: Envelope-encrypt arbitrary text with the user's registered RSA key
+      operationId: e2eEncrypt
+      tags: [Security]
+      description: |
+        Returns AES-256-GCM ciphertext + RSA-OAEP-SHA256 wrapped data key.
+        The user must hold the private key client-side; the server never
+        sees the plaintext after the call returns. Pipeline auto-encryption
+        of OCR result blobs is scaffolded but not enabled by default in
+        v1.0 because key generation, escrow, and rotation are user-owned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string }
+      responses:
+        "200":
+          description: Envelope
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  algorithm: { type: string }
+                  encryptedKey: { type: string }
+                  iv: { type: string }
+                  authTag: { type: string }
+                  ciphertext: { type: string }
+                  publicKeyFingerprint: { type: string }
+        "409":
+          description: No public key registered
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413": { $ref: "#/components/responses/BadRequest" }
+
   /api/v1/jobs/{id}/equations:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
