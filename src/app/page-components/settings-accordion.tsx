@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, InfoIcon } from "lucide-react";
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type AccordionContextValue = {
   open: string | null;
@@ -86,10 +87,25 @@ export function SettingsAccordionItem({ value, title, hint, right, children }: S
             type="button"
             className="group flex-1 flex items-center justify-between gap-3 px-4 py-3 text-left rounded-xl hover:bg-muted/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           >
-            <div className="min-w-0">
+            <div className="min-w-0 flex items-center gap-1.5">
               <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
               {hint ? (
-                <p className="text-[12px] text-muted-foreground/90 leading-relaxed mt-0.5 line-clamp-2">{hint}</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label="More information"
+                      className="text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <InfoIcon size={13} aria-hidden />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={6} className="max-w-xs text-[12px] leading-relaxed">
+                    {hint}
+                  </TooltipContent>
+                </Tooltip>
               ) : null}
             </div>
             <ChevronDownIcon
