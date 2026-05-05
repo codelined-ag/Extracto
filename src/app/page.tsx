@@ -10,6 +10,7 @@ import {
  Cloud,
  Layers,
  Plug,
+ TrendingUp,
 } from"lucide-react";
 
 import { ArchiveIcon } from"@/components/ui/archive";
@@ -98,7 +99,9 @@ import { WatchersSection } from "@/app/page-components/watchers-section";
 import { TemplatesSection } from "@/app/page-components/templates-section";
 import { IntegrationsPanel } from "@/app/page-components/integrations-panel";
 import { CloudImportDialog } from "@/app/page-components/cloud-import-dialog";
-import { HintLabel } from "@/app/page-components/field-hint";
+import { CompareDialog } from "@/app/page-components/compare-dialog";
+import { RecommendationsDialog } from "@/app/page-components/recommendations-dialog";
+import { FieldHint, HintLabel } from "@/app/page-components/field-hint";
 import { clearQueue, deletePagePreviews, loadAllPagePreviews, loadQueue, persistPagePreviews, persistQueue, reconcileJobFromServer } from "@/app/page-components/queue-persistence";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { useHistory } from "@/app/page-components/use-history";
@@ -1635,6 +1638,8 @@ export default function ExtractoPage() {
 
  const [cloudConnected, setCloudConnected] = React.useState<{ dropbox: boolean; google_drive: boolean; onedrive: boolean }>({ dropbox: false, google_drive: false, onedrive: false });
  const [cloudImportOpen, setCloudImportOpen] = React.useState(false);
+ const [compareOpen, setCompareOpen] = React.useState(false);
+ const [recommendationsOpen, setRecommendationsOpen] = React.useState(false);
 
  React.useEffect(() => {
    let cancelled = false;
@@ -2821,6 +2826,10 @@ export default function ExtractoPage() {
  ariaLabel={t("Modello OCR","OCR model","Modèle OCR","Modelo OCR","OCR-Modell")}
  />
  {modelError ? <p className="text-[11px] text-destructive">{modelError}</p> : null}
+ <button type="button" onClick={() => setRecommendationsOpen(true)} className="text-[11px] text-primary hover:underline self-start inline-flex items-center gap-1">
+   <TrendingUp className="size-3" />
+   {t("Vedi modelli consigliati per i tuoi documenti","See recommended models for your documents","Voir les modèles recommandés","Ver modelos recomendados","Empfohlene Modelle ansehen")}
+ </button>
  </div>
  <div className="space-y-1.5">
  <HintLabel hint={t("Quante pagine processare contemporaneamente. 0 lascia decidere a Extracto (di solito 1-2). Più alto = più veloce ma più carico sul provider e sulla GPU/CPU. Per Mistral OCR 4-8 va bene; per Ollama locale di solito 1-2.","How many pages to process at the same time. 0 lets Extracto pick (usually 1-2). Higher means faster but more load on the provider and GPU/CPU. Mistral OCR can handle 4-8; local Ollama usually 1-2.","Combien de pages traiter simultanément. 0 laisse Extracto choisir (1-2 d'habitude). Plus élevé = plus rapide mais plus de charge.","Cuántas páginas se procesan a la vez. 0 deja decidir a Extracto (1-2 normalmente). Más alto = más rápido pero más carga.","Wie viele Seiten gleichzeitig verarbeitet werden. 0 lässt Extracto entscheiden (meist 1-2). Höher heißt schneller, aber mehr Last.")}>{t("Pagine in parallelo","Pages in parallel","Pages en parallèle","Páginas en paralelo","Seiten parallel")}</HintLabel>
@@ -3326,6 +3335,21 @@ export default function ExtractoPage() {
         t={t}
       />
 
+      <CompareDialog
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+        selectedFile={selectedFile ?? null}
+        models={models}
+        defaultModel={selectedModel || ""}
+        t={t}
+      />
+
+      <RecommendationsDialog
+        open={recommendationsOpen}
+        onOpenChange={setRecommendationsOpen}
+        t={t}
+      />
+
       <HistoryDialog
         open={historyOpen}
         onOpenChange={(open) => {
@@ -3585,6 +3609,16 @@ export default function ExtractoPage() {
 
  <div className="space-y-2 surface-soft rounded-xl px-3.5 py-3">
  <div className="flex items-center justify-between gap-2">
+ <div className="flex items-center gap-1.5">
+ <Label className="text-sm font-medium">{t("Mascheramento PII","PII redaction","Caviardage PII","Redacción de PII","PII-Schwärzung")}</Label>
+ <FieldHint>{t("Maschera automaticamente email, telefoni, carte, IBAN, IP, URL, date di nascita e SSN nel testo estratto. L'audit (tipi e offset, mai i valori) viene salvato sui metadati del job.","Auto-mask emails, phones, cards, IBANs, IPs, URLs, dates of birth, and SSNs in the extracted text. The audit trail (kinds and offsets, never the values) lives on the job metadata.","Masquer automatiquement les e-mails, téléphones, cartes, IBAN, IP, URL, dates de naissance et SSN dans le texte extrait. L'audit (types et offsets, jamais les valeurs) vit sur les métadonnées du job.","Enmascara automáticamente correos, teléfonos, tarjetas, IBAN, IP, URL, fechas de nacimiento y SSN en el texto extraído. La auditoría (tipos y desplazamientos, nunca los valores) vive en los metadatos del trabajo.","Maskiert automatisch E-Mails, Telefonnummern, Karten, IBANs, IPs, URLs, Geburtsdaten und SSNs im extrahierten Text. Der Audit-Trail (Typen und Offsets, nie die Werte) liegt auf den Job-Metadaten.")}</FieldHint>
+ </div>
+ <Switch checked={settings.piiRedaction} onCheckedChange={(piiRedaction) => setSettings((s) => ({ ...s, piiRedaction }))} />
+ </div>
+ </div>
+
+ <div className="space-y-2 surface-soft rounded-xl px-3.5 py-3">
+ <div className="flex items-center justify-between gap-2">
  <Label className="text-sm font-medium">{t("Post-processing","Post-processing","Post-traitement","Post-procesamiento","Nachverarbeitung")}</Label>
  <Switch checked={postProcessing.enabled} onCheckedChange={(enabled) => setPostProcessing((prev) => ({ ...prev, enabled }))} />
  </div>
@@ -3660,6 +3694,7 @@ export default function ExtractoPage() {
                     onSendToS3={exportFileToS3}
                     onSendToCloud={exportFileToCloud}
                     cloudConnected={cloudConnected}
+                    onCompareModels={() => setCompareOpen(true)}
                     t={t}
                   />
 

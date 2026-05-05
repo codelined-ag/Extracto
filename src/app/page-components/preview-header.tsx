@@ -1,6 +1,6 @@
 "use client";
 
-import { Cloud, Columns, MoreHorizontal } from "lucide-react";
+import { Cloud, Columns, GitCompare, MoreHorizontal } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +43,7 @@ export interface PreviewHeaderProps {
   onSendToS3: (file: ProcessingFile) => void;
   onSendToCloud: (file: ProcessingFile, provider: "dropbox" | "google_drive" | "onedrive") => void;
   cloudConnected: { dropbox: boolean; google_drive: boolean; onedrive: boolean };
+  onCompareModels: () => void;
   t: Translator;
 }
 
@@ -57,6 +58,7 @@ export function PreviewHeader({
   onSendToS3,
   onSendToCloud,
   cloudConnected,
+  onCompareModels,
   t,
 }: PreviewHeaderProps) {
   const viewModes: Array<{
@@ -325,6 +327,13 @@ export function PreviewHeader({
                       <span>
                         {t("Invia a OneDrive", "Send to OneDrive", "Envoyer vers OneDrive", "Enviar a OneDrive", "An OneDrive senden")}
                         {cloudConnected.onedrive ? "" : ` · ${t("non connesso", "not connected", "non connecté", "no conectado", "nicht verbunden")}`}
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => onCompareModels()}>
+                      <GitCompare className="size-4" />
+                      <span>
+                        {t("Confronta modelli OCR", "Compare OCR models", "Comparer les modèles OCR", "Comparar modelos OCR", "OCR-Modelle vergleichen")}
                       </span>
                     </DropdownMenuItem>
                   </>

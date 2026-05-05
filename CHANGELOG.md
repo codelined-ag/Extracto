@@ -6,7 +6,14 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
-## [1.2.2] - 2026-05-05
+## [1.3.0] - 2026-05-05
+
+### Added
+- PII redaction toggle in the workspace Advanced Options panel; the existing pipeline option finally has a UI control.
+- A/B model comparison dialog: pick 2-4 models, run them on the selected file, and see side-by-side outputs with word-level diff against the baseline.
+- Recommendations dialog surfaces the best-performing model per document type pulled from your own job history; entry button lives next to the OCR model picker.
+
+
 
 ### Added
 - Advanced Options panel state, post-processing toggle, instructions, model, and output format now persist across refresh.
