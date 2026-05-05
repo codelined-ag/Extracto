@@ -21,11 +21,14 @@ enum OcrJobStatus {
 }
 
 model AuthUser {
-  id                 String         @id @default(cuid())
-  email              String         @unique
-  passwordHash       String
-  passwordChangedAt  DateTime       @default(now())
-  name               String?
+  id                    String         @id @default(cuid())
+  email                 String         @unique
+  passwordHash          String
+  passwordChangedAt     DateTime       @default(now())
+  totpSecret            String?
+  totpEnabled           Boolean        @default(false)
+  totpRecoveryCodesHash Json?
+  name                  String?
   jobs               OcrJob[]
   apiKeys            ApiKey[]
   webhooks           Webhook[]

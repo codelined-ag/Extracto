@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApiKeysSection } from "@/app/page-components/api-keys-section";
 import { NotificationsSection } from "@/app/page-components/notifications-section";
+import { SecuritySection } from "@/app/page-components/security-section";
 import { UsageSection } from "@/app/page-components/usage-section";
 import {
   SettingsAccordion,
@@ -110,6 +111,20 @@ export function AccountDialog({ open, onOpenChange, t, uiLanguage, setUiLanguage
                 )}
               >
                 <NotificationsSection t={t} />
+              </SettingsAccordionItem>
+
+              <SettingsAccordionItem
+                value="security"
+                title={t("Sicurezza", "Security", "Sécurité", "Seguridad", "Sicherheit")}
+                hint={t(
+                  "Protezione dell'account: due fattori (TOTP).",
+                  "Account protection: two-factor (TOTP).",
+                  "Protection du compte : double authentification (TOTP).",
+                  "Protección de cuenta: doble factor (TOTP).",
+                  "Kontoschutz: Zwei-Faktor (TOTP).",
+                )}
+              >
+                <SecuritySection t={t} />
               </SettingsAccordionItem>
 
               <SettingsAccordionItem

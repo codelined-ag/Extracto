@@ -8,6 +8,7 @@ interface AuthUserRecord {
   passwordHash: string;
   passwordChangedAt: Date;
   name: string | null;
+  totpEnabled?: boolean;
 }
 
 export function normalizeEmail(value: string): string {
@@ -49,6 +50,7 @@ export async function findUserByEmail(email: string): Promise<AuthUserRecord | n
       passwordHash: true,
       passwordChangedAt: true,
       name: true,
+      totpEnabled: true,
     },
   });
 }

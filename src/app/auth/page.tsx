@@ -128,6 +128,37 @@ export default function AuthPage() {
     };
   }, [router]);
 
+  const [twoFactorChallenge, setTwoFactorChallenge] = React.useState<string | null>(null);
+  const [totpCode, setTotpCode] = React.useState("");
+
+  const submitTotp = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!twoFactorChallenge) return;
+    setLoading(true);
+    try {
+      const response = await fetch("/api/auth/2fa/challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challengeToken: twoFactorChallenge, code: totpCode.trim() }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error || "Verification failed");
+      }
+      setTwoFactorChallenge(null);
+      setTotpCode("");
+      router.push("/");
+    } catch (error) {
+      toast({
+        title: t("Codice non valido", "Invalid code", "Code invalide", "Código no válido", "Code ungültig"),
+        description: error instanceof Error ? error.message : "",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -163,10 +194,18 @@ export default function AuthPage() {
 
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string;
+        requires2fa?: boolean;
+        challengeToken?: string;
       };
 
       if (!response.ok) {
         throw new Error(payload.error || t("Non siamo riusciti ad accedere", "Couldn't sign you in", "Connexion impossible", "No pudimos iniciar sesión", "Anmeldung nicht möglich"));
+      }
+
+      if (payload.requires2fa && payload.challengeToken) {
+        setTwoFactorChallenge(payload.challengeToken);
+        setTotpCode("");
+        return;
       }
 
       router.push("/");
@@ -288,6 +327,48 @@ export default function AuthPage() {
               </p>
             </div>
 
+            {twoFactorChallenge ? (
+              <div className="mt-6 space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  {t(
+                    "Inserisci il codice a 6 cifre dalla tua app authenticator (o un codice di recupero).",
+                    "Enter the 6-digit code from your authenticator app (or a recovery code).",
+                    "Saisis le code à 6 chiffres de ton application d'authentification (ou un code de récupération).",
+                    "Introduce el código de 6 dígitos de tu app de autenticación (o un código de recuperación).",
+                    "Gib den 6-stelligen Code aus deiner Authenticator-App ein (oder einen Wiederherstellungscode).",
+                  )}
+                </p>
+                <form className="space-y-4" onSubmit={submitTotp}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    autoFocus
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value)}
+                    maxLength={32}
+                    placeholder="123 456"
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-center font-mono text-lg tracking-widest"
+                  />
+                  <Button type="submit" disabled={loading || totpCode.trim().length < 6} className="w-full group" size="lg">
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    <span>
+                      {loading
+                        ? t("Verifica...", "Verifying...", "Vérification...", "Verificando...", "Überprüfe...")
+                        : t("Verifica e accedi", "Verify and sign in", "Vérifier et se connecter", "Verificar e iniciar sesión", "Bestätigen und anmelden")}
+                    </span>
+                    {!loading ? <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" /> : null}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => { setTwoFactorChallenge(null); setTotpCode(""); }}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {t("Annulla e torna al login", "Cancel and go back", "Annuler et revenir", "Cancelar y volver", "Abbrechen und zurück")}
+                  </button>
+                </form>
+              </div>
+            ) : (
             <Tabs value={mode} onValueChange={(next) => setMode(next as "signin" | "signup")} className="mt-6">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="signin">{t("Accedi", "Sign in", "Se connecter", "Iniciar sesión", "Anmelden")}</TabsTrigger>
@@ -350,6 +431,7 @@ export default function AuthPage() {
                 </form>
               </TabsContent>
             </Tabs>
+            )}
           </div>
 
         </section>

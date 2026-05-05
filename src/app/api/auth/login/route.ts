@@ -10,6 +10,7 @@ import {
   getSessionMaxAgeSeconds,
   shouldUseSecureCookie,
 } from "@/lib/auth/token";
+import { createTwoFactorChallengeToken } from "@/lib/auth/two-factor-challenge";
 import { badRequest, isRequestSecure, normalizeEmail, tooManyRequests } from "@/app/api/auth/helpers";
 
 const LOGIN_IP_LIMIT_MAX = 20;
@@ -66,6 +67,14 @@ export async function POST(request: NextRequest) {
 
     if (!verifyPassword(password, user.passwordHash)) {
       return badRequest("Invalid credentials", 401);
+    }
+
+    if (user.totpEnabled) {
+      const challengeToken = createTwoFactorChallengeToken({
+        userId: user.id,
+        email: user.email,
+      });
+      return NextResponse.json({ requires2fa: true, challengeToken });
     }
 
     const token = await createSessionToken({
