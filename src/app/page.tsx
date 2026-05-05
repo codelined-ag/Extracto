@@ -512,6 +512,7 @@ export default function ExtractoPage() {
  const [apiKeyDirty, setApiKeyDirty] = React.useState(false);
  const [isDragOver, setIsDragOver] = React.useState(false);
  const [isProcessing, setIsProcessing] = React.useState(false);
+ const isProcessingRef = React.useRef(false);
  const [uiLanguage, setUiLanguage] = React.useState<UiLanguage>("en");
  const [selectedFileId, setSelectedFileId] = React.useState<string | null>(null);
  const [copied, setCopied] = React.useState<"md"|"json"| null>(null);
@@ -2173,6 +2174,7 @@ export default function ExtractoPage() {
  };
 
  const processFiles = async (filterIds?: Set<string>) => {
+ if (isProcessingRef.current) return;
  if (files.length === 0) return;
  if (!selectedModel.trim()) {
  toast({
@@ -2211,6 +2213,7 @@ export default function ExtractoPage() {
   return;
  }
 
+ isProcessingRef.current = true;
  setIsProcessing(true);
  const filesToProcess = files.filter((f) => (f.status === "pending" || f.status === "offline-queued") && (!filterIds || filterIds.has(f.id)));
  let completedInRun = 0;
@@ -2251,6 +2254,7 @@ export default function ExtractoPage() {
  }
  }
 
+ isProcessingRef.current = false;
  setIsProcessing(false);
  if (completedInRun > 0) {
  toast({
@@ -2325,6 +2329,8 @@ export default function ExtractoPage() {
  if (file.status !=="paused") {
  return;
  }
+ if (isProcessingRef.current) return;
+ isProcessingRef.current = true;
  setIsProcessing(true);
  try {
  const result = await processSingleFile(file, true);
@@ -2352,6 +2358,7 @@ export default function ExtractoPage() {
  variant:"destructive",
  });
  } finally {
+ isProcessingRef.current = false;
  setIsProcessing(false);
  }
  };

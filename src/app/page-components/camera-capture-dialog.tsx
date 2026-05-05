@@ -66,6 +66,8 @@ export function CameraCaptureDialog({
   const [enhance, setEnhance] = React.useState(true);
   const [mode, setMode] = React.useState<CaptureMode>("document");
   const [shots, setShots] = React.useState<BatchShot[]>([]);
+  const [submitting, setSubmitting] = React.useState(false);
+  const submittingRef = React.useRef(false);
   const shotsRef = React.useRef<BatchShot[]>([]);
   React.useEffect(() => {
     shotsRef.current = shots;
@@ -203,10 +205,15 @@ export function CameraCaptureDialog({
   };
 
   const finishBatch = () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
     const finalize = (extra?: BatchShot) => {
       const base = shotsRef.current;
       const all = extra ? [...base, extra] : base;
       if (all.length > 0) onCapture(all.map((shot) => shot.file));
+      submittingRef.current = false;
+      setSubmitting(false);
       onOpenChange(false);
     };
     if (status === "preview") {
@@ -401,7 +408,7 @@ export function CameraCaptureDialog({
                   <Camera className="size-4 mr-1.5" />
                   {t("Aggiungi e continua", "Add and keep shooting", "Ajouter et continuer", "Añadir y seguir", "Hinzufügen und weiter")}
                 </Button>
-                <Button onClick={finishBatch} data-testid="finish-batch">
+                <Button onClick={finishBatch} disabled={submitting} data-testid="finish-batch">
                   <Check className="size-4 mr-1.5" />
                   {finishLabel()}
                 </Button>
@@ -409,7 +416,7 @@ export function CameraCaptureDialog({
             ) : (
               <>
                 {canFinish ? (
-                  <Button variant="outline" onClick={finishBatch} data-testid="finish-batch">
+                  <Button variant="outline" onClick={finishBatch} disabled={submitting} data-testid="finish-batch">
                     <Check className="size-4 mr-1.5" />
                     {finishLabel()}
                   </Button>

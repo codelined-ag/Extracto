@@ -3,11 +3,15 @@ import { createHash, timingSafeEqual } from "node:crypto";
 
 import { ApiRouteError, handleApiError, parseJsonBody } from "@/lib/api-error";
 import { db } from "@/lib/db";
-import { isTrustedMutationRequest } from "@/lib/request-security";
+import { consumeSharedRateLimit } from "@/lib/rate-limit";
+import { getClientIpAddress, isTrustedMutationRequest } from "@/lib/request-security";
 
 interface ConfirmBody extends Record<string, unknown> {
   token?: unknown;
 }
+
+const CONFIRM_IP_LIMIT_MAX = 30;
+const CONFIRM_WINDOW_MS = 60 * 60 * 1000;
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -24,6 +28,14 @@ export async function POST(request: NextRequest) {
   try {
     if (!isTrustedMutationRequest(request)) {
       return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+    }
+    const ipLimit = await consumeSharedRateLimit({
+      key: `auth:email-confirm:ip:${getClientIpAddress(request)}`,
+      max: CONFIRM_IP_LIMIT_MAX,
+      windowMs: CONFIRM_WINDOW_MS,
+    });
+    if (!ipLimit.allowed) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const body = await parseJsonBody<ConfirmBody>(request);
     const token = typeof body.token === "string" ? body.token.trim() : "";
