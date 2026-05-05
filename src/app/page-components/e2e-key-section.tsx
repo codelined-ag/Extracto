@@ -94,11 +94,11 @@ export function E2eKeySection({ t }: { t: Translator }) {
         </h4>
         <p className="text-xs text-muted-foreground">
           {t(
-            "Registra la tua chiave pubblica RSA SPKI: il server cifra le risposte di /api/v1/e2e/encrypt con quella chiave, così solo tu puoi decifrarle con la chiave privata.",
-            "Register your RSA SPKI public key. The server seals responses from /api/v1/e2e/encrypt to that key so only you can open them with your private key.",
-            "Enregistre ta clé publique RSA SPKI : le serveur scelle les réponses de /api/v1/e2e/encrypt avec cette clé, toi seul peux les ouvrir avec la clé privée.",
-            "Registra tu clave pública RSA SPKI: el servidor sella las respuestas de /api/v1/e2e/encrypt con esa clave para que solo tú puedas abrirlas con tu clave privada.",
-            "Registriere deinen öffentlichen RSA-SPKI-Schlüssel. Der Server versiegelt Antworten von /api/v1/e2e/encrypt mit diesem Schlüssel, sodass nur du sie mit deinem privaten Schlüssel öffnen kannst.",
+            "Registra la tua chiave pubblica RSA SPKI. Solo le risposte di /api/v1/e2e/encrypt vengono cifrate con questa chiave: i risultati di /jobs, /ocr/batch e /openai/chat/completions restano in chiaro. Per cifrare un risultato, ripassalo in /api/v1/e2e/encrypt.",
+            "Register your RSA SPKI public key. Only /api/v1/e2e/encrypt responses are sealed to this key. Results from /jobs, /ocr/batch and /openai/chat/completions stay in cleartext on the wire. To seal a result, re-POST it to /api/v1/e2e/encrypt.",
+            "Enregistre ta clé publique RSA SPKI. Seules les réponses de /api/v1/e2e/encrypt sont scellées avec cette clé. Les résultats de /jobs, /ocr/batch et /openai/chat/completions restent en clair sur le réseau. Pour sceller un résultat, repasse-le dans /api/v1/e2e/encrypt.",
+            "Registra tu clave pública RSA SPKI. Solo las respuestas de /api/v1/e2e/encrypt se sellan con esta clave. Los resultados de /jobs, /ocr/batch y /openai/chat/completions viajan sin cifrar. Para sellar un resultado, vuelve a enviarlo a /api/v1/e2e/encrypt.",
+            "Registriere deinen öffentlichen RSA-SPKI-Schlüssel. Nur Antworten von /api/v1/e2e/encrypt werden mit diesem Schlüssel versiegelt. Ergebnisse von /jobs, /ocr/batch und /openai/chat/completions bleiben unverschlüsselt. Um ein Ergebnis zu versiegeln, sende es erneut an /api/v1/e2e/encrypt.",
           )}
         </p>
       </div>

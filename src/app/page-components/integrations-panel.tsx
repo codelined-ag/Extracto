@@ -173,19 +173,37 @@ export function IntegrationsPanel({ t }: { t: Translator }) {
                       <Trash2 className="size-3.5 mr-1.5" />
                       {t("Disconnetti", "Disconnect", "Déconnecter", "Desconectar", "Trennen")}
                     </Button>
-                  ) : (
+                  ) : available ? (
                     <Button
                       size="sm"
                       onClick={() => void onConnect(p.id)}
-                      disabled={!available || busyProvider === p.id}
+                      disabled={busyProvider === p.id}
                     >
                       <Plug className="size-3.5 mr-1.5" />
                       {t("Connetti", "Connect", "Connecter", "Conectar", "Verbinden")}
                     </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        const target = document.querySelector(`[data-oauth-config="${p.id}"]`) as HTMLElement | null;
+                        if (!target) return;
+                        const addBtn = Array.from(target.querySelectorAll("button"))
+                          .find((b) => /OAuth app/i.test(b.textContent ?? "")) as HTMLButtonElement | undefined;
+                        addBtn?.click();
+                        target.scrollIntoView({ behavior: "smooth", block: "center" });
+                      }}
+                    >
+                      <Plug className="size-3.5 mr-1.5" />
+                      {t("Aggiungi credenziali", "Add credentials", "Ajouter les identifiants", "Añadir credenciales", "Anmeldedaten hinzufügen")}
+                    </Button>
                   )}
                 </div>
                 {!connected ? (
-                  <OAuthAppConfig provider={p.id} t={t} onChanged={refresh} hasUserCreds={oauthApp?.source === "user"} />
+                  <div data-oauth-config={p.id}>
+                    <OAuthAppConfig provider={p.id} t={t} onChanged={refresh} hasUserCreds={oauthApp?.source === "user"} />
+                  </div>
                 ) : null}
               </CardContent>
             </Card>
@@ -406,6 +424,17 @@ function CreateWatcherForm({
                     : t("ID cartella", "Folder ID", "ID dossier", "ID de carpeta", "Ordner-ID")}
               </Label>
               <Input value={folderPath} onChange={(e) => setFolderPath(e.target.value)} placeholder={provider === "dropbox" ? "/Inbox" : provider === "local" ? "inbox" : "root"} />
+              {provider === "onedrive" ? (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {t(
+                    "Solo cartelle dentro l'app folder OneDrive sono accessibili (scope Files.ReadWrite.AppFolder). Folder ID arbitrari restituiscono 403.",
+                    "Only folders inside the OneDrive app folder are accessible (Files.ReadWrite.AppFolder scope). Arbitrary folder IDs return 403.",
+                    "Seuls les dossiers dans l'app folder OneDrive sont accessibles (scope Files.ReadWrite.AppFolder). Les ID arbitraires renvoient 403.",
+                    "Solo las carpetas dentro de la carpeta de la app de OneDrive son accesibles (scope Files.ReadWrite.AppFolder). Los ID arbitrarios devuelven 403.",
+                    "Nur Ordner im OneDrive-App-Ordner sind erreichbar (Scope Files.ReadWrite.AppFolder). Beliebige Ordner-IDs liefern 403.",
+                  )}
+                </p>
+              ) : null}
             </div>
             <div>
               <Label className="text-xs">{t("Modello", "Model", "Modèle", "Modelo", "Modell")}</Label>
