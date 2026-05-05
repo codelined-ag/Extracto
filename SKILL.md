@@ -138,6 +138,14 @@ extracto jobs form-fields <job-id>
 
 `extracto jobs form-fields` calls `GET /api/v1/jobs/{id}/form-fields`. Reads the job's structured result and returns the `form` block flattened into `{ field, value, page? }` entries plus a flat `byField` map. Works best when the job ran with `documentPreset: "form"` so the OCR prompt asks the model to populate `fields.form`. Returns `source: "absent"` when no form data was captured.
 
+### Pull equations from an academic job
+
+```bash
+extracto jobs equations <job-id>
+```
+
+`extracto jobs equations` calls `GET /api/v1/jobs/{id}/equations`. Parses the job's extractedText for `$$..$$` (display) and `$..$` (inline) math, ignoring math inside fenced or inline code spans. Best results when the job ran with `documentPreset: "academic"` so the OCR prompt asked the model to wrap math in TeX delimiters. Returns each equation with its `kind`, `latex`, and char offsets.
+
 ### Edit a page (with version history)
 
 ```bash

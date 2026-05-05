@@ -11,6 +11,7 @@ follows [SemVer](https://semver.org/).
 - Model recommendations from your own history: GET /api/v1/recommendations groups recent jobs by document type and ranks models by success rate, processingMs as the tiebreaker; available on REST, MCP, and CLI.
 - PII auto-redaction with audit trail: POST /api/v1/pii/redact masks emails, phones, Luhn-valid cards, IBANs, IPs, URLs, dates of birth, and SSNs in arbitrary text; OCR jobs can opt in via settings.piiRedaction and the audit (kinds + offsets, no values) lives on metadata.piiAudit.
 - Form field extraction: GET /api/v1/jobs/{id}/form-fields surfaces a flat fieldName-to-value map from form-shaped jobs (best results with documentPreset=form); available on REST, MCP, and CLI.
+- Equation / LaTeX extraction: GET /api/v1/jobs/{id}/equations parses the OCR markdown for `$..$` and `$$..$$` blocks, ignoring code spans, and returns each match with its char offsets; best results with documentPreset=academic; available on REST, MCP, and CLI.
 
 ## [0.11.0] - 2026-05-05
 

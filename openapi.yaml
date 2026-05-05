@@ -104,6 +104,16 @@ components:
         createdAt: { type: string, format: date-time }
         jobCount: { type: integer, description: "Only present in tags list responses" }
 
+    EquationEntry:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [display, inline]
+        latex: { type: string }
+        startOffset: { type: integer }
+        endOffset: { type: integer }
+
     ModelStat:
       type: object
       properties:
@@ -571,6 +581,40 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/jobs/{id}/equations:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Extract LaTeX equations from a COMPLETED job
+      operationId: getJobEquations
+      tags: [OCR]
+      responses:
+        "200":
+          description: Equations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId: { type: string }
+                  count: { type: integer }
+                  display:
+                    type: array
+                    items: { $ref: "#/components/schemas/EquationEntry" }
+                  inline:
+                    type: array
+                    items: { $ref: "#/components/schemas/EquationEntry" }
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Job not COMPLETED
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /api/v1/jobs/{id}/form-fields:
     parameters:

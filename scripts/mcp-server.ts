@@ -187,6 +187,14 @@ server.tool(
 );
 
 server.tool(
+  "job_equations",
+  "Extract LaTeX equations from a COMPLETED job. Display equations are detected as $$..$$, inline as $..$. Best results when the job ran with documentPreset='academic' so the OCR prompt asks the model to wrap math in TeX delimiters.",
+  { jobId: z.string() },
+  async ({ jobId }) =>
+    asTextResult(await call(`/api/v1/jobs/${encodeURIComponent(jobId)}/equations`)),
+);
+
+server.tool(
   "job_form_fields",
   "Extract structured form fields from a COMPLETED OCR job whose result includes a form-shaped block (typically when documentPreset='form' was used). Returns each field as { field, value, page? } plus a flat byField map.",
   { jobId: z.string() },
