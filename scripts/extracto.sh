@@ -444,6 +444,67 @@ cmd_logs() {
   compose logs -f app
 }
 
+cmd_dropbox() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    list)
+      local path="${1:-}"
+      api_get "/api/v1/integrations/dropbox/list?path=$(printf %s "$path" | python3 -c 'import sys,urllib.parse; sys.stdout.write(urllib.parse.quote(sys.stdin.read()))')"
+      ;;
+    import)
+      local dx_path="" dx_model=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --path)  dx_path="${2:-}"; shift 2 ;;
+          --model) dx_model="${2:-}"; shift 2 ;;
+          *) die "unknown dropbox import flag: $1" ;;
+        esac
+      done
+      [ -n "$dx_path" ] || die "usage: extracto dropbox import --path /folder/file.pdf --model NAME"
+      [ -n "$dx_model" ] || die "--model is required"
+      local body
+      body="$(EXTRACTO_DX_PATH="$dx_path" EXTRACTO_DX_MODEL="$dx_model" python3 -c '
+import json, os
+print(json.dumps({"path": os.environ["EXTRACTO_DX_PATH"], "model": os.environ["EXTRACTO_DX_MODEL"]}))
+')"
+      api_post_json "/api/v1/integrations/dropbox/import" "$body"
+      ;;
+    push)
+      local dx_job="" dx_folder="" dx_format="md"
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --job)    dx_job="${2:-}"; shift 2 ;;
+          --folder) dx_folder="${2:-}"; shift 2 ;;
+          --format) dx_format="${2:-}"; shift 2 ;;
+          *) die "unknown dropbox push flag: $1" ;;
+        esac
+      done
+      [ -n "$dx_job" ] || die "usage: extracto dropbox push --job <job-id> [--folder /path] [--format md|...|obsidian]"
+      case "$dx_format" in
+        md|json|txt|html|docx|rtf|csv|xlsx|obsidian) ;;
+        *) die "--format must be one of: md, json, txt, html, docx, rtf, csv, xlsx, obsidian" ;;
+      esac
+      local body
+      body="$(EXTRACTO_DX_JOB="$dx_job" EXTRACTO_DX_FOLDER="$dx_folder" EXTRACTO_DX_FORMAT="$dx_format" python3 -c '
+import json, os
+print(json.dumps({
+  "jobId": os.environ["EXTRACTO_DX_JOB"],
+  "folder": os.environ.get("EXTRACTO_DX_FOLDER",""),
+  "format": os.environ["EXTRACTO_DX_FORMAT"],
+}))
+')"
+      api_post_json "/api/v1/integrations/dropbox/push" "$body"
+      ;;
+    disconnect)
+      api_delete "/api/v1/integrations/dropbox"
+      ;;
+    *)
+      die "usage: extracto dropbox {list [path]|import --path P --model M|push --job ID [--folder F] [--format X]|disconnect}"
+      ;;
+  esac
+}
+
 cmd_estimate() {
   command -v python3 >/dev/null 2>&1 || die "python3 is required by 'extracto estimate' for safe JSON construction"
   local file="" pages="" model="" provider="" endpoint="" pp_model="" pp_format="" out_tokens="" in_tokens=""
@@ -1421,6 +1482,7 @@ main() {
     settings)  shift; cmd_settings "$@" ;;
     kb)        shift; cmd_kb "$@" ;;
     s3)        shift; cmd_s3 "$@" ;;
+    dropbox)   shift; cmd_dropbox "$@" ;;
     -h|--help|help|"")
       print_help
       ;;

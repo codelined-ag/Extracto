@@ -9,6 +9,9 @@ const PUBLIC_PATHS = [
   "/auth",
   "/api/auth",
   "/api/health",
+  "/api/integrations/dropbox/callback",
+  "/api/integrations/google_drive/callback",
+  "/api/integrations/onedrive/callback",
   // /api/v1/metrics has its own METRICS_TOKEN bearer scheme — the middleware's
   // extr_-prefixed bearer check would reject it before the route runs. The
   // route itself does the constant-time token check.

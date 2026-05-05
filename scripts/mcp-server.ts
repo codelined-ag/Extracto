@@ -557,5 +557,47 @@ server.tool(
   },
 );
 
+server.tool(
+  "integrations_list",
+  "List the user's connected cloud-drive integrations and which providers the operator has configured at the instance level.",
+  {},
+  async () => asTextResult(await call("/api/v1/integrations")),
+);
+
+server.tool(
+  "dropbox_list_folder",
+  "List a Dropbox folder. Pass an empty path or '/' to list the App folder root. Returns each entry's kind (file/folder), name, path, size, and modified timestamp.",
+  { path: z.string().default("") },
+  async ({ path }) =>
+    asTextResult(await call(`/api/v1/integrations/dropbox/list?path=${encodeURIComponent(path)}`)),
+);
+
+server.tool(
+  "dropbox_import",
+  "Download a file from the user's Dropbox and submit it for OCR. Returns a jobId. Supports pdf, png, jpg, webp up to 32 MiB.",
+  {
+    path: z.string().describe("Dropbox file path (e.g. '/Apps/Extracto/invoice.pdf')."),
+    model: z.string(),
+  },
+  async (input) =>
+    asTextResult(
+      await call("/api/v1/integrations/dropbox/import", { method: "POST", body: input }),
+    ),
+);
+
+server.tool(
+  "dropbox_push",
+  "Push a COMPLETED job's text back into Dropbox in the chosen format. The filename comes from the original job; pass `folder` to control where it lands ('/' or empty drops it at the root of the configured app folder).",
+  {
+    jobId: z.string(),
+    folder: z.string().default(""),
+    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx", "obsidian"]).default("md"),
+  },
+  async (input) =>
+    asTextResult(
+      await call("/api/v1/integrations/dropbox/push", { method: "POST", body: input }),
+    ),
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);

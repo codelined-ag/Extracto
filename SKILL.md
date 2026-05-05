@@ -208,6 +208,20 @@ Endpoint is server-side validated against SSRF (cloud-metadata IPs and link-loca
   - `result`: structured JSON. `result.structured.pages[]` is the per-page array; each entry has `pageNumber`, `durationMs`, `markdown`, and (when detection succeeds) `language` (ISO 639-3, e.g. `eng`/`ita`) plus `languageName` (English name).
   - `metadata`: provider, model, timing, post-processing info, `pageResults[]` mirroring the per-page fields above, and (when first-page heuristics succeed) a `document` sub-object with `title`, `date`, `authors[]`, and `keywords[]`. May also include `documentType` `{ kind, confidence }` where `kind` is one of `invoice`, `receipt`, `contract`, `academic`, `form`, `id`, or `generic`. A page entry may include `degenerateRetry: { reason, succeeded }` when the server detected degenerate output (`char-run` / `no-whitespace` / `token-loop` / `provider-noise`) and re-OCR'd the page once without text-layer anchoring. The reason is the failure mode that triggered the retry. Retries are budgeted per job so a pathologically broken document cannot double the cost of an entire batch.
 
+## Cloud storage integrations
+
+Operators register an OAuth app per provider (Dropbox, Google Drive, OneDrive) at the provider's developer console, then set the client id/secret in `docker.env` and a `PUBLIC_BASE_URL` matching the URL users hit in a browser. Users connect their account from Settings; tokens are stored encrypted with an `AUTH_SECRET`-derived key.
+
+```bash
+extracto dropbox list                                       # lists the App folder root (or pass a path)
+extracto dropbox list /Apps/Extracto/incoming
+extracto dropbox import --path /Apps/Extracto/invoice.pdf --model mistral-ocr-latest
+extracto dropbox push --job <job-id> --folder /Apps/Extracto/output --format docx
+extracto dropbox disconnect
+```
+
+Import downloads the file from Dropbox, queues it for OCR, and returns the `jobId`. Push renders a COMPLETED job to the chosen format and uploads it back to the chosen folder. Same surface is exposed on `POST /api/v1/integrations/dropbox/{import,push}` and the `dropbox_*` MCP tools.
+
 ## Lifecycle commands (no token required)
 
 ```bash
