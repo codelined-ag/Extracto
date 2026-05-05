@@ -1640,6 +1640,86 @@ cmd_s3() {
   esac
 }
 
+cmd_webhooks() {
+  local sub="${1:-list}"
+  shift || true
+  case "$sub" in
+    list|ls)
+      api_get "/api/v1/webhooks"
+      ;;
+    create|add)
+      local url="" events="" active="true"
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --url) url="${2:-}"; shift 2 ;;
+          --events) events="${2:-}"; shift 2 ;;
+          --active) active="${2:-}"; shift 2 ;;
+          *) die "unknown webhooks create flag: $1" ;;
+        esac
+      done
+      [ -n "$url" ] || die "usage: extracto webhooks create --url URL --events ev1,ev2 [--active true|false]"
+      [ -n "$events" ] || events="job.completed,job.failed"
+      local body
+      body="$(URL="$url" EVENTS="$events" ACTIVE="$active" python3 -c '
+import json, os
+events = [e.strip() for e in os.environ["EVENTS"].split(",") if e.strip()]
+print(json.dumps({"url": os.environ["URL"], "events": events, "active": os.environ["ACTIVE"].lower() == "true"}))
+')"
+      api_post_json "/api/v1/webhooks" "$body"
+      ;;
+    update|patch)
+      local id="${1:-}"
+      shift || true
+      [ -n "$id" ] || die "usage: extracto webhooks update <id> [--url URL] [--events ev1,ev2] [--active true|false]"
+      local url="" events="" active=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --url) url="${2:-}"; shift 2 ;;
+          --events) events="${2:-}"; shift 2 ;;
+          --active) active="${2:-}"; shift 2 ;;
+          *) die "unknown webhooks update flag: $1" ;;
+        esac
+      done
+      local body
+      body="$(URL="$url" EVENTS="$events" ACTIVE="$active" python3 -c '
+import json, os
+out = {}
+url = os.environ.get("URL","")
+if url: out["url"] = url
+events = os.environ.get("EVENTS","")
+if events: out["events"] = [e.strip() for e in events.split(",") if e.strip()]
+active = os.environ.get("ACTIVE","")
+if active: out["active"] = active.lower() == "true"
+print(json.dumps(out))
+')"
+      api_patch_json "/api/v1/webhooks/${id}" "$body"
+      ;;
+    delete|rm)
+      [ -n "${1:-}" ] || die "usage: extracto webhooks delete <id>"
+      api_delete "/api/v1/webhooks/${1}"
+      ;;
+    test)
+      [ -n "${1:-}" ] || die "usage: extracto webhooks test <id>"
+      api_post_json "/api/v1/webhooks/${1}/test" "{}"
+      ;;
+    deliveries)
+      [ -n "${1:-}" ] || die "usage: extracto webhooks deliveries <id> [--limit N]"
+      local id="$1"; shift
+      local limit="20"
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --limit) limit="${2:-}"; shift 2 ;;
+          *) die "unknown deliveries flag: $1" ;;
+        esac
+      done
+      api_get "/api/v1/webhooks/${id}/deliveries?limit=${limit}"
+      ;;
+    *)
+      die "usage: extracto webhooks <list|create|update|delete|test|deliveries> [args...]"
+      ;;
+  esac
+}
+
 cmd_integrations() {
   local sub="${1:-}"
   shift || true
@@ -1855,6 +1935,7 @@ main() {
     gdrive)       shift; cmd_gdrive "$@" ;;
     onedrive)     shift; cmd_onedrive "$@" ;;
     integrations) shift; cmd_integrations "$@" ;;
+    webhooks)     shift; cmd_webhooks "$@" ;;
     -h|--help|help|"")
       print_help
       ;;

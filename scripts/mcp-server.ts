@@ -790,6 +790,73 @@ server.tool(
 );
 
 server.tool(
+  "integration_disconnect",
+  "Disconnect a cloud provider (Dropbox / Google Drive / OneDrive). Best-effort revokes the OAuth token at the provider before deleting the local row.",
+  { provider: z.enum(["dropbox", "google_drive", "onedrive"]) },
+  async ({ provider }) =>
+    asTextResult(await call(`/api/v1/integrations/${provider}`, { method: "DELETE" })),
+);
+
+server.tool(
+  "webhooks_list",
+  "List the user's registered webhooks. Each entry includes id, url, events, active, lastFiredAt, failureCount.",
+  {},
+  async () => asTextResult(await call("/api/v1/webhooks")),
+);
+
+server.tool(
+  "webhooks_create",
+  "Register a new webhook. Returns a one-time HMAC signing secret in the response. Save it now — it is not shown again. The receiver must verify the X-Extracto-Signature header (t=<unix>,v1=<hex>) using HMAC-SHA256 of `${timestamp}.${body}` with the secret.",
+  {
+    url: z.string().url(),
+    events: z.array(z.enum(["job.created", "job.completed", "job.failed", "watcher.ingested"])).min(1),
+    active: z.boolean().default(true),
+  },
+  async (input) =>
+    asTextResult(await call("/api/v1/webhooks", { method: "POST", body: input })),
+);
+
+server.tool(
+  "webhooks_update",
+  "Update a webhook. Pass any of active, url, or events to change them. The signing secret cannot be rotated through this tool; delete and recreate to rotate.",
+  {
+    id: z.string(),
+    active: z.boolean().optional(),
+    url: z.string().url().optional(),
+    events: z.array(z.enum(["job.created", "job.completed", "job.failed", "watcher.ingested"])).min(1).optional(),
+  },
+  async ({ id, ...rest }) =>
+    asTextResult(await call(`/api/v1/webhooks/${encodeURIComponent(id)}`, { method: "PATCH", body: rest })),
+);
+
+server.tool(
+  "webhooks_delete",
+  "Delete a webhook. Cancels all pending retry deliveries.",
+  { id: z.string() },
+  async ({ id }) =>
+    asTextResult(await call(`/api/v1/webhooks/${encodeURIComponent(id)}`, { method: "DELETE" })),
+);
+
+server.tool(
+  "webhooks_test",
+  "Fire a synthetic signed delivery to a webhook so you can verify URL, signature, and firewall before relying on a real job.",
+  { id: z.string() },
+  async ({ id }) =>
+    asTextResult(await call(`/api/v1/webhooks/${encodeURIComponent(id)}/test`, { method: "POST", body: {} })),
+);
+
+server.tool(
+  "webhooks_deliveries",
+  "List recent delivery attempts for a webhook. Each row has the event, statusCode, ok, attempt, status (pending/delivered/exhausted), and durationMs. Useful for debugging why a receiver is rejecting payloads.",
+  {
+    id: z.string(),
+    limit: z.number().int().min(1).max(200).default(20),
+  },
+  async ({ id, limit }) =>
+    asTextResult(await call(`/api/v1/webhooks/${encodeURIComponent(id)}/deliveries?limit=${limit}`)),
+);
+
+server.tool(
   "watchers_list",
   "List the user's cloud watched folders (Dropbox / Google Drive / OneDrive). Each entry surfaces provider, name, folderPath, model, intervalSeconds, active, lastPolledAt, lastError.",
   {},

@@ -328,6 +328,33 @@ extracto integrations oauth-app clear --provider dropbox
 
 REST: `GET/PUT/DELETE /api/v1/integrations/{provider}/oauth-app`. MCP: `oauth_app_status`, `oauth_app_set`, `oauth_app_clear`. The redirect URI Extracto registers is `<PUBLIC_BASE_URL>/api/integrations/<provider>/callback`.
 
+## Webhooks
+
+Register HTTP receivers that get an HMAC-signed POST when jobs change state (`job.created`, `job.completed`, `job.failed`) or when a watcher ingests a file (`watcher.ingested`). Failed deliveries retry on a 1m / 5m / 30m / 2h / 12h schedule (six attempts). After 20 consecutive failures the webhook auto-disables.
+
+```bash
+extracto webhooks list
+extracto webhooks create --url https://example.com/hooks --events job.completed,job.failed
+extracto webhooks update <id> --url https://new.example.com/hooks --active false
+extracto webhooks test <id>
+extracto webhooks deliveries <id> --limit 50
+extracto webhooks delete <id>
+```
+
+REST: `GET/POST /api/v1/webhooks`, `PATCH/DELETE /api/v1/webhooks/{id}`, `POST /api/v1/webhooks/{id}/test`, `GET /api/v1/webhooks/{id}/deliveries`. MCP: `webhooks_list`, `webhooks_create`, `webhooks_update`, `webhooks_delete`, `webhooks_test`, `webhooks_deliveries`.
+
+The signing secret is shown once on `create` and never again. Verify the `X-Extracto-Signature: t=<unix>,v1=<hex>` header by computing `HMAC-SHA256(secret, "${t}.${rawBody}")` and timing-safe comparing against `<hex>`. Reject signatures whose timestamp is more than 5 minutes off.
+
+## Disconnect a cloud integration
+
+```bash
+extracto dropbox disconnect
+extracto gdrive disconnect
+extracto onedrive disconnect
+```
+
+REST: `DELETE /api/v1/integrations/{dropbox|google_drive|onedrive}`. MCP: `integration_disconnect`. Best-effort revokes the OAuth token at the provider before deleting the local row; OneDrive has no per-token revoke API so the token expires by inactivity (~90 days).
+
 ## Lifecycle commands (no token required)
 
 ```bash
