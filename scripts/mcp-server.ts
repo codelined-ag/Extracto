@@ -187,6 +187,16 @@ server.tool(
 );
 
 server.tool(
+  "recommendations",
+  "Get model recommendations per document type based on the user's recent OCR history. For each document type seen, returns the highest success-rate model + alternatives + an insufficientData flag when there aren't enough samples to be confident.",
+  {
+    days: z.number().int().min(1).max(365).default(90).describe("Lookback window in days (1 to 365)."),
+  },
+  async ({ days }) =>
+    asTextResult(await call(`/api/v1/recommendations?days=${days}`)),
+);
+
+server.tool(
   "ocr_compare",
   "Submit one input file to N models in parallel and get a comparisonId. Use ocr_comparison_get to fetch the per-model outputs and the server-computed word-level diff against the first model.",
   {

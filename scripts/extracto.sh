@@ -742,6 +742,22 @@ print(json.dumps(out))
   api_post_json "/api/v1/ocr/estimate" "$body"
 }
 
+cmd_recommend() {
+  local days=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --days) days="${2:-}"; shift 2 ;;
+      *) die "unknown recommend flag: $1" ;;
+    esac
+  done
+  if [ -n "$days" ]; then
+    case "$days" in ''|*[!0-9]*) die "--days must be a positive integer" ;; esac
+    api_get "/api/v1/recommendations?days=${days}"
+  else
+    api_get "/api/v1/recommendations"
+  fi
+}
+
 cmd_compare() {
   local sub="${1:-}"
   shift || true
@@ -1658,6 +1674,7 @@ main() {
     ocr)       shift; cmd_ocr "$@" ;;
     estimate)  shift; cmd_estimate "$@" ;;
     compare)   shift; cmd_compare "$@" ;;
+    recommend) shift; cmd_recommend "$@" ;;
     jobs)      shift; cmd_jobs "$@" ;;
     tags)      shift; cmd_tags "$@" ;;
     presets)   shift; cmd_presets "$@" ;;

@@ -87,6 +87,15 @@ extracto compare get <comparison-id>
 
 `extracto compare run` calls `POST /api/v1/ocr/compare` with the file + 2 to 4 model ids. Returns a `comparisonId` plus the per-model `jobId`s. `extracto compare get` returns each model's job (status, extractedText, processingMs, error if any) and a server-computed word-level diff between the first model's output (baseline) and each other completed job. Diffs are an array of `{ op: "equal"|"insert"|"delete", text }` segments plus a summary `{ equalChars, insertedChars, deletedChars, similarity }`.
 
+### Get model recommendations from your own history
+
+```bash
+extracto recommend
+extracto recommend --days 30
+```
+
+`extracto recommend` calls `GET /api/v1/recommendations` and groups your recent COMPLETED+FAILED jobs by document type. For each kind (invoice, receipt, contract, academic, form, id, generic) the response returns the highest success-rate model with `successRate`, `attempts`, `meanMs`, plus up to 3 alternatives, and an `insufficientData: true` flag when there aren't enough samples (less than 3 attempts per model). Default lookback is 90 days, override with `--days N` (max 365).
+
 ### List recent jobs
 
 ```bash
