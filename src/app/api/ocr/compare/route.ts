@@ -131,21 +131,26 @@ export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) =
   };
   let diffs: DiffEntry[] | undefined;
   if (completed.length >= 2) {
-    const [baseline, ...rest] = completed;
-    const baselineText = baseline.extractedText ?? "";
-    diffs = rest.map((candidate) => {
-      const candidateText = candidate.extractedText ?? "";
-      if (baselineText.length > MAX_DIFF_CHARS || candidateText.length > MAX_DIFF_CHARS) {
-        return { baselineJobId: baseline.id, candidateJobId: candidate.id, truncated: true };
+    diffs = [];
+    for (let i = 0; i < completed.length; i += 1) {
+      for (let j = i + 1; j < completed.length; j += 1) {
+        const baseline = completed[i];
+        const candidate = completed[j];
+        const baselineText = baseline.extractedText ?? "";
+        const candidateText = candidate.extractedText ?? "";
+        if (baselineText.length > MAX_DIFF_CHARS || candidateText.length > MAX_DIFF_CHARS) {
+          diffs.push({ baselineJobId: baseline.id, candidateJobId: candidate.id, truncated: true });
+          continue;
+        }
+        const segments = diffWords(baselineText, candidateText);
+        diffs.push({
+          baselineJobId: baseline.id,
+          candidateJobId: candidate.id,
+          segments,
+          summary: summarizeDiff(segments),
+        });
       }
-      const segments = diffWords(baselineText, candidateText);
-      return {
-        baselineJobId: baseline.id,
-        candidateJobId: candidate.id,
-        segments,
-        summary: summarizeDiff(segments),
-      };
-    });
+    }
   }
   return NextResponse.json({ comparisonId, jobs, diffs });
 });

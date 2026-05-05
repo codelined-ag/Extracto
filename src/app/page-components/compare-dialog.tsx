@@ -66,6 +66,7 @@ export interface CompareDialogProps {
   selectedFile: ProcessingFile | null;
   models: ModelOption[];
   defaultModel: string;
+  configuredProvider?: string;
   t: Translator;
 }
 
@@ -75,6 +76,7 @@ export function CompareDialog({
   selectedFile,
   models,
   defaultModel,
+  configuredProvider,
   t,
 }: CompareDialogProps) {
   const { toast } = useToast();
@@ -176,7 +178,43 @@ export function CompareDialog({
     return () => { cancelled = true; };
   }, [comparisonId, t, toast]);
 
-  const baselineId = data?.jobs[0]?.id;
+  const [explicitBaselineId, setExplicitBaselineId] = React.useState<string | null>(null);
+  const knownBaseline = explicitBaselineId && data?.jobs.some((j) => j.id === explicitBaselineId)
+    ? explicitBaselineId
+    : null;
+  const baselineId = knownBaseline ?? data?.jobs[0]?.id;
+  React.useEffect(() => {
+    if (!open || !comparisonId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setExplicitBaselineId(null);
+    }
+  }, [open, comparisonId]);
+
+  const findDiff = (baselineJobId: string | undefined, candidateJobId: string): DiffEntry | undefined => {
+    if (!data?.diffs || !baselineJobId) return undefined;
+    const direct = data.diffs.find((d) => d.baselineJobId === baselineJobId && d.candidateJobId === candidateJobId);
+    if (direct) return direct;
+    const reversed = data.diffs.find((d) => d.baselineJobId === candidateJobId && d.candidateJobId === baselineJobId);
+    if (!reversed) return undefined;
+    const flippedSegments = reversed.segments?.map((s) =>
+      s.op === "equal" ? s : { op: s.op === "insert" ? "delete" : "insert", text: s.text } as const,
+    );
+    const summary = reversed.summary
+      ? {
+          equalChars: reversed.summary.equalChars,
+          insertedChars: reversed.summary.deletedChars,
+          deletedChars: reversed.summary.insertedChars,
+          similarity: reversed.summary.similarity,
+        }
+      : undefined;
+    return {
+      baselineJobId,
+      candidateJobId,
+      segments: flippedSegments,
+      summary,
+      truncated: reversed.truncated,
+    };
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -205,22 +243,41 @@ export function CompareDialog({
               </Label>
               <ScrollArea className="h-72 rounded border mt-1">
                 <div className="p-1">
-                  {models.map((m) => {
-                    const isPicked = picked.includes(m.id);
-                    const disabled = !isPicked && picked.length >= 4;
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => togglePicked(m.id)}
-                        disabled={disabled}
-                        className={`w-full flex items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-secondary/50 ${isPicked ? "bg-primary/10" : ""} ${disabled ? "opacity-50" : ""}`}
-                      >
-                        <span className="truncate">{m.name}</span>
-                        <span className="text-[10px] text-muted-foreground">{m.provider}</span>
-                      </button>
-                    );
-                  })}
+                  {(() => {
+                    const provider = configuredProvider?.trim() || "";
+                    const visible = provider
+                      ? models.filter((m) => !m.provider || m.provider === provider)
+                      : models;
+                    if (visible.length === 0) {
+                      return (
+                        <p className="text-xs text-muted-foreground italic p-3">
+                          {t(
+                            "Nessun modello disponibile per il provider configurato.",
+                            "No models available for the configured provider.",
+                            "Aucun modèle disponible pour le fournisseur configuré.",
+                            "No hay modelos disponibles para el proveedor configurado.",
+                            "Keine Modelle für den konfigurierten Anbieter verfügbar.",
+                          )}
+                        </p>
+                      );
+                    }
+                    return visible.map((m) => {
+                      const isPicked = picked.includes(m.id);
+                      const disabled = !isPicked && picked.length >= 4;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => togglePicked(m.id)}
+                          disabled={disabled}
+                          className={`w-full flex items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-secondary/50 ${isPicked ? "bg-primary/10" : ""} ${disabled ? "opacity-50" : ""}`}
+                        >
+                          <span className="truncate">{m.name}</span>
+                          <span className="text-[10px] text-muted-foreground">{m.provider}</span>
+                        </button>
+                      );
+                    });
+                  })()}
                 </div>
               </ScrollArea>
             </div>
@@ -244,13 +301,22 @@ export function CompareDialog({
             ) : (
               <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${data.jobs.length}, minmax(0, 1fr))` }}>
                 {data.jobs.map((job) => {
-                  const diff = data.diffs?.find((d) => d.candidateJobId === job.id);
                   const isBaseline = job.id === baselineId;
+                  const diff = isBaseline ? undefined : findDiff(baselineId, job.id);
                   return (
                     <div key={job.id} className="border rounded-md flex flex-col min-h-0">
                       <div className="p-2 border-b bg-secondary/30 space-y-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-medium truncate" title={job.model}>{job.model}</span>
+                          <button
+                            type="button"
+                            onClick={() => setExplicitBaselineId(job.id)}
+                            className="text-xs font-medium truncate hover:underline text-left"
+                            title={isBaseline
+                              ? t("base attuale", "current base", "base actuelle", "base actual", "aktuelle Basis")
+                              : t("imposta come base", "set as base", "définir comme base", "establecer como base", "als Basis festlegen")}
+                          >
+                            {job.model}
+                          </button>
                           {isBaseline ? <Badge variant="outline" className="text-[10px] py-0 px-1">{t("base", "base", "base", "base", "base")}</Badge> : null}
                         </div>
                         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">

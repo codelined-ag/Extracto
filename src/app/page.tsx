@@ -3395,6 +3395,7 @@ export default function ExtractoPage() {
         selectedFile={selectedFile ?? null}
         models={models}
         defaultModel={selectedModel || ""}
+        configuredProvider={apiSettings.provider}
         t={t}
       />
 
