@@ -103,6 +103,11 @@ import { PreviewHeader } from "@/app/page-components/preview-header";
 import { NoSelectionCard } from "@/app/page-components/no-selection-card";
 import { DocumentGallery } from "@/app/page-components/document-gallery";
 import { UploadArea } from "@/app/page-components/upload-area";
+import {
+  isClientOnline,
+  isNetworkError,
+  subscribeNetworkStatus,
+} from "@/lib/offline/network-status";
 import type {
   OcrPageCheckpointView,
   OcrProgressEventView,
@@ -494,6 +499,11 @@ export default function ExtractoPage() {
  const router = useRouter();
  const { toast } = useToast();
  const [files, setFiles] = React.useState<ProcessingFile[]>([]);
+ const [isOnline, setIsOnline] = React.useState<boolean>(true);
+ const filesRef = React.useRef<ProcessingFile[]>([]);
+ React.useEffect(() => {
+  filesRef.current = files;
+ }, [files]);
  const [bulkSelectedIds, setBulkSelectedIds] = React.useState<Set<string>>(() => new Set());
  const [selectedModel, setSelectedModel] = React.useState<string>(OLLAMA_FALLBACK_MODELS[0].id);
  const [models, setModels] = React.useState<Model[]>(OLLAMA_FALLBACK_MODELS);
@@ -2183,8 +2193,26 @@ export default function ExtractoPage() {
  return;
  }
 
+ if (!isClientOnline()) {
+  setIsOnline(false);
+  const targets = files.filter((f) => (f.status === "pending" || f.status === "offline-queued") && (!filterIds || filterIds.has(f.id)));
+  if (targets.length === 0) return;
+  setFiles((prev) => prev.map((f) => (targets.some((t) => t.id === f.id) ? { ...f, status: "offline-queued" as const, error: undefined } : f)));
+  toast({
+   title: t("Offline", "Offline", "Hors ligne", "Sin conexión", "Offline"),
+   description: t(
+    `${targets.length} file in coda. Verranno inviati al ritorno online.`,
+    `${targets.length} file${targets.length === 1 ? "" : "s"} queued. They'll submit when you're back online.`,
+    `${targets.length} fichier${targets.length === 1 ? "" : "s"} en file. Ils seront envoyés au retour en ligne.`,
+    `${targets.length} archivo${targets.length === 1 ? "" : "s"} en cola. Se enviarán al volver en línea.`,
+    `${targets.length} ${targets.length === 1 ? "Datei" : "Dateien"} in Warteschlange. Werden gesendet, sobald du wieder online bist.`,
+   ),
+  });
+  return;
+ }
+
  setIsProcessing(true);
- const filesToProcess = files.filter((f) => f.status ==="pending"&& (!filterIds || filterIds.has(f.id)));
+ const filesToProcess = files.filter((f) => (f.status === "pending" || f.status === "offline-queued") && (!filterIds || filterIds.has(f.id)));
  let completedInRun = 0;
 
  for (const file of filesToProcess) {
@@ -2206,6 +2234,15 @@ export default function ExtractoPage() {
  break;
  }
  } catch (error) {
+ if (!isClientOnline() || isNetworkError(error)) {
+  updateFileById(file.id, (entry) => ({
+   ...entry,
+   status:"offline-queued",
+   error: undefined,
+  }));
+  setIsOnline(false);
+  continue;
+ }
  updateFileById(file.id, (entry) => ({
  ...entry,
  status:"error",
@@ -2228,6 +2265,26 @@ export default function ExtractoPage() {
  });
  }
  };
+
+ const processFilesRef = React.useRef(processFiles);
+ React.useEffect(() => {
+  processFilesRef.current = processFiles;
+ });
+
+ React.useEffect(() => {
+  if (typeof navigator !== "undefined" && typeof navigator.onLine === "boolean") {
+   setIsOnline(navigator.onLine);
+  }
+  const unsubscribe = subscribeNetworkStatus((online) => {
+   setIsOnline(online);
+   if (!online) return;
+   const queued = filesRef.current.filter((f) => f.status === "offline-queued");
+   if (queued.length === 0) return;
+   const ids = new Set(queued.map((f) => f.id));
+   void processFilesRef.current(ids);
+  });
+  return unsubscribe;
+ }, []);
 
  const stopProcessingFile = async (file: ProcessingFile) => {
  if (!file.jobId || file.status !=="processing") {
@@ -2333,6 +2390,8 @@ export default function ExtractoPage() {
         onChangePassword={() => setChangePasswordOpen(true)}
         onSignOut={signOut}
         isSigningOut={isSigningOut}
+        isOnline={isOnline}
+        offlineQueuedCount={files.filter((f) => f.status === "offline-queued").length}
       />
 
       <ChangePasswordDialog

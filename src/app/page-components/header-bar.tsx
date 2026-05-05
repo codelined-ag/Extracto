@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-import { KeyRoundIcon, UserCogIcon } from "lucide-react";
+import { KeyRoundIcon, UserCogIcon, WifiOff } from "lucide-react";
 import { LogoutIcon } from "@/components/ui/logout";
 import { SettingsIcon } from "@/components/ui/settings";
 import { UserIcon } from "@/components/ui/user";
@@ -28,6 +28,8 @@ export interface HeaderBarProps {
   onChangePassword: () => void;
   onSignOut: () => void;
   isSigningOut: boolean;
+  isOnline?: boolean;
+  offlineQueuedCount?: number;
 }
 
 export function HeaderBar({
@@ -37,6 +39,8 @@ export function HeaderBar({
   onChangePassword,
   onSignOut,
   isSigningOut,
+  isOnline = true,
+  offlineQueuedCount = 0,
 }: HeaderBarProps) {
   return (
     <motion.header
@@ -60,6 +64,36 @@ export function HeaderBar({
         </motion.div>
 
         <div className="flex items-center gap-2">
+          {!isOnline ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  data-testid="offline-chip"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground"
+                >
+                  <WifiOff className="size-3" />
+                  {offlineQueuedCount > 0
+                    ? t(
+                        `Offline · ${offlineQueuedCount} in coda`,
+                        `Offline · ${offlineQueuedCount} queued`,
+                        `Hors ligne · ${offlineQueuedCount} en file`,
+                        `Sin conexión · ${offlineQueuedCount} en cola`,
+                        `Offline · ${offlineQueuedCount} in Warteschlange`,
+                      )
+                    : t("Offline", "Offline", "Hors ligne", "Sin conexión", "Offline")}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {t(
+                  "Sei offline. Le elaborazioni in coda partiranno al ritorno online.",
+                  "You're offline. Queued items will run when you're back online.",
+                  "Vous êtes hors ligne. Les tâches en file repartiront au retour en ligne.",
+                  "Estás sin conexión. Los elementos en cola se ejecutarán al volver en línea.",
+                  "Du bist offline. Wartelistenelemente starten, sobald du wieder online bist.",
+                )}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
           <Tooltip>
             <TooltipTrigger asChild>
               <motion.div

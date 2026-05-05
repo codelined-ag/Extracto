@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { AlertCircle, CheckIcon } from "lucide-react";
+import { AlertCircle, CheckIcon, WifiOff } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -126,6 +126,14 @@ export function FileListItem({
               </span>
             </div>
           ) : null}
+          {file.status === "offline-queued" ? (
+            <div className="flex items-center gap-1">
+              <WifiOff size={12} className="text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">
+                {t("in coda offline", "offline queue", "file d'attente hors ligne", "cola sin conexión", "Offline-Warteschlange")}
+              </span>
+            </div>
+          ) : null}
         </div>
         {(file.status === "processing" || file.status === "paused") && (
           <>
@@ -159,6 +167,7 @@ export function FileListItem({
           </motion.div>
         )}
         {file.status === "error" && <AlertCircle className="h-4 w-4 text-destructive" />}
+        {file.status === "offline-queued" && <WifiOff className="h-4 w-4 text-muted-foreground" />}
         {file.status === "paused" && (
           <PauseIcon
             size={16}

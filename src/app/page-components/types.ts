@@ -56,7 +56,7 @@ export interface ProcessingFile {
   name: string;
   size: number;
   type: string;
-  status: "pending" | "processing" | "paused" | "completed" | "error";
+  status: "pending" | "processing" | "paused" | "completed" | "error" | "offline-queued";
   progress: number;
   result?: {
     text: string;
