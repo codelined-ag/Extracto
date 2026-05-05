@@ -20,6 +20,7 @@ const settings = {
   documentPreset: "generic",
   pageConcurrency: 1,
   autoRetryMaxAttempts: 1,
+ piiRedaction: false,
 } as const;
 
 const page: ProcessedPageOutput = {

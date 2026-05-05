@@ -20,6 +20,7 @@ export interface AdvancedSettings {
   documentPreset: DocumentPresetKind;
   pageConcurrency: number;
   autoRetryMaxAttempts: number;
+  piiRedaction: boolean;
 }
 
 export const AUTO_RETRY_MIN = 1;
@@ -44,6 +45,7 @@ export const DEFAULT_SETTINGS: AdvancedSettings = {
   documentPreset: "generic",
   pageConcurrency: PAGE_CONCURRENCY_DEFAULT,
   autoRetryMaxAttempts: AUTO_RETRY_DEFAULT,
+  piiRedaction: false,
 };
 
 const VALID_PRESETS: ReadonlySet<DocumentPresetKind> = new Set([
@@ -111,6 +113,7 @@ export function normalizeAdvancedSettings(input: unknown): AdvancedSettings {
     documentPreset: getPreset(c, DEFAULT_SETTINGS.documentPreset),
     pageConcurrency,
     autoRetryMaxAttempts,
+    piiRedaction: getBool(c, "piiRedaction", DEFAULT_SETTINGS.piiRedaction),
   };
 }
 

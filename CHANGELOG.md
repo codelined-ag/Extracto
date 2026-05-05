@@ -9,6 +9,7 @@ follows [SemVer](https://semver.org/).
 ### Added
 - Multi-model comparison: POST /api/v1/ocr/compare fans out one input to 2 to 4 models, GET returns each model's output plus a server-computed word-level diff against the baseline; available on REST, MCP, and CLI.
 - Model recommendations from your own history: GET /api/v1/recommendations groups recent jobs by document type and ranks models by success rate, processingMs as the tiebreaker; available on REST, MCP, and CLI.
+- PII auto-redaction with audit trail: POST /api/v1/pii/redact masks emails, phones, Luhn-valid cards, IBANs, IPs, URLs, dates of birth, and SSNs in arbitrary text; OCR jobs can opt in via settings.piiRedaction and the audit (kinds + offsets, no values) lives on metadata.piiAudit.
 
 ## [0.11.0] - 2026-05-05
 

@@ -19,6 +19,7 @@ function validSettings(overrides: Partial<AdvancedSettings> = {}): AdvancedSetti
     documentPreset: "generic",
     pageConcurrency: 0,
     autoRetryMaxAttempts: 1,
+ piiRedaction: false,
     ...overrides,
   };
 }
@@ -300,6 +301,7 @@ describe("DEFAULT_SETTINGS", () => {
       documentPreset: "generic",
       pageConcurrency: 0,
       autoRetryMaxAttempts: 1,
+ piiRedaction: false,
     });
   });
 });

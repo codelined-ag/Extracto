@@ -47,6 +47,7 @@ const baseInput = {
     documentPreset: "generic" as const,
     pageConcurrency: 1,
     autoRetryMaxAttempts: 1,
+ piiRedaction: false,
   },
   postProcessingPayload: {
     enabled: false,

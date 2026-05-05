@@ -187,6 +187,14 @@ server.tool(
 );
 
 server.tool(
+  "pii_redact",
+  "Run server-side PII redaction over a chunk of text. Replaces emails, phones (>=7 digits), Luhn-valid credit cards, IBAN-shaped strings, IPv4 addresses, URLs, dates of birth, and SSNs with [REDACTED:KIND:N] placeholders. Returns the redacted text plus the audit (kind + char offsets only, no original values).",
+  { text: z.string().min(1) },
+  async ({ text }) =>
+    asTextResult(await call("/api/v1/pii/redact", { method: "POST", body: { text } })),
+);
+
+server.tool(
   "recommendations",
   "Get model recommendations per document type based on the user's recent OCR history. For each document type seen, returns the highest success-rate model + alternatives + an insufficientData flag when there aren't enough samples to be confident.",
   {

@@ -572,6 +572,44 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /api/v1/pii/redact:
+    post:
+      summary: Run server-side PII redaction over arbitrary text
+      operationId: redactPii
+      tags: [OCR]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, description: "UTF-8 input, max 5 MiB." }
+      responses:
+        "200":
+          description: Redacted text + audit
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  redactedText: { type: string }
+                  matches:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kind: { type: string }
+                        startOffset: { type: integer }
+                        endOffset: { type: integer }
+                  countsByKind:
+                    type: object
+                    additionalProperties: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/BadRequest" }
+
   /api/v1/recommendations:
     get:
       summary: Get model recommendations per document type from the user's recent OCR history

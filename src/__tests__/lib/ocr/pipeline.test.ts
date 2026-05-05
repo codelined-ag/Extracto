@@ -184,7 +184,7 @@ describe("buildPrompt", () => {
     handwritingRecognition: false,
     preserveFormatting: true,
     customPrompt: "",
-    quality: 80, preferTextLayer: true, documentPreset: "generic" as const, pageConcurrency: 1, autoRetryMaxAttempts: 1 };
+    quality: 80, preferTextLayer: true, documentPreset: "generic" as const, pageConcurrency: 1, autoRetryMaxAttempts: 1, piiRedaction: false };
 
   it("includes the language instruction when language is not 'auto'", () => {
     const prompt = buildPrompt({ ...baseSettings, language: "fr" });
@@ -471,6 +471,7 @@ describe("submitOcrJob", () => {
       documentPreset: "generic" as const,
       pageConcurrency: 1,
       autoRetryMaxAttempts: 1,
+      piiRedaction: false,
     },
     postProcessingPayload: { enabled: false, instruction: "", outputFormat: "markdown" as const, model: "", template: "custom" as const, targetLanguage: "" },
     inputPreviews: [PREVIEW],

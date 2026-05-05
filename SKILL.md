@@ -96,6 +96,17 @@ extracto recommend --days 30
 
 `extracto recommend` calls `GET /api/v1/recommendations` and groups your recent COMPLETED+FAILED jobs by document type. For each kind (invoice, receipt, contract, academic, form, id, generic) the response returns the highest success-rate model with `successRate`, `attempts`, `meanMs`, plus up to 3 alternatives, and an `insufficientData: true` flag when there aren't enough samples (less than 3 attempts per model). Default lookback is 90 days, override with `--days N` (max 365).
 
+### Redact PII from a chunk of text
+
+```bash
+extracto redact --text "Call Alice at 555-123-4567 or alice@example.com"
+extracto redact --file ./meeting-notes.md
+```
+
+`extracto redact` calls `POST /api/v1/pii/redact`. Detects emails, phones (>=7 digits), Luhn-valid credit cards, IBAN-shaped strings, IPv4 addresses, URLs, dates of birth, and SSNs. Returns the redacted text with `[REDACTED:KIND:N]` placeholders plus an audit (kind + char offsets only — never the original values).
+
+You can also turn on redaction per OCR job (settings field `piiRedaction: true`); the pipeline applies redaction to the final markdown and persists the audit on the job's `metadata.piiAudit`.
+
 ### List recent jobs
 
 ```bash

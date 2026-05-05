@@ -742,6 +742,29 @@ print(json.dumps(out))
   api_post_json "/api/v1/ocr/estimate" "$body"
 }
 
+cmd_redact() {
+  command -v python3 >/dev/null 2>&1 || die "python3 is required by 'extracto redact'"
+  local file="" text=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --file) file="${2:-}"; shift 2 ;;
+      --text) text="${2:-}"; shift 2 ;;
+      *) die "unknown redact flag: $1" ;;
+    esac
+  done
+  if [ -n "$file" ]; then
+    [ -f "$file" ] || die "file not found: $file"
+    text="$(cat "$file")"
+  fi
+  [ -n "$text" ] || die "usage: extracto redact (--text \"...\" | --file PATH)"
+  local body
+  body="$(EXTRACTO_REDACT_TEXT="$text" python3 -c '
+import json, os
+print(json.dumps({"text": os.environ["EXTRACTO_REDACT_TEXT"]}))
+')"
+  api_post_json "/api/v1/pii/redact" "$body"
+}
+
 cmd_recommend() {
   local days=""
   while [ $# -gt 0 ]; do
@@ -1675,6 +1698,7 @@ main() {
     estimate)  shift; cmd_estimate "$@" ;;
     compare)   shift; cmd_compare "$@" ;;
     recommend) shift; cmd_recommend "$@" ;;
+    redact)    shift; cmd_redact "$@" ;;
     jobs)      shift; cmd_jobs "$@" ;;
     tags)      shift; cmd_tags "$@" ;;
     presets)   shift; cmd_presets "$@" ;;

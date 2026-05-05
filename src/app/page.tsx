@@ -549,6 +549,7 @@ export default function ExtractoPage() {
  documentPreset: "generic",
  pageConcurrency: 0,
  autoRetryMaxAttempts: 1,
+ piiRedaction: false,
  });
  const [postProcessing, setPostProcessing] = React.useState<PostProcessingSettings>({
  enabled: false,

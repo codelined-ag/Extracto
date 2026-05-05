@@ -314,10 +314,25 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       extractedMarkdown,
       snapshot: snapshotMetadata,
     });
-    const finalMarkdown = postProcessing.finalMarkdown;
-    const postProcessedText = postProcessing.postProcessedText;
-    const postProcessedJson = postProcessing.postProcessedJson;
+    let finalMarkdown = postProcessing.finalMarkdown;
+    let postProcessedText = postProcessing.postProcessedText;
+    let postProcessedJson = postProcessing.postProcessedJson;
+    let rawExtractionText = extractedMarkdown;
     extractedMetadata.postProcessing = postProcessing.postProcessingForExtractedMetadata;
+
+    if (input.settingsPayload.piiRedaction) {
+      const { redactPii, redactJsonValues } = await import("@/lib/pii/redact");
+      const finalRedaction = redactPii(finalMarkdown);
+      finalMarkdown = finalRedaction.redactedText;
+      rawExtractionText = redactPii(rawExtractionText).redactedText;
+      if (postProcessedText) postProcessedText = redactPii(postProcessedText).redactedText;
+      postProcessedJson = redactJsonValues(postProcessedJson);
+      extractedMetadata.piiAudit = {
+        applied: true,
+        countsByKind: finalRedaction.countsByKind,
+        matches: finalRedaction.matches,
+      };
+    }
 
     const result = buildJsonResult({
       fileName: input.fileName,
@@ -327,7 +342,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       markdown: finalMarkdown,
       structured: {
         markdown: finalMarkdown,
-        rawMarkdown: extractedMarkdown,
+        rawMarkdown: rawExtractionText,
         pages: state.partialStructuredPages,
         ...(postProcessedText
           ? {
@@ -343,7 +358,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       },
       metadata: extractedMetadata,
     });
-    result.rawExtractionText = extractedMarkdown;
+    result.rawExtractionText = rawExtractionText;
     if (postProcessedText) {
       result.postProcessedText = postProcessedText;
     }
