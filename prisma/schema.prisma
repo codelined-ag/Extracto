@@ -159,6 +159,7 @@ model OcrSetting {
   documentPreset         String       @default("generic")
   pageConcurrency        Int          @default(0)
   autoRetryMaxAttempts   Int          @default(1)
+  piiRedaction           Boolean      @default(false)
   jobs                   OcrJob[]
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt
