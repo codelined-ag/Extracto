@@ -30,7 +30,7 @@
   </picture>
 </p>
 
-> **v0.11.0**: pre-run cost estimator with live per-token pricing from OpenRouter and the LiteLLM mirror, DOCX/RTF/CSV/XLSX/HTML export formats, Obsidian vault export with frontmatter and per-page notes, translation and summarization post-processing templates, and bidirectional Dropbox / Google Drive / OneDrive integration on least-privilege OAuth scopes. See the [changelog](./CHANGELOG.md).
+> **v1.0.0**: side-by-side multi-model comparison with server-computed word-level diff, model recommendations from your own OCR history, PII auto-redaction with audit trail, form-field extraction, LaTeX equation extraction, and an E2E encryption scaffold (RSA SPKI public-key registration + AES-256-GCM envelope). v1.0 is the end of the roadmap; see the [changelog](./CHANGELOG.md).
 
 ---
 
