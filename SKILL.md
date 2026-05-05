@@ -100,6 +100,21 @@ extracto jobs page-history <job-id> <page-number>
 
 `edit-page` replaces the markdown of one page on a `COMPLETED` job and re-stitches the job's `extractedText`. The previous text is appended to the page's edit history (max 20 entries; newest first). The job is flagged `userEdited: true`, and prior KB/S3 exports are marked stale, you'll need to re-export to update them.
 
+### Export a job to a downloadable file
+
+```bash
+extracto jobs export <job-id> --format md                       # default
+extracto jobs export <job-id> --format docx --out report.docx
+extracto jobs export <job-id> --format xlsx                     # markdown tables become sheets
+extracto jobs export <job-id> --format csv                      # markdown table as CSV
+extracto jobs export <job-id> --format rtf
+extracto jobs export <job-id> --format txt                      # plaintext, sigils stripped
+extracto jobs export <job-id> --format html
+extracto jobs export <job-id> --format json                     # full structured result
+```
+
+`extracto jobs export` calls `GET /api/v1/jobs/{id}/export?format=...`. Supported formats: `md`, `json`, `txt`, `html`, `docx`, `rtf`, `csv`, `xlsx`. CSV emits the first markdown table; if the document has multiple tables the file contains all of them with `# table N` separators. XLSX puts each markdown table on its own sheet (and falls back to a single text-dump sheet for prose-only documents). Only works on `COMPLETED` jobs (returns 409 otherwise).
+
 ### Cancel or delete a job
 
 ```bash

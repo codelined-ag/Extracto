@@ -145,6 +145,36 @@ server.tool(
 );
 
 server.tool(
+  "job_export",
+  "Render a COMPLETED job's text into a downloadable file. Supported formats: md (markdown), json (full structured result), txt (plain text), html, docx, rtf, csv (markdown tables, falls back to one-line dump for prose), xlsx (each markdown table is a separate sheet, prose dumps to a single sheet). Returns the file as base64.",
+  {
+    jobId: z.string(),
+    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx"]),
+  },
+  async ({ jobId, format }) => {
+    const url = `/api/v1/jobs/${encodeURIComponent(jobId)}/export?format=${encodeURIComponent(format)}`;
+    const res = await fetch(`${EXTRACTO_URL}${url}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${EXTRACTO_TOKEN}`, Origin: EXTRACTO_URL },
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`GET ${url} -> ${res.status}: ${text.slice(0, 400)}`);
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const disposition = res.headers.get("Content-Disposition") ?? "";
+    const filenameMatch = disposition.match(/filename="([^"]+)"/);
+    const filename = filenameMatch?.[1] ?? `${jobId}.${format}`;
+    return asTextResult({
+      filename,
+      contentType: res.headers.get("Content-Type"),
+      base64: buffer.toString("base64"),
+      size: buffer.length,
+    });
+  },
+);
+
+server.tool(
   "ocr_estimate",
   "Estimate the dollar cost of running OCR on a set of pages before submitting. Pricing is fetched live (OpenRouter, LiteLLM mirror), static (Mistral OCR per-page rates), or $0 (Ollama, unknown self-hosted). Returns a breakdown with per-page rate, total, and warnings about pricing-source confidence.",
   {

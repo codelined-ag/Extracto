@@ -606,6 +606,26 @@ cmd_jobs() {
       done
       printf "%s\n" "$body"
       ;;
+    export)
+      [ -n "${1:-}" ] || die "usage: extracto jobs export <job-id> [--format md|json|txt|html|docx|rtf|csv|xlsx] [--out PATH]"
+      local ex_job_id="$1"; shift
+      local ex_format="md" ex_out=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --format) ex_format="${2:-}"; shift 2 ;;
+          --out)    ex_out="${2:-}"; shift 2 ;;
+          *) die "unknown export flag: $1" ;;
+        esac
+      done
+      case "$ex_format" in
+        md|json|txt|html|docx|rtf|csv|xlsx) ;;
+        *) die "--format must be one of: md, json, txt, html, docx, rtf, csv, xlsx" ;;
+      esac
+      [ -n "$ex_out" ] || ex_out="${ex_job_id}.${ex_format}"
+      api_get_raw "/api/v1/jobs/${ex_job_id}/export?format=${ex_format}" "$ex_out" \
+        || die "export failed (job=${ex_job_id} format=${ex_format})"
+      ok "wrote ${ex_out}"
+      ;;
     edit-page)
       [ -n "${1:-}" ] && [ -n "${2:-}" ] || die "usage: extracto jobs edit-page <job-id> <page-number> (--text TEXT | --from-file PATH)"
       local ep_job_id="$1"
@@ -664,7 +684,7 @@ cmd_jobs() {
       api_put_json "/api/v1/jobs/${job_id}/tags" "$(printf '{"tagIds":%s}' "$ids_json")"
       ;;
     *)
-      die "usage: extracto jobs <list|get|delete|cancel|wait|set-tags|bulk-tag|edit-page|page-history> [args...]"
+      die "usage: extracto jobs <list|get|export|delete|cancel|wait|set-tags|bulk-tag|edit-page|page-history> [args...]"
       ;;
   esac
 }

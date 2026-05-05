@@ -8,6 +8,7 @@ follows [SemVer](https://semver.org/).
 
 ### Added
 - Pre-run cost estimator on REST, MCP, CLI, and the workspace badge, pulling live per-token pricing from OpenRouter and the LiteLLM mirror, the static per-page rate from Mistral OCR, and $0 with a heads-up for local Ollama and self-hosted endpoints with no mirror entry.
+- Job export to DOCX, RTF, CSV, XLSX, plus existing md/json/txt/html via GET /api/v1/jobs/{id}/export, mirrored on MCP and CLI; markdown tables become CSV rows or per-sheet XLSX automatically.
 
 ## [0.10.0] - 2026-05-05
 

@@ -39,6 +39,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "docx": "^9.6.1",
+    "exceljs": "^4.4.0",
     "franc-min": "^6.2.0",
     "iso-639-3": "^3.0.1",
     "jszip": "^3.10.1",

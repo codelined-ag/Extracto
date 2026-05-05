@@ -471,6 +471,65 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /api/v1/jobs/{id}/export:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [md, json, txt, html, docx, rtf, csv, xlsx]
+          default: md
+    get:
+      summary: Render a COMPLETED job to a downloadable file
+      operationId: exportOcrJob
+      tags: [OCR]
+      description: |
+        Returns the job's text rendered to the requested format. CSV
+        and XLSX surface markdown tables as structured rows (XLSX puts
+        each table on its own sheet); prose-only documents fall back
+        to a single text-dump sheet. RTF/DOCX/HTML render full
+        formatting (headings, paragraphs, lists, tables). Only works
+        on COMPLETED jobs.
+      responses:
+        "200":
+          description: |
+            File body. The `Content-Type` varies by format:
+            md=text/markdown, json=application/json, txt=text/plain, html=text/html,
+            rtf=application/rtf, csv=text/csv,
+            docx=application/vnd.openxmlformats-officedocument.wordprocessingml.document,
+            xlsx=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.
+            All variants set Content-Disposition: attachment; filename="...".
+          content:
+            text/markdown: { schema: { type: string } }
+            application/json: { schema: { type: object } }
+            text/plain: { schema: { type: string } }
+            text/html: { schema: { type: string } }
+            application/rtf: { schema: { type: string } }
+            text/csv: { schema: { type: string } }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Job not COMPLETED
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413":
+          description: Source markdown exceeds the 25 MiB export limit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /api/v1/openai/chat/completions:
     post:
       summary: OpenAI-shaped chat-completions adapter that performs OCR
