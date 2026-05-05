@@ -59,7 +59,7 @@ Everything else (per-user accounts, scoped API keys, rate limits, signed webhook
 You need Docker. That's it.
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/codelined-ag/Extracto/v0.7.0/scripts/quickstart.sh | bash
+curl -fsSL https://extracto.help/install.sh | bash
 ```
 
 Pulls the prebuilt multi-arch image, runs a single container with an auto-generated `AUTH_SECRET` and a persistent SQLite volume, waits for the healthcheck, and prints the URL. Open <http://localhost:3000>, sign up, follow the tour.
