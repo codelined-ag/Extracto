@@ -31,6 +31,8 @@ model AuthUser {
   pendingEmail          String?
   emailChangeTokenHash  String?
   emailChangeExpiresAt  DateTime?
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
   name                  String?
   jobs               OcrJob[]
   apiKeys            ApiKey[]
