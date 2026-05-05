@@ -84,12 +84,16 @@ describe("seedPostProcessingMeta", () => {
     instruction: "",
     outputFormat: "markdown",
     model: "",
+    template: "custom",
+    targetLanguage: "",
   };
   const baseEnabled: PostProcessingSettings = {
     enabled: true,
     instruction: "Extract tables as JSON arrays",
     outputFormat: "json",
     model: "",
+    template: "custom",
+    targetLanguage: "",
   };
 
   it("returns only { enabled: false } when disabled", () => {

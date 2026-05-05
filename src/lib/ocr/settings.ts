@@ -5,6 +5,8 @@ export interface PostProcessingSettings {
   instruction: string;
   outputFormat: PostProcessOutputFormat;
   model: string;
+  template: import("@/lib/ocr/post-processing-templates").PostProcessTemplate;
+  targetLanguage: string;
 }
 
 export interface AdvancedSettings {

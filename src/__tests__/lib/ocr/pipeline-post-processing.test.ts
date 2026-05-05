@@ -13,6 +13,8 @@ describe("buildPostProcessingPrompt", () => {
       instruction: "extract names",
       outputFormat: "markdown",
       model: "",
+      template: "custom",
+      targetLanguage: "",
     });
     expect(out.systemPrompt).toMatch(/precise post-processing assistant/);
     expect(out.userPrompt).toContain("extract names");
@@ -25,6 +27,8 @@ describe("buildPostProcessingPrompt", () => {
       instruction: "anything",
       outputFormat: "json",
       model: "",
+      template: "custom",
+      targetLanguage: "",
     });
     expect(out.userPrompt).toContain("Return only valid JSON");
   });

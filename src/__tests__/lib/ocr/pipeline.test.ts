@@ -215,6 +215,8 @@ describe("buildPostProcessingPrompt", () => {
       instruction: "extract invoice fields",
       outputFormat: "markdown",
       model: "",
+      template: "custom",
+      targetLanguage: "",
     });
     expect(result.systemPrompt).toContain("post-processing assistant");
     expect(result.userPrompt).toContain("extract invoice fields");
@@ -226,6 +228,8 @@ describe("buildPostProcessingPrompt", () => {
       instruction: "extract",
       outputFormat: "json",
       model: "",
+      template: "custom",
+      targetLanguage: "",
     });
     expect(result.userPrompt).toContain("Return only valid JSON");
   });
@@ -236,6 +240,8 @@ describe("buildPostProcessingPrompt", () => {
       instruction: "polish",
       outputFormat: "markdown",
       model: "",
+      template: "custom",
+      targetLanguage: "",
     });
     expect(result.userPrompt).toContain("Return markdown only");
   });
@@ -466,7 +472,7 @@ describe("submitOcrJob", () => {
       pageConcurrency: 1,
       autoRetryMaxAttempts: 1,
     },
-    postProcessingPayload: { enabled: false, instruction: "", outputFormat: "markdown" as const, model: "" },
+    postProcessingPayload: { enabled: false, instruction: "", outputFormat: "markdown" as const, model: "", template: "custom" as const, targetLanguage: "" },
     inputPreviews: [PREVIEW],
     prompt: "extract text",
     sourcePreview: PREVIEW,

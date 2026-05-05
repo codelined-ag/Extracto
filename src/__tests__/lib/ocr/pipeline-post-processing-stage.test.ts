@@ -74,6 +74,8 @@ function makeDeps(overrides: Partial<Parameters<typeof runPostProcessingStage>[1
       outputFormat: "markdown" as const,
       instruction: "tighten",
       model: "llama-pp",
+      template: "custom" as const,
+      targetLanguage: "",
     },
     postProcessingModel: "llama-pp",
     pageScopedText: "Page 1\n---\nfoo",
@@ -94,7 +96,7 @@ describe("runPostProcessingStage", () => {
   it("returns the raw extracted markdown when post-processing is disabled (no provider call)", async () => {
     const state = freshState();
     const out = await runPostProcessingStage(state, makeDeps({
-      postProcessingPayload: { enabled: false, outputFormat: "markdown", instruction: "", model: "" },
+      postProcessingPayload: { enabled: false, outputFormat: "markdown" as const, instruction: "", model: "", template: "custom" as const, targetLanguage: "" },
     }));
     expect(out.finalMarkdown).toBe("raw extracted");
     expect(out.postProcessingForExtractedMetadata).toEqual({ enabled: false });
@@ -127,7 +129,7 @@ describe("runPostProcessingStage", () => {
     });
     const state = freshState();
     const out = await runPostProcessingStage(state, makeDeps({
-      postProcessingPayload: { enabled: true, outputFormat: "json", instruction: "extract", model: "llama-pp" },
+      postProcessingPayload: { enabled: true, outputFormat: "json" as const, instruction: "extract", model: "llama-pp", template: "custom" as const, targetLanguage: "" },
     }));
     expect(out.finalMarkdown).toBe("raw extracted");
     expect(out.postProcessedJson).toEqual({ title: "doc" });

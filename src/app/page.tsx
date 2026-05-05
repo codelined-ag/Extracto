@@ -555,6 +555,8 @@ export default function ExtractoPage() {
  instruction:"",
  outputFormat:"markdown",
  model:"",
+ template: "custom",
+ targetLanguage: "",
  });
 
  // KB export defaults — loaded from /api/kb/defaults on mount, edited

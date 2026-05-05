@@ -67,6 +67,17 @@ extracto estimate ./report.pdf --model openai/gpt-4o --post-model anthropic/clau
 
 `extracto estimate` calls `POST /api/v1/ocr/estimate` and returns the dollar total before you commit. Page counts are auto-detected (PDFs via `pdfinfo`, images = 1 page) or you can pass `--pages N` directly. Pricing sources: OpenRouter live API, LiteLLM community mirror for OpenAI-compatible models, static table for Mistral OCR (per-page billed; Mistral has no pricing API), $0 for Ollama. Self-hosted OpenAI-compatible endpoints with no mirror entry return $0 plus a warning so you know the estimate excludes provider cost. Pass `--post-model NAME` to add a post-processing pass to the estimate.
 
+### Translate or summarize the OCR output
+
+```bash
+extracto ocr ./report.pdf --model openai/gpt-4o --post-template translate --target-language Italian
+extracto ocr ./meeting.pdf --model openai/gpt-4o --post-template summarize-3sentence
+extracto ocr ./meeting.pdf --model openai/gpt-4o --post-template summarize-executive --post-model anthropic/claude-sonnet-4.6
+extracto ocr ./meeting.pdf --model openai/gpt-4o --post-template extract-actions --post-format markdown
+```
+
+`--post-template` selects a server-built post-processing instruction so you don't have to write it yourself. Supported: `translate` (requires `--target-language`), `summarize-3sentence`, `summarize-executive`, `extract-actions`, or `custom` (the default; pairs with the free-form instruction in your stored settings). `--post-model` overrides the post-processing model; `--post-format` selects markdown or json output. The same fields are accepted on `POST /api/v1/ocr/batch` (`postProcessing.template`, `postProcessing.targetLanguage`) and the `ocr_submit` MCP tool.
+
 ### List recent jobs
 
 ```bash

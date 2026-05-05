@@ -130,6 +130,18 @@ server.tool(
               instruction: z.string().optional(),
               outputFormat: z.enum(["markdown", "json"]).optional(),
               model: z.string().optional(),
+              template: z
+                .enum(["custom", "translate", "summarize-3sentence", "summarize-executive", "extract-actions"])
+                .optional()
+                .describe(
+                  "Server-built post-processing instruction. 'translate' requires targetLanguage; the summarize/extract templates ignore the user instruction. Default 'custom' uses the free-form instruction field.",
+                ),
+              targetLanguage: z
+                .string()
+                .optional()
+                .describe(
+                  "Target language for the 'translate' template (e.g. 'Italian', 'Brazilian Portuguese', 'zh-CN'). Ignored for other templates.",
+                ),
             })
             .partial()
             .optional(),

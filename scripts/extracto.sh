@@ -846,9 +846,9 @@ cmd_settings() {
 
 cmd_ocr() {
   local file="${1:-}"
-  [ -n "$file" ] || die "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7] [--preset generic|academic|invoice|contract|form] [--no-text-layer] [--page-concurrency N]"
+  [ -n "$file" ] || die "usage: extracto ocr <file> --model NAME [--out PATH] [--no-wait] [--pages 1-5,7] [--preset generic|academic|invoice|contract|form] [--no-text-layer] [--page-concurrency N] [--post-template translate|summarize-3sentence|summarize-executive|extract-actions|custom] [--target-language LANG] [--post-model NAME] [--post-format markdown|json]"
   [ -f "$file" ] || die "file not found: $file"
-  local out="" model="" wait_flag=1 pages_spec="" preset="" prefer_text_layer="" page_concurrency=""
+  local out="" model="" wait_flag=1 pages_spec="" preset="" prefer_text_layer="" page_concurrency="" pp_template="" pp_target_lang="" pp_model="" pp_format=""
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -886,6 +886,28 @@ cmd_ocr() {
         if [ "$page_concurrency" -lt 1 ] || [ "$page_concurrency" -gt 16 ]; then
           die "--page-concurrency must be between 1 and 16"
         fi
+        shift 2
+        ;;
+      --post-template)
+        pp_template="${2:-}"
+        case "$pp_template" in
+          custom|translate|summarize-3sentence|summarize-executive|extract-actions) ;;
+          *) die "--post-template must be one of: custom, translate, summarize-3sentence, summarize-executive, extract-actions" ;;
+        esac
+        shift 2
+        ;;
+      --target-language)
+        pp_target_lang="${2:-}"; shift 2
+        ;;
+      --post-model)
+        pp_model="${2:-}"; shift 2
+        ;;
+      --post-format)
+        pp_format="${2:-}"
+        case "$pp_format" in
+          markdown|json) ;;
+          *) die "--post-format must be 'markdown' or 'json'" ;;
+        esac
         shift 2
         ;;
       *)
@@ -1019,7 +1041,7 @@ PY
 
   local body
   if [ -n "$pages_payload" ]; then
-    body="$(python3 -c '
+    body="$(EXTRACTO_PP_TEMPLATE="${pp_template:-}" EXTRACTO_PP_TARGET="${pp_target_lang:-}" EXTRACTO_PP_MODEL="${pp_model:-}" EXTRACTO_PP_FORMAT="${pp_format:-}" python3 -c '
 import json, sys
 data = sys.stdin.read().split("\x1f")
 file_name, model, page_numbers_csv, pages_concat, preset, prefer_text_layer, source_pdf, page_concurrency = data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]
@@ -1038,10 +1060,26 @@ if page_concurrency:
     settings["pageConcurrency"] = int(page_concurrency)
 if settings:
     file_entry["settings"] = settings
+import os
+pp_template = os.environ.get("EXTRACTO_PP_TEMPLATE", "")
+pp_target = os.environ.get("EXTRACTO_PP_TARGET", "")
+pp_model_v = os.environ.get("EXTRACTO_PP_MODEL", "")
+pp_format_v = os.environ.get("EXTRACTO_PP_FORMAT", "")
+if pp_template or pp_target or pp_model_v:
+    pp = {"enabled": True}
+    if pp_template:
+        pp["template"] = pp_template
+    if pp_target:
+        pp["targetLanguage"] = pp_target
+    if pp_model_v:
+        pp["model"] = pp_model_v
+    if pp_format_v:
+        pp["outputFormat"] = pp_format_v
+    file_entry["postProcessing"] = pp
 print(json.dumps({"files": [file_entry]}, separators=(",", ":")))
 ' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${page_numbers_list}"$'\x1f'"${pages_payload}"$'\x1f'"${preset}"$'\x1f'"${prefer_text_layer}"$'\x1f'"${source_pdf}"$'\x1f'"${page_concurrency}")"
   else
-    body="$(python3 -c '
+    body="$(EXTRACTO_PP_TEMPLATE="${pp_template:-}" EXTRACTO_PP_TARGET="${pp_target_lang:-}" EXTRACTO_PP_MODEL="${pp_model:-}" EXTRACTO_PP_FORMAT="${pp_format:-}" python3 -c '
 import json, sys
 data = sys.stdin.read().split("\x1f")
 file_name, model, preview, preset, prefer_text_layer, source_pdf, page_concurrency = data[0], data[1], data[2], data[3], data[4], data[5], data[6]
@@ -1057,6 +1095,22 @@ if page_concurrency:
     settings["pageConcurrency"] = int(page_concurrency)
 if settings:
     file_entry["settings"] = settings
+import os
+pp_template = os.environ.get("EXTRACTO_PP_TEMPLATE", "")
+pp_target = os.environ.get("EXTRACTO_PP_TARGET", "")
+pp_model_v = os.environ.get("EXTRACTO_PP_MODEL", "")
+pp_format_v = os.environ.get("EXTRACTO_PP_FORMAT", "")
+if pp_template or pp_target or pp_model_v:
+    pp = {"enabled": True}
+    if pp_template:
+        pp["template"] = pp_template
+    if pp_target:
+        pp["targetLanguage"] = pp_target
+    if pp_model_v:
+        pp["model"] = pp_model_v
+    if pp_format_v:
+        pp["outputFormat"] = pp_format_v
+    file_entry["postProcessing"] = pp
 print(json.dumps({"files": [file_entry]}, separators=(",", ":")))
 ' <<<"${file_basename}"$'\x1f'"${model}"$'\x1f'"${preview_payload}"$'\x1f'"${preset}"$'\x1f'"${prefer_text_layer}"$'\x1f'"${source_pdf}"$'\x1f'"${page_concurrency}")"
   fi

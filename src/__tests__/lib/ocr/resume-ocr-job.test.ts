@@ -53,6 +53,8 @@ const baseInput = {
     instruction: "",
     outputFormat: "markdown" as const,
     model: "",
+    template: "custom" as const,
+    targetLanguage: "",
   },
   inputPreviews: ["data:image/png;base64,a", "data:image/png;base64,b"],
   prompt: "PROMPT",

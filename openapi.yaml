@@ -252,6 +252,17 @@ components:
         customPrompt: { type: string }
         quality: { type: integer, minimum: 0, maximum: 100, default: 80 }
 
+    PostProcessingTemplate:
+      type: string
+      enum: [custom, translate, summarize-3sentence, summarize-executive, extract-actions]
+      description: |
+        Server-built post-processing instruction.
+        - custom: use the free-form `instruction` field
+        - translate: requires `targetLanguage`; server builds a translation instruction
+        - summarize-3sentence: 3-sentence overview
+        - summarize-executive: short executive paragraph
+        - extract-actions: bullet list of action items
+
     PostProcessingSettings:
       type: object
       properties:
@@ -262,6 +273,11 @@ components:
           enum: [markdown, json]
           default: markdown
         model: { type: string }
+        template: { $ref: "#/components/schemas/PostProcessingTemplate" }
+        targetLanguage:
+          type: string
+          maxLength: 80
+          description: Target language for the 'translate' template. Ignored otherwise.
 
     ApiKey:
       type: object

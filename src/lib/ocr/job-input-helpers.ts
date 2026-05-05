@@ -10,6 +10,12 @@ import {
   MAX_OCR_SUBMIT_PAGES,
   MAX_SOURCE_PDF_BYTES,
 } from "@/lib/ocr/input-limits";
+import {
+  DEFAULT_POST_PROCESS_TEMPLATE,
+  isPostProcessTemplate,
+  resolveTemplateInstruction,
+  sanitizeTargetLanguage,
+} from "@/lib/ocr/post-processing-templates";
 
 const MAX_POST_PROCESS_INSTRUCTION_LENGTH = 6000;
 const MAX_STORED_PREVIEW_LENGTH = 1_500_000;
@@ -22,12 +28,22 @@ export function sanitizePostProcessing(
   const rawInstruction = typeof raw?.instruction === "string" ? raw.instruction.trim() : "";
   const outputFormat = raw?.outputFormat === "json" ? "json" : "markdown";
   const model = typeof raw?.model === "string" ? raw.model.trim() : "";
-  const enabled = Boolean(raw?.enabled) && rawInstruction.length > 0;
+  const template = isPostProcessTemplate(raw?.template) ? raw.template : DEFAULT_POST_PROCESS_TEMPLATE;
+  const targetLanguage = sanitizeTargetLanguage(raw?.targetLanguage);
+  const customInstruction = rawInstruction.slice(0, MAX_POST_PROCESS_INSTRUCTION_LENGTH);
+  const resolved = resolveTemplateInstruction({
+    template,
+    targetLanguage,
+    customInstruction,
+  });
+  const enabled = Boolean(raw?.enabled) && resolved.length > 0;
   return {
     enabled,
-    instruction: rawInstruction.slice(0, MAX_POST_PROCESS_INSTRUCTION_LENGTH),
+    instruction: resolved,
     outputFormat,
     model,
+    template,
+    targetLanguage,
   };
 }
 

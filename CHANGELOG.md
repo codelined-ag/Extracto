@@ -10,6 +10,7 @@ follows [SemVer](https://semver.org/).
 - Pre-run cost estimator on REST, MCP, CLI, and the workspace badge, pulling live per-token pricing from OpenRouter and the LiteLLM mirror, the static per-page rate from Mistral OCR, and $0 with a heads-up for local Ollama and self-hosted endpoints with no mirror entry.
 - Job export to DOCX, RTF, CSV, XLSX, plus existing md/json/txt/html via GET /api/v1/jobs/{id}/export, mirrored on MCP and CLI; markdown tables become CSV rows or per-sheet XLSX automatically.
 - Obsidian vault export: zip with date-prefixed folder, frontmatter-rich index note, per-page notes for multi-page jobs, and attachments folder, ready to drop into a vault.
+- Post-processing template for translation: pick a target language and the server builds the right instruction; available on REST, MCP, and CLI.
 
 ## [0.10.0] - 2026-05-05
 
