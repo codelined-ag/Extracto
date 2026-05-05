@@ -2,10 +2,12 @@
 
 import * as React from "react";
 import { motion } from "motion/react";
-import { FileUp, Upload } from "lucide-react";
+import { Camera, FileUp, Upload } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { CameraCaptureDialog } from "@/app/page-components/camera-capture-dialog";
 
 import type { Translator } from "@/app/page-components/types";
 
@@ -27,6 +29,36 @@ export function UploadArea({
   t,
 }: UploadAreaProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const cameraRef = React.useRef<HTMLInputElement>(null);
+  const [hasCamera, setHasCamera] = React.useState(false);
+  const [supportsLivePreview, setSupportsLivePreview] = React.useState(false);
+  const [cameraDialogOpen, setCameraDialogOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const live =
+      typeof navigator !== "undefined" &&
+      typeof navigator.mediaDevices !== "undefined" &&
+      typeof navigator.mediaDevices.getUserMedia === "function";
+    const coarse = window.matchMedia?.("(any-pointer: coarse)").matches === true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHasCamera(Boolean(live || coarse));
+    setSupportsLivePreview(Boolean(live));
+  }, []);
+
+  const handleTakePhoto = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (supportsLivePreview) {
+      setCameraDialogOpen(true);
+    } else {
+      cameraRef.current?.click();
+    }
+  };
+
+  const acceptCapturedFile = (file: File) => {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    onPickFiles(dt.files);
+  };
 
   return (
     <>
@@ -82,6 +114,19 @@ export function UploadArea({
         </CardContent>
       </Card>
 
+      {hasCamera ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleTakePhoto}
+          className="self-start"
+          data-tour="capture-camera"
+        >
+          <Camera className="size-3.5 mr-1.5" />
+          {t("Scatta una foto", "Take a photo", "Prendre une photo", "Hacer una foto", "Foto aufnehmen")}
+        </Button>
+      ) : null}
+
       <input
         ref={inputRef}
         type="file"
@@ -89,6 +134,20 @@ export function UploadArea({
         accept="image/*,.pdf,.doc,.docx"
         className="hidden"
         onChange={(e) => e.target.files && onPickFiles(e.target.files)}
+      />
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => e.target.files && onPickFiles(e.target.files)}
+      />
+      <CameraCaptureDialog
+        open={cameraDialogOpen}
+        onOpenChange={setCameraDialogOpen}
+        onCapture={acceptCapturedFile}
+        t={t}
       />
     </>
   );
