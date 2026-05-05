@@ -158,10 +158,10 @@ server.tool(
 
 server.tool(
   "job_export",
-  "Render a COMPLETED job's text into a downloadable file. Supported formats: md (markdown), json (full structured result), txt (plain text), html, docx, rtf, csv (markdown tables, falls back to one-line dump for prose), xlsx (each markdown table is a separate sheet, prose dumps to a single sheet), obsidian (zip with a per-job folder containing the index note, per-page notes, and attachments; ready to drop into a vault). Returns the file as base64.",
+  "Render a COMPLETED job's text into a downloadable file. Supported formats: md (markdown), json (full structured result), txt (plain text), html, docx, rtf, csv (markdown tables, falls back to one-line dump for prose), xlsx (each markdown table is a separate sheet, prose dumps to a single sheet), obsidian (zip with a per-job folder containing the index note, per-page notes, and attachments; ready to drop into a vault), zip (flat archive with index.md, per-page markdown files under pages/, and a joined all-pages.md). Returns the file as base64.",
   {
     jobId: z.string(),
-    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx", "obsidian"]),
+    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx", "obsidian", "zip"]),
   },
   async ({ jobId, format }) => {
     const url = `/api/v1/jobs/${encodeURIComponent(jobId)}/export?format=${encodeURIComponent(format)}`;
@@ -665,7 +665,7 @@ server.tool(
   {
     jobId: z.string(),
     folder: z.string().default(""),
-    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx", "obsidian"]).default("md"),
+    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx", "obsidian", "zip"]).default("md"),
   },
   async (input) =>
     asTextResult(
@@ -702,7 +702,7 @@ server.tool(
   {
     jobId: z.string(),
     parentId: z.string().default(""),
-    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx", "obsidian"]).default("md"),
+    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx", "obsidian", "zip"]).default("md"),
   },
   async (input) =>
     asTextResult(
@@ -739,7 +739,7 @@ server.tool(
   {
     jobId: z.string(),
     parentId: z.string().default(""),
-    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx", "obsidian"]).default("md"),
+    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx", "obsidian", "zip"]).default("md"),
   },
   async (input) =>
     asTextResult(

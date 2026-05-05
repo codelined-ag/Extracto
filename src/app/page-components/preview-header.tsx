@@ -36,8 +36,8 @@ export interface PreviewHeaderProps {
   selectedFile: ProcessingFile;
   viewMode: ResultViewMode;
   onViewModeChange: (mode: ResultViewMode) => void;
-  copied: ResultFormat | null;
-  onCopy: (format: ResultFormat) => void;
+  copied: "md" | "json" | null;
+  onCopy: (format: "md" | "json") => void;
   onDownload: (format: ResultFormat) => void;
   onExportToKb: (file: ProcessingFile) => void;
   onSendToS3: (file: ProcessingFile) => void;
@@ -127,10 +127,12 @@ export function PreviewHeader({
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 gap-1 group">
-                  <span className="text-xs">
-                    {t("Azioni", "Actions", "Actions", "Acciones", "Aktionen")}
-                  </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 group"
+                  aria-label={t("Azioni", "Actions", "Actions", "Acciones", "Aktionen")}
+                >
                   <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground/80 transition-transform duration-200 group-hover:scale-110" />
                 </Button>
               </DropdownMenuTrigger>
@@ -183,6 +185,18 @@ export function PreviewHeader({
                       "Télécharger JSON",
                       "Descargar JSON",
                       "JSON herunterladen",
+                    )}
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onDownload("zip")}>
+                  <DownloadIcon size={16} className="inline-flex" />
+                  <span>
+                    {t(
+                      "Scarica ZIP (per pagina)",
+                      "Download as ZIP (per page)",
+                      "Télécharger en ZIP (par page)",
+                      "Descargar como ZIP (por página)",
+                      "Als ZIP herunterladen (pro Seite)",
                     )}
                   </span>
                 </DropdownMenuItem>

@@ -178,9 +178,10 @@ extracto jobs export <job-id> --format txt                      # plaintext, sig
 extracto jobs export <job-id> --format html
 extracto jobs export <job-id> --format json                     # full structured result
 extracto jobs export <job-id> --format obsidian                 # vault zip ready to drop into Obsidian
+extracto jobs export <job-id> --format zip                      # flat archive with per-page markdown
 ```
 
-`extracto jobs export` calls `GET /api/v1/jobs/{id}/export?format=...`. Supported formats: `md`, `json`, `txt`, `html`, `docx`, `rtf`, `csv`, `xlsx`, `obsidian`. CSV emits the first markdown table; if the document has multiple tables the file contains all of them with `# table N` separators. XLSX puts each markdown table on its own sheet (and falls back to a single text-dump sheet for prose-only documents). The `obsidian` format returns a zip with a per-job folder (date-prefixed for sortability), an index note with frontmatter, per-page notes under `pages/` for multi-page jobs, and attachments under `attachments/` when the source preview is available. Only works on `COMPLETED` jobs (returns 409 otherwise).
+`extracto jobs export` calls `GET /api/v1/jobs/{id}/export?format=...`. Supported formats: `md`, `json`, `txt`, `html`, `docx`, `rtf`, `csv`, `xlsx`, `obsidian`, `zip`. CSV emits the first markdown table; if the document has multiple tables the file contains all of them with `# table N` separators. XLSX puts each markdown table on its own sheet (and falls back to a single text-dump sheet for prose-only documents). The `obsidian` format returns a zip with a per-job folder (date-prefixed for sortability), an index note with frontmatter, per-page notes under `pages/` for multi-page jobs, and attachments under `attachments/` when the source preview is available. The `zip` format is a flat archive: top-level `index.md` with page links, one `pages/page-NNN.md` per page from the structured result, and `all-pages.md` with everything joined. Only works on `COMPLETED` jobs (returns 409 otherwise).
 
 ### Cancel or delete a job
 

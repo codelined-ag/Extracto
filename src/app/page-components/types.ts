@@ -10,7 +10,7 @@ export type SettingsTab = "ocr" | "kb" | "storage" | "templates";
 
 export type ResultViewMode = "preview" | "split" | "result";
 
-export type ResultFormat = "md" | "json";
+export type ResultFormat = "md" | "json" | "zip";
 
 export type UiLanguage = "it" | "en" | "fr" | "es" | "de";
 

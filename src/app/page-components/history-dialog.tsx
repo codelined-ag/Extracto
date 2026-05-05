@@ -68,7 +68,7 @@ export interface HistoryDialogProps {
   selectedStructuredJson: unknown;
   isDeleting: boolean;
   onDelete: () => void;
-  onDownload: (format: "md" | "json") => void;
+  onDownload: (format: "md" | "json" | "zip") => void;
   onBulkDelete: (ids: string[]) => void;
   onBulkExport: (ids: string[]) => void;
   onBulkTag: (jobIds: string[], tagIds: string[]) => Promise<void>;
@@ -952,6 +952,10 @@ export function HistoryDialog({
                   <DropdownMenuItem onSelect={() => onDownload("json")}>
                     <DownloadIcon size={16} className="inline-flex" />
                     <span>JSON</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onDownload("zip")}>
+                    <DownloadIcon size={16} className="inline-flex" />
+                    <span>ZIP (per page)</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

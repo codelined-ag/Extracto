@@ -482,8 +482,8 @@ print(json.dumps({"path": os.environ["EXTRACTO_DX_PATH"], "model": os.environ["E
       done
       [ -n "$dx_job" ] || die "usage: extracto dropbox push --job <job-id> [--folder /path] [--format md|...|obsidian]"
       case "$dx_format" in
-        md|json|txt|html|docx|rtf|csv|xlsx|obsidian) ;;
-        *) die "--format must be one of: md, json, txt, html, docx, rtf, csv, xlsx, obsidian" ;;
+        md|json|txt|html|docx|rtf|csv|xlsx|obsidian|zip) ;;
+        *) die "--format must be one of: md, json, txt, html, docx, rtf, csv, xlsx, obsidian, zip" ;;
       esac
       local body
       body="$(EXTRACTO_DX_JOB="$dx_job" EXTRACTO_DX_FOLDER="$dx_folder" EXTRACTO_DX_FORMAT="$dx_format" python3 -c '
@@ -543,8 +543,8 @@ print(json.dumps({"fileId": os.environ["EXTRACTO_GD_FILE"], "model": os.environ[
       done
       [ -n "$gd_job" ] || die "usage: extracto gdrive push --job <job-id> [--parent <folder-id>] [--format md|...|obsidian]"
       case "$gd_format" in
-        md|json|txt|html|docx|rtf|csv|xlsx|obsidian) ;;
-        *) die "--format must be one of: md, json, txt, html, docx, rtf, csv, xlsx, obsidian" ;;
+        md|json|txt|html|docx|rtf|csv|xlsx|obsidian|zip) ;;
+        *) die "--format must be one of: md, json, txt, html, docx, rtf, csv, xlsx, obsidian, zip" ;;
       esac
       local body
       body="$(EXTRACTO_GD_JOB="$gd_job" EXTRACTO_GD_PARENT="$gd_parent" EXTRACTO_GD_FORMAT="$gd_format" python3 -c '
@@ -604,8 +604,8 @@ print(json.dumps({"fileId": os.environ["EXTRACTO_OD_FILE"], "model": os.environ[
       done
       [ -n "$od_job" ] || die "usage: extracto onedrive push --job <job-id> [--parent <item-id>] [--format md|...|obsidian]"
       case "$od_format" in
-        md|json|txt|html|docx|rtf|csv|xlsx|obsidian) ;;
-        *) die "--format must be one of: md, json, txt, html, docx, rtf, csv, xlsx, obsidian" ;;
+        md|json|txt|html|docx|rtf|csv|xlsx|obsidian|zip) ;;
+        *) die "--format must be one of: md, json, txt, html, docx, rtf, csv, xlsx, obsidian, zip" ;;
       esac
       local body
       body="$(EXTRACTO_OD_JOB="$od_job" EXTRACTO_OD_PARENT="$od_parent" EXTRACTO_OD_FORMAT="$od_format" python3 -c '
@@ -924,7 +924,7 @@ cmd_jobs() {
       printf "%s\n" "$body"
       ;;
     export)
-      [ -n "${1:-}" ] || die "usage: extracto jobs export <job-id> [--format md|json|txt|html|docx|rtf|csv|xlsx|obsidian] [--out PATH]"
+      [ -n "${1:-}" ] || die "usage: extracto jobs export <job-id> [--format md|json|txt|html|docx|rtf|csv|xlsx|obsidian|zip] [--out PATH]"
       local ex_job_id="$1"; shift
       local ex_format="md" ex_out=""
       while [ $# -gt 0 ]; do
@@ -935,12 +935,14 @@ cmd_jobs() {
         esac
       done
       case "$ex_format" in
-        md|json|txt|html|docx|rtf|csv|xlsx|obsidian) ;;
-        *) die "--format must be one of: md, json, txt, html, docx, rtf, csv, xlsx, obsidian" ;;
+        md|json|txt|html|docx|rtf|csv|xlsx|obsidian|zip) ;;
+        *) die "--format must be one of: md, json, txt, html, docx, rtf, csv, xlsx, obsidian, zip" ;;
       esac
       if [ -z "$ex_out" ]; then
         if [ "$ex_format" = "obsidian" ]; then
           ex_out="${ex_job_id}-vault.zip"
+        elif [ "$ex_format" = "zip" ]; then
+          ex_out="${ex_job_id}-pages.zip"
         else
           ex_out="${ex_job_id}.${ex_format}"
         fi

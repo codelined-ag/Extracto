@@ -968,9 +968,52 @@ export default function ExtractoPage() {
  await history.loadJobs();
  };
 
- const downloadHistoryResult = (type:"md"|"json") => {
+ const downloadHistoryResult = async (type:"md"|"json"|"zip") => {
  if (!history.selectedJob) return;
  const fileStem = history.selectedJob.fileName.replace(/\.[^/.]+$/,"") ||"ocr-result";
+
+ if (type === "zip") {
+   const JSZip = (await import("jszip")).default;
+   const zip = new JSZip();
+   const structured = history.selectedStructuredJson as { pages?: Array<{ pageNumber?: number; markdown?: string; text?: string }> } | undefined;
+   const structuredPages = structured?.pages;
+   const pages: Array<{ pageNumber: number; markdown: string }> = [];
+   if (Array.isArray(structuredPages) && structuredPages.length > 0) {
+     for (const page of structuredPages) {
+       const md = typeof page.markdown === "string" ? page.markdown : typeof page.text === "string" ? page.text : "";
+       if (md.trim().length === 0) continue;
+       pages.push({ pageNumber: typeof page.pageNumber === "number" ? page.pageNumber : pages.length + 1, markdown: md });
+     }
+   }
+   if (pages.length === 0) pages.push({ pageNumber: 1, markdown: history.selectedMarkdown });
+
+   const indexLines = [`# ${fileStem}`, "", `Pages: ${pages.length}`, ""];
+   if (pages.length > 1) {
+     indexLines.push("## Pages");
+     for (const page of pages) {
+       const padded = String(page.pageNumber).padStart(3, "0");
+       indexLines.push(`- [Page ${page.pageNumber}](pages/page-${padded}.md)`);
+     }
+     indexLines.push("");
+   }
+   indexLines.push("All pages joined: [all-pages.md](all-pages.md)", "");
+   zip.file(`${fileStem}/index.md`, indexLines.join("\n"));
+   for (const page of pages) {
+     const padded = String(page.pageNumber).padStart(3, "0");
+     zip.file(`${fileStem}/pages/page-${padded}.md`, page.markdown.trim() + "\n");
+   }
+   zip.file(`${fileStem}/all-pages.md`, pages.map((p) => `## Page ${p.pageNumber}\n\n${p.markdown.trim()}\n`).join("\n"));
+
+   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+   const url = URL.createObjectURL(blob);
+   const a = document.createElement("a");
+   a.href = url;
+   a.download = `${fileStem}-pages.zip`;
+   a.click();
+   URL.revokeObjectURL(url);
+   return;
+ }
+
  const isMarkdown = type === "md";
  const blobBody = isMarkdown
  ? history.selectedMarkdown
@@ -1447,6 +1490,14 @@ export default function ExtractoPage() {
  title: t("Esportazione KB non riuscita","KB export failed","Échec d'export KB","Error de exportación KB","KB-Export fehlgeschlagen"),
  description: message,
  variant:"destructive",
+ action: (
+ <ToastAction
+ altText={t("Configura KB","Configure KB","Configurer KB","Configurar KB","KB konfigurieren")}
+ onClick={() => { openSettingsTab("kb"); }}
+ >
+ {t("Configura","Configure","Configurer","Configurar","Konfigurieren")}
+ </ToastAction>
+ ),
  });
  }
  };
@@ -1535,6 +1586,14 @@ export default function ExtractoPage() {
  title: t("Esportazione S3 non riuscita","S3 export failed","Échec d'export S3","Error de exportación S3","S3-Export fehlgeschlagen"),
  description: message,
  variant:"destructive",
+ action: (
+ <ToastAction
+ altText={t("Configura S3","Configure S3","Configurer S3","Configurar S3","S3 konfigurieren")}
+ onClick={() => { openSettingsTab("storage"); }}
+ >
+ {t("Configura","Configure","Configurer","Configurar","Konfigurieren")}
+ </ToastAction>
+ ),
  });
  }
  };
@@ -1731,8 +1790,57 @@ export default function ExtractoPage() {
  });
  };
 
- const downloadResult = (type:"md"|"json") => {
+ const downloadResult = async (type:"md"|"json"|"zip") => {
  if (!selectedFile?.result) return;
+
+ const stem = selectedFile.name.replace(/\.[^/.]+$/,"");
+
+ if (type === "zip") {
+   const JSZip = (await import("jszip")).default;
+   const zip = new JSZip();
+   const structured = selectedFileStructuredJson as { pages?: Array<{ pageNumber?: number; markdown?: string; text?: string }> } | undefined;
+   const structuredPages = structured?.pages;
+   const pages: Array<{ pageNumber: number; markdown: string }> = [];
+   if (Array.isArray(structuredPages) && structuredPages.length > 0) {
+     for (const page of structuredPages) {
+       const md = typeof page.markdown === "string" ? page.markdown : typeof page.text === "string" ? page.text : "";
+       if (md.trim().length === 0) continue;
+       pages.push({ pageNumber: typeof page.pageNumber === "number" ? page.pageNumber : pages.length + 1, markdown: md });
+     }
+   }
+   if (pages.length === 0) pages.push({ pageNumber: 1, markdown: selectedFileMarkdown });
+
+   const indexLines = [`# ${stem}`, "", `Pages: ${pages.length}`, ""];
+   if (pages.length > 1) {
+     indexLines.push("## Pages");
+     for (const page of pages) {
+       const padded = String(page.pageNumber).padStart(3, "0");
+       indexLines.push(`- [Page ${page.pageNumber}](pages/page-${padded}.md)`);
+     }
+     indexLines.push("");
+   }
+   indexLines.push("All pages joined: [all-pages.md](all-pages.md)", "");
+   zip.file(`${stem}/index.md`, indexLines.join("\n"));
+   for (const page of pages) {
+     const padded = String(page.pageNumber).padStart(3, "0");
+     zip.file(`${stem}/pages/page-${padded}.md`, page.markdown.trim() + "\n");
+   }
+   zip.file(`${stem}/all-pages.md`, pages.map((p) => `## Page ${p.pageNumber}\n\n${p.markdown.trim()}\n`).join("\n"));
+
+   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+   const url = URL.createObjectURL(blob);
+   const a = document.createElement("a");
+   a.href = url;
+   a.download = `${stem}-pages.zip`;
+   a.click();
+   URL.revokeObjectURL(url);
+
+   toast({
+     title: t("Download avviato","Download started","Téléchargement démarré","Descarga iniciada","Download gestartet"),
+     description: `${stem}-pages.zip`,
+   });
+   return;
+ }
 
  const text = type ==="md"? selectedFileMarkdown
  : JSON.stringify(selectedFileStructuredJson, null, 2);
@@ -1740,7 +1848,7 @@ export default function ExtractoPage() {
  const url = URL.createObjectURL(blob);
  const a = document.createElement("a");
  a.href = url;
- a.download = `${selectedFile.name.replace(/\.[^/.]+$/,"")}.${type ==="md"?"md":"json"}`;
+ a.download = `${stem}.${type ==="md"?"md":"json"}`;
  a.click();
  URL.revokeObjectURL(url);
 
@@ -3178,11 +3286,11 @@ export default function ExtractoPage() {
                             className="inline-flex items-center justify-center mr-2 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6"
                           />
                           {t(
-                            `Avvia OCR (${pendingCount} in attesa)`,
-                            `Run OCR (${pendingCount} pending)`,
-                            `Lancer OCR (${pendingCount} en attente)`,
-                            `Iniciar OCR (${pendingCount} pendientes)`,
-                            `OCR starten (${pendingCount} ausstehend)`,
+                            `Avvia (${pendingCount})`,
+                            `Run (${pendingCount})`,
+                            `Lancer (${pendingCount})`,
+                            `Iniciar (${pendingCount})`,
+                            `Starten (${pendingCount})`,
                           )}
                         </>
                       )}
@@ -3616,11 +3724,11 @@ export default function ExtractoPage() {
  <p className="text-sm font-medium mb-1">{t("Pronto per OCR","Ready for OCR","Prêt pour l'OCR","Listo para OCR","Bereit für OCR")}</p>
  <p className="text-xs text-muted-foreground">
  {t(
-'Clicca "Avvia OCR" per estrarre il testo',
-'Click "Run OCR" to extract text',
-'Cliquez sur « Lancer l\'OCR » pour extraire le texte',
-'Pulsa "Iniciar OCR" para extraer el texto',
-'Klicke auf „OCR starten", um den Text zu extrahieren',
+'Clicca "Avvia" per estrarre il testo',
+'Click "Run" to extract text',
+'Cliquez sur « Lancer » pour extraire le texte',
+'Pulsa "Iniciar" para extraer el texto',
+'Klicke auf „Starten", um den Text zu extrahieren',
 )}
  </p>
  </motion.div>

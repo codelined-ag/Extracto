@@ -10,6 +10,7 @@ export const SUPPORTED_EXPORT_FORMATS = [
   "csv",
   "xlsx",
   "obsidian",
+  "zip",
 ] as const;
 
 export const MAX_EXPORT_INPUT_BYTES = 25 * 1024 * 1024;
@@ -39,6 +40,7 @@ const CONTENT_TYPE: Record<ExportFormat, string> = {
   csv: "text/csv; charset=utf-8",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   obsidian: "application/zip",
+  zip: "application/zip",
 };
 
 export function isExportFormat(value: unknown): value is ExportFormat {
@@ -62,7 +64,12 @@ export async function renderJobExport(
   job: JobExportSource,
 ): Promise<ExportResult> {
   const stem = baseName(job.fileName ?? "extracto-job");
-  const filename = format === "obsidian" ? `${stem}-vault.zip` : `${stem}.${format}`;
+  const filename =
+    format === "obsidian"
+      ? `${stem}-vault.zip`
+      : format === "zip"
+        ? `${stem}-pages.zip`
+        : `${stem}.${format}`;
   const contentType = CONTENT_TYPE[format];
   const md = job.extractedText ?? "";
   if (Buffer.byteLength(md, "utf-8") > MAX_EXPORT_INPUT_BYTES) {
@@ -98,6 +105,18 @@ export async function renderJobExport(
   if (format === "xlsx") {
     const { markdownToXlsx } = await import("@/lib/export/xlsx");
     return { filename, contentType, body: await markdownToXlsx(md) };
+  }
+  if (format === "zip") {
+    const { buildJobZip } = await import("@/lib/export/zip");
+    return {
+      filename,
+      contentType,
+      body: await buildJobZip({
+        fileName: job.fileName ?? null,
+        extractedText: md,
+        result: job.result,
+      }),
+    };
   }
   if (format === "obsidian") {
     const { buildObsidianVaultZip } = await import("@/lib/export/obsidian");

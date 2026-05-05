@@ -116,16 +116,23 @@ export function UploadArea({
       </Card>
 
       {hasCamera ? (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleTakePhoto}
-          className="self-start"
-          data-tour="capture-camera"
-        >
-          <Camera className="size-3.5 mr-1.5" />
-          {t("Scatta una foto", "Take a photo", "Prendre une photo", "Hacer una foto", "Foto aufnehmen")}
-        </Button>
+        <>
+          <div className="flex items-center gap-3 text-[11px] uppercase tracking-wider text-muted-foreground/60">
+            <span className="h-px flex-1 bg-foreground/10" />
+            {t("oppure", "or", "ou", "o", "oder")}
+            <span className="h-px flex-1 bg-foreground/10" />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleTakePhoto}
+            className="self-center"
+            data-tour="capture-camera"
+          >
+            <Camera className="size-3.5 mr-1.5" />
+            {t("Scatta una foto", "Take a photo", "Prendre une photo", "Hacer una foto", "Foto aufnehmen")}
+          </Button>
+        </>
       ) : null}
 
       <input

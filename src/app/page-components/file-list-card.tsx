@@ -185,11 +185,11 @@ export function FileListCard({
                   }
                 >
                   {t(
-                    `Avvia OCR (${bulkRunPendingCount})`,
-                    `Run OCR (${bulkRunPendingCount})`,
-                    `Lancer l'OCR (${bulkRunPendingCount})`,
-                    `Iniciar OCR (${bulkRunPendingCount})`,
-                    `OCR starten (${bulkRunPendingCount})`,
+                    `Avvia (${bulkRunPendingCount})`,
+                    `Run (${bulkRunPendingCount})`,
+                    `Lancer (${bulkRunPendingCount})`,
+                    `Iniciar (${bulkRunPendingCount})`,
+                    `Starten (${bulkRunPendingCount})`,
                   )}
                 </Button>
               ) : null}
