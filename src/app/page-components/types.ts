@@ -79,6 +79,11 @@ export interface ProcessingFile {
     startedAt?: string;
     error?: string;
   };
+  piiAudit?: {
+    applied: boolean;
+    countsByKind: Record<string, number>;
+    total: number;
+  };
   jobId?: string;
   checkpoints?: OcrPageCheckpointView[];
   events?: OcrProgressEventView[];

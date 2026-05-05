@@ -86,4 +86,61 @@ describe("redactPii", () => {
     expect(r.matches).toEqual([]);
     expect(r.countsByKind.email).toBe(0);
   });
+
+  it("redacts an ISO YYYY-MM-DD date of birth", () => {
+    const r = redactPii("DOB 1985-03-14 enrolled");
+    expect(r.redactedText).toContain("[REDACTED:DATE_OF_BIRTH:1]");
+    expect(r.redactedText).not.toContain("1985-03-14");
+  });
+
+  it("redacts a DD/MM/YYYY day-first date of birth", () => {
+    const r = redactPii("DOB 14/03/1985 enrolled");
+    expect(r.redactedText).toContain("[REDACTED:DATE_OF_BIRTH:1]");
+  });
+
+  it("redacts a phone with international prefix", () => {
+    const r = redactPii("call +1 (555) 123-4567 today");
+    expect(r.countsByKind.phone).toBeGreaterThanOrEqual(1);
+  });
+
+  it("redacts a phone with parentheses area code", () => {
+    const r = redactPii("call (555) 123-4567 today");
+    expect(r.countsByKind.phone).toBe(1);
+  });
+
+  it("ignores a 7-digit number with no separators", () => {
+    const r = redactPii("Order 1234567 was shipped");
+    expect(r.countsByKind.phone).toBe(0);
+  });
+
+  it("ignores a 5-digit zip code", () => {
+    const r = redactPii("ZIP 90210 cleared");
+    expect(r.countsByKind.phone).toBe(0);
+  });
+
+  it("ignores a tracking-number-shaped string", () => {
+    const r = redactPii("Tracking number 1Z999AA10123456784");
+    expect(r.countsByKind.phone).toBe(0);
+  });
+
+  it("ignores all-zero or repeated-digit phone matches", () => {
+    expect(redactPii("call 000-000-0000 today").countsByKind.phone).toBe(0);
+    expect(redactPii("call 111-111-1111 today").countsByKind.phone).toBe(0);
+  });
+
+  it("does not redact a current-year date as date_of_birth", () => {
+    const r = redactPii("Invoice 2024-05-06 issued");
+    expect(r.countsByKind.date_of_birth).toBe(0);
+    expect(r.redactedText).toContain("2024-05-06");
+  });
+
+  it("does not redact a 2025+ date as date_of_birth", () => {
+    const r = redactPii("Schedule 2025-01-15 review");
+    expect(r.countsByKind.date_of_birth).toBe(0);
+  });
+
+  it("rejects an ISO date with invalid month or day", () => {
+    expect(redactPii("DOB 1985-13-01 here").countsByKind.date_of_birth).toBe(0);
+    expect(redactPii("DOB 1985-02-32 here").countsByKind.date_of_birth).toBe(0);
+  });
 });

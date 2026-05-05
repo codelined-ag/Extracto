@@ -11,6 +11,7 @@ import {
  Layers,
  Plug,
  TrendingUp,
+ ShieldCheck,
 } from"lucide-react";
 
 import { ArchiveIcon } from"@/components/ui/archive";
@@ -2240,6 +2241,22 @@ export default function ExtractoPage() {
      })()
    : undefined;
 
+ const auditRaw = value.piiAudit;
+ const piiAudit = auditRaw && typeof auditRaw === "object" && !Array.isArray(auditRaw)
+   ? (() => {
+       const a = auditRaw as Record<string, unknown>;
+       const counts = a.countsByKind && typeof a.countsByKind === "object" && !Array.isArray(a.countsByKind)
+         ? Object.fromEntries(
+             Object.entries(a.countsByKind as Record<string, unknown>)
+               .filter(([, v]) => typeof v === "number")
+               .map(([k, v]) => [k, v as number]),
+           )
+         : {};
+       const total = Object.values(counts).reduce((acc, n) => acc + n, 0);
+       return { applied: Boolean(a.applied), countsByKind: counts, total };
+     })()
+   : undefined;
+
  return {
  stage: typeof value.stage ==="string"? value.stage : undefined,
  message: typeof value.message ==="string"? value.message : undefined,
@@ -2248,6 +2265,7 @@ export default function ExtractoPage() {
  processedPages: typeof value.processedPages ==="number"? value.processedPages : undefined,
  etaSeconds: typeof value.etaSeconds ==="number"? value.etaSeconds : null,
  postProcessing,
+ piiAudit,
  checkpoints,
  events,
  };
@@ -2311,6 +2329,7 @@ export default function ExtractoPage() {
        error: progressMeta.postProcessing.error,
      }
    : entry.postProcessing,
+ piiAudit: progressMeta?.piiAudit ?? entry.piiAudit,
  checkpoints: progressMeta?.checkpoints ?? entry.checkpoints,
  events: progressMeta?.events ?? entry.events,
  result:
@@ -3790,8 +3809,8 @@ export default function ExtractoPage() {
  viewMode ==="split"?"w-[42%]":"flex-1")}
  >
  <Tabs defaultValue="markdown"className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
- <div className="px-3 pt-2">
- <TabsList className="h-8 w-full justify-start overflow-x-auto">
+ <div className="px-3 pt-2 flex items-center gap-2">
+ <TabsList className="h-8 flex-1 justify-start overflow-x-auto">
  <TabsTrigger value="markdown"className="text-xs gap-1.5 h-6 shrink-0 group">
  <FileTextIcon size={12} className="inline-flex items-center justify-center text-[oklch(0.62_0.13_150)] transition-transform duration-200 group-hover:-translate-y-0.5 group-data-[state=active]:scale-110"/>
  Markdown
@@ -3805,6 +3824,22 @@ export default function ExtractoPage() {
  JSON
  </TabsTrigger>
  </TabsList>
+ {selectedFile.piiAudit?.applied ? (
+ <Tooltip>
+ <TooltipTrigger asChild>
+ <Badge variant="secondary" className="text-[10px] py-0 px-1.5 h-6 shrink-0 cursor-default">
+ <ShieldCheck className="size-3 mr-1"/>
+ {t(`PII redatti (${selectedFile.piiAudit.total})`,`PII redacted (${selectedFile.piiAudit.total})`,`PII rédigés (${selectedFile.piiAudit.total})`,`PII redactados (${selectedFile.piiAudit.total})`,`PII redigiert (${selectedFile.piiAudit.total})`)}
+ </Badge>
+ </TooltipTrigger>
+ <TooltipContent>
+ {Object.entries(selectedFile.piiAudit.countsByKind)
+   .filter(([, n]) => n > 0)
+   .map(([k, n]) => `${k}: ${n}`)
+   .join(", ") || t("Nessuna PII rilevata","No PII detected","Aucune PII détectée","Sin PII detectada","Keine PII erkannt")}
+ </TooltipContent>
+ </Tooltip>
+ ) : null}
  </div>
 
  <TabsContent value="markdown"className="flex-1 m-0 min-h-0 min-w-0">

@@ -54,12 +54,12 @@ const PATTERNS: PatternEntry[] = [
   },
   {
     kind: "phone",
-    regex: /\b(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)|\d{2,4})[\s.-]?\d{3,4}[\s.-]?\d{3,4}\b/g,
-    validate: (m) => m.replace(/\D/g, "").length >= 7,
+    regex: /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?\d{3,4}[\s.-]?\d{3,4}|\d{2,4}[\s.-]\d{3,4}[\s.-]\d{3,4})/g,
+    validate: isLikelyPhone,
   },
   {
     kind: "date_of_birth",
-    regex: /\b(?:0[1-9]|1[0-2])[/-](?:0[1-9]|[12]\d|3[01])[/-](?:19|20)\d{2}\b/g,
+    regex: /\b(?:(?:0[1-9]|1[0-2])[/-](?:0[1-9]|[12]\d|3[01])[/-](?:19\d{2}|20[01]\d)|(?:0[1-9]|[12]\d|3[01])[/-](?:0[1-9]|1[0-2])[/-](?:19\d{2}|20[01]\d)|(?:19\d{2}|20[01]\d)-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))\b/g,
   },
 ];
 
@@ -130,6 +130,14 @@ export function redactJsonValues(value: unknown): unknown {
     return out;
   }
   return value;
+}
+
+function isLikelyPhone(value: string): boolean {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 15) return false;
+  if (/^0+$/.test(digits)) return false;
+  if (/^(\d)\1+$/.test(digits)) return false;
+  return true;
 }
 
 function luhnValid(value: string): boolean {
