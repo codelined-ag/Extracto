@@ -19,6 +19,7 @@ const PUBLIC_PATHS = [
   "/api/v1/docs",
   "/api/v1/openapi.yaml",
   "/manifest.webmanifest",
+  "/pdf.worker.min.mjs",
   "/sw.js",
   "/extracto-favicon.svg",
   "/extracto-icon.svg",

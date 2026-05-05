@@ -45,7 +45,7 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "react-hooks/rules-of-hooks": "error",
   },
 }, {
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "coverage/**", "next-env.d.ts", "examples/**", "skills"]
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "coverage/**", "next-env.d.ts", "examples/**", "skills", "public/**"]
 }];
 
 export default eslintConfig;

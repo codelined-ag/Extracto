@@ -373,8 +373,8 @@ async function loadPdfJsLib(): Promise<Record<string, unknown>> {
 
  const pdfjsLib = await pdfJsLibPromise;
  const globalOptions = (pdfjsLib as { GlobalWorkerOptions?: { workerSrc?: string } }).GlobalWorkerOptions;
- if (globalOptions) {
- globalOptions.workerSrc = "";
+ if (globalOptions && !globalOptions.workerSrc) {
+ globalOptions.workerSrc = "/pdf.worker.min.mjs";
  }
 
  return pdfjsLib;
@@ -415,7 +415,7 @@ async function renderPdfPagesAsImages(
  throw new Error("PDF renderer unavailable");
  }
 
- const loadingTask = getDocument({ data: await getPdfArrayBuffer(file), disableWorker: true });
+ const loadingTask = getDocument({ data: await getPdfArrayBuffer(file) });
  const pdfDocument = await loadingTask.promise;
  const startPage =
  typeof options?.startPage ==="number"&& Number.isFinite(options.startPage) && options.startPage > 0
@@ -466,7 +466,7 @@ async function getPdfPageCount(file: File): Promise<number> {
  throw new Error("PDF renderer unavailable");
  }
 
- const loadingTask = getDocument({ data: await getPdfArrayBuffer(file), disableWorker: true });
+ const loadingTask = getDocument({ data: await getPdfArrayBuffer(file) });
  const pdfDocument = await loadingTask.promise;
  return pdfDocument.numPages;
 }
@@ -486,11 +486,12 @@ async function buildInitialPreview(file: File): Promise<{
  }
 
  try {
- const pageCount = await getPdfPageCount(file).catch(() => undefined);
+ const pageCount = await getPdfPageCount(file).catch((err) => { console.error("[extracto] getPdfPageCount failed:", err); return undefined; });
  const previews = await renderPdfPagesAsImages(file, { pageLimit: 1, startPage: 1 });
  const firstPage = previews[0] ||"";
  return { preview: firstPage, pagePreviews: previews, pageCount };
- } catch {
+ } catch (err) {
+ console.error("[extracto] buildInitialPreview failed:", err);
  return { preview:""};
  }
 }
