@@ -66,4 +66,22 @@ describe("extractEquations", () => {
     const eq = r.display[0];
     expect(text.slice(eq.startOffset, eq.endOffset)).toBe("$$\\sum n$$");
   });
+
+  it("anchors display offsets to the original text even after a code fence", () => {
+    const text = "```\nfoo\n```\nThen $$a + b$$ ends here.";
+    const r = extractEquations(text);
+    expect(r.display).toHaveLength(1);
+    const eq = r.display[0];
+    expect(text.slice(eq.startOffset, eq.endOffset)).toBe("$$a + b$$");
+  });
+
+  it("ignores priced text shaped like inline math", () => {
+    const r = extractEquations("Premium plan $9 dollars while Pro is $19 dollars.");
+    expect(r.inline).toHaveLength(0);
+  });
+
+  it("ignores escaped display delimiters", () => {
+    const r = extractEquations("literal \\$\\$not math\\$\\$ here");
+    expect(r.display).toHaveLength(0);
+  });
 });
