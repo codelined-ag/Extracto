@@ -12,7 +12,7 @@ vi.mock("@/lib/auth/api-key-shared", () => ({
 }));
 
 import { verifySessionToken } from "@/lib/auth/token";
-import { middleware } from "../../middleware";
+import { middleware } from "@/middleware";
 import { NextRequest } from "next/server";
 
 const mockedVerify = verifySessionToken as ReturnType<typeof vi.fn>;
