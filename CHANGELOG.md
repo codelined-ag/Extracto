@@ -6,6 +6,12 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-05-05
+
+### Added
+- Inline hover tooltips for every setting in the OCR, Knowledge base, and Storage tabs (provider, endpoint, API key, model, parallelism, embedding fields, chunking strategy, vector-store kind, S3 fields).
+- Integrations docs site: `/integrations/overview`, `/integrations/oauth-credentials`, `/integrations/watched-folders` on extracto.help.
+
 ## [1.2.0] - 2026-05-05
 
 ### Added

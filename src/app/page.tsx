@@ -98,6 +98,7 @@ import { WatchersSection } from "@/app/page-components/watchers-section";
 import { TemplatesSection } from "@/app/page-components/templates-section";
 import { IntegrationsPanel } from "@/app/page-components/integrations-panel";
 import { CloudImportDialog } from "@/app/page-components/cloud-import-dialog";
+import { HintLabel } from "@/app/page-components/field-hint";
 import { clearQueue, deletePagePreviews, loadAllPagePreviews, loadQueue, persistPagePreviews, persistQueue, reconcileJobFromServer } from "@/app/page-components/queue-persistence";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { useHistory } from "@/app/page-components/use-history";
@@ -2700,7 +2701,7 @@ export default function ExtractoPage() {
  >
  <div className="space-y-3">
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</Label>
+ <HintLabel hint={t("Dove gira il modello che legge i tuoi documenti. Ollama è locale e gratis; Mistral OCR e OpenRouter sono API a pagamento; OpenAI-compatible punta a qualsiasi endpoint compatibile.","Where the model that reads your documents runs. Ollama is local and free; Mistral OCR and OpenRouter are paid APIs; OpenAI-compatible points at any compatible endpoint.","Où s'exécute le modèle qui lit vos documents. Ollama est local et gratuit ; Mistral OCR et OpenRouter sont des API payantes ; OpenAI-compatible cible tout endpoint compatible.","Dónde se ejecuta el modelo que lee tus documentos. Ollama es local y gratis; Mistral OCR y OpenRouter son APIs de pago; OpenAI-compatible apunta a cualquier endpoint compatible.","Wo das Modell läuft, das deine Dokumente liest. Ollama ist lokal und kostenlos; Mistral OCR und OpenRouter sind kostenpflichtige APIs; OpenAI-compatible zeigt auf jeden kompatiblen Endpunkt.")}>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</HintLabel>
  <Select value={apiSettingsDraft.provider} onValueChange={(value) => setApiSettingsDraft((prev) => {
    const nextProvider = normalizeProvider(value);
    if (nextProvider === prev.provider) return prev;
@@ -2717,11 +2718,11 @@ export default function ExtractoPage() {
  </Select>
  </div>
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">Endpoint</Label>
+ <HintLabel hint={t("URL HTTP del provider. Cambia il provider sopra per popolare il default; sovrascrivi solo se hai un endpoint personalizzato (es. self-hosted Ollama o gateway corporate).","HTTP URL of the provider. Switching the provider above fills the default; override only if you run a custom endpoint (e.g. self-hosted Ollama or a corporate gateway).","URL HTTP du fournisseur. Changer le fournisseur ci-dessus remplit la valeur par défaut ; ne remplace que si tu as un endpoint personnalisé.","URL HTTP del proveedor. Cambiar el proveedor arriba rellena el valor por defecto; sobrescribe solo si tienes un endpoint personalizado.","HTTP-URL des Anbieters. Beim Wechsel des Anbieters wird der Standard gesetzt; überschreibe nur, wenn du einen eigenen Endpunkt hast.")}>Endpoint</HintLabel>
  <Input value={apiSettingsDraft.apiEndpoint} onChange={(event) => setApiSettingsDraft((prev) => ({ ...prev, apiEndpoint: event.target.value }))} placeholder={defaultEndpointForProvider(normalizeProvider(apiSettingsDraft.provider))}/>
  </div>
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">API key</Label>
+ <HintLabel hint={t("Chiave API del provider. Salvata cifrata sul disco accanto al DB; non viene mai inviata al browser. Lascia vuoto per Ollama locale.","Provider API key. Stored encrypted on disk next to the DB; never sent back to the browser. Leave blank for local Ollama.","Clé API du fournisseur. Stockée chiffrée à côté du DB ; jamais renvoyée au navigateur. Laisser vide pour Ollama local.","Clave API del proveedor. Se guarda cifrada en disco junto al DB; nunca se envía al navegador. Déjala vacía para Ollama local.","API-Schlüssel des Anbieters. Wird verschlüsselt neben der DB gespeichert; nie an den Browser zurückgesendet. Für lokales Ollama leer lassen.")}>API key</HintLabel>
  <Input
  type="password"
  value={apiSettingsDraft.apiKey}
@@ -2748,7 +2749,7 @@ export default function ExtractoPage() {
  >
  <div className="space-y-4">
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Modello OCR","OCR model","Modèle OCR","Modelo OCR","OCR-Modell")}</Label>
+ <HintLabel hint={t("Il modello che legge ogni pagina del documento. Modelli vision (es. mistral-ocr, qwen2-vl, llama3.2-vision) gestiscono tabelle e layout meglio dei modelli solo testo.","The model that reads each page of the document. Vision models (e.g. mistral-ocr, qwen2-vl, llama3.2-vision) handle tables and layout better than text-only models.","Le modèle qui lit chaque page. Les modèles vision (mistral-ocr, qwen2-vl, llama3.2-vision) gèrent mieux tableaux et mises en page que les modèles texte.","El modelo que lee cada página. Los modelos vision (mistral-ocr, qwen2-vl, llama3.2-vision) manejan tablas y layout mejor que los de solo texto.","Das Modell, das jede Seite liest. Vision-Modelle (mistral-ocr, qwen2-vl, llama3.2-vision) handhaben Tabellen und Layout besser als reine Textmodelle.")}>{t("Modello OCR","OCR model","Modèle OCR","Modelo OCR","OCR-Modell")}</HintLabel>
  <Combobox
  options={models.map((m) => ({ value: m.id, label: m.name, hint: m.provider }))}
  value={selectedModel}
@@ -2765,7 +2766,7 @@ export default function ExtractoPage() {
  {modelError ? <p className="text-[11px] text-destructive">{modelError}</p> : null}
  </div>
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Pagine in parallelo","Pages in parallel","Pages en parallèle","Páginas en paralelo","Seiten parallel")}</Label>
+ <HintLabel hint={t("Quante pagine processare contemporaneamente. 0 lascia decidere a Extracto (di solito 1-2). Più alto = più veloce ma più carico sul provider e sulla GPU/CPU. Per Mistral OCR 4-8 va bene; per Ollama locale di solito 1-2.","How many pages to process at the same time. 0 lets Extracto pick (usually 1-2). Higher means faster but more load on the provider and GPU/CPU. Mistral OCR can handle 4-8; local Ollama usually 1-2.","Combien de pages traiter simultanément. 0 laisse Extracto choisir (1-2 d'habitude). Plus élevé = plus rapide mais plus de charge.","Cuántas páginas se procesan a la vez. 0 deja decidir a Extracto (1-2 normalmente). Más alto = más rápido pero más carga.","Wie viele Seiten gleichzeitig verarbeitet werden. 0 lässt Extracto entscheiden (meist 1-2). Höher heißt schneller, aber mehr Last.")}>{t("Pagine in parallelo","Pages in parallel","Pages en parallèle","Páginas en paralelo","Seiten parallel")}</HintLabel>
  <div className="flex items-center gap-2">
  <Input
  type="number"
@@ -2893,7 +2894,7 @@ export default function ExtractoPage() {
  <div className="space-y-3">
  <div className="grid grid-cols-2 gap-3">
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</Label>
+ <HintLabel hint={t("Chi calcola gli embedding (i numeri che rappresentano il significato del testo). Ollama è locale e gratis; OpenRouter e i provider OpenAI-compatible sono a pagamento ma più precisi.","Who computes the embeddings (the numbers that represent the text's meaning). Ollama is local and free; OpenRouter and OpenAI-compatible providers are paid but usually higher quality.","Qui calcule les embeddings (les nombres qui représentent le sens du texte). Ollama est local et gratuit ; OpenRouter et les fournisseurs OpenAI-compatibles sont payants mais souvent meilleurs.","Quién calcula los embeddings (los números que representan el significado del texto). Ollama es local y gratis; OpenRouter y los proveedores OpenAI-compatibles son de pago pero suelen ser mejores.","Wer die Embeddings berechnet (die Zahlen, die die Bedeutung des Textes darstellen). Ollama ist lokal und kostenlos; OpenRouter und OpenAI-kompatible Anbieter kosten Geld, sind aber oft präziser.")}>{t("Provider","Provider","Fournisseur","Proveedor","Anbieter")}</HintLabel>
  <Select value={kbDefaultsDraft.embeddingProvider} onValueChange={(value) => setKbDefaultsDraft((p) => ({ ...p, embeddingProvider: value as KbEmbeddingProvider }))}>
  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
  <SelectContent>
@@ -2920,11 +2921,11 @@ export default function ExtractoPage() {
  </div>
  </div>
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">Endpoint</Label>
+ <HintLabel hint={t("URL HTTP del provider di embedding. Se cambi provider sopra, il default viene popolato automaticamente.","HTTP URL of the embedding provider. The default fills in automatically when you switch the provider above.","URL HTTP du fournisseur d'embedding. Le défaut se remplit automatiquement quand vous changez de fournisseur.","URL HTTP del proveedor de embeddings. El valor por defecto se rellena automáticamente al cambiar el proveedor.","HTTP-URL des Embedding-Anbieters. Beim Wechsel des Anbieters wird der Standard automatisch gesetzt.")}>Endpoint</HintLabel>
  <Input value={kbDefaultsDraft.embeddingEndpoint} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, embeddingEndpoint: e.target.value }))} placeholder="http://127.0.0.1:11434"/>
  </div>
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Modello","Model","Modèle","Modelo","Modell")}</Label>
+ <HintLabel hint={t("Il modello di embedding. nomic-embed-text e mxbai-embed-large sono buone scelte locali. Le dimensioni a destra devono corrispondere a quelle del modello scelto.","The embedding model. nomic-embed-text and mxbai-embed-large are solid local picks. The Dimensions field on the right must match the model's vector size.","Le modèle d'embedding. nomic-embed-text et mxbai-embed-large sont de bons choix locaux. Le champ Dimensions à droite doit correspondre à la taille du vecteur du modèle.","El modelo de embeddings. nomic-embed-text y mxbai-embed-large son opciones locales sólidas. El campo Dimensions a la derecha debe coincidir con el tamaño del vector del modelo.","Das Embedding-Modell. nomic-embed-text und mxbai-embed-large sind solide lokale Optionen. Das Dimensions-Feld rechts muss zur Vektorgröße des Modells passen.")}>{t("Modello","Model","Modèle","Modelo","Modell")}</HintLabel>
  <Combobox
  options={embeddingModelOptions}
  value={kbDefaultsDraft.embeddingModel}
@@ -2941,7 +2942,7 @@ export default function ExtractoPage() {
  />
  </div>
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">API key</Label>
+ <HintLabel hint={t("Chiave API del provider di embedding. Lascia vuoto per Ollama locale.","API key for the embedding provider. Leave blank for local Ollama.","Clé API du fournisseur d'embedding. Laisser vide pour Ollama local.","Clave API del proveedor de embeddings. Déjala vacía para Ollama local.","API-Schlüssel des Embedding-Anbieters. Für lokales Ollama leer lassen.")}>API key</HintLabel>
  <Input
  type="password"
  value={kbDefaultsDraft.embeddingApiKey}
@@ -2989,7 +2990,7 @@ export default function ExtractoPage() {
  >
  <div className="space-y-3">
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Strategia","Strategy","Stratégie","Estrategia","Strategie")}</Label>
+ <HintLabel hint={t("Come spezzare il testo prima di indicizzarlo. 'Per paragrafo' è il default robusto. 'Gerarchico' segue i titoli markdown. 'Semantico' taglia dove gli embedding di frasi consecutive sono più diversi (più costoso ma più pulito).","How to slice the text before indexing. 'Per paragraph' is the safe default. 'Hierarchical' follows markdown headings. 'Semantic' cuts where consecutive sentence embeddings differ most (slower but cleaner).","Comment découper le texte avant indexation. « Par paragraphe » est le défaut sûr. « Hiérarchique » suit les titres markdown. « Sémantique » coupe là où les embeddings de phrases consécutives diffèrent le plus.","Cómo trocear el texto antes de indexar. 'Por párrafo' es la opción segura por defecto. 'Jerárquico' sigue los títulos markdown. 'Semántico' corta donde los embeddings de frases consecutivas más difieren.","Wie der Text vor der Indexierung geteilt wird. 'Pro Absatz' ist der robuste Standard. 'Hierarchisch' folgt Markdown-Überschriften. 'Semantisch' schneidet dort, wo die Embeddings aufeinanderfolgender Sätze am stärksten abweichen.")}>{t("Strategia","Strategy","Stratégie","Estrategia","Strategie")}</HintLabel>
  <Select value={kbDefaultsDraft.chunkingStrategy} onValueChange={(value) => setKbDefaultsDraft((p) => ({ ...p, chunkingStrategy: value as KbChunkingStrategy }))}>
  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
  <SelectContent>
@@ -3003,7 +3004,7 @@ export default function ExtractoPage() {
  </div>
  <div className="grid grid-cols-3 gap-3">
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Max","Max","Max","Máx","Max")}</Label>
+ <HintLabel hint={t("Lunghezza massima di un chunk in caratteri. 800-1600 funziona bene per la maggior parte dei modelli di embedding.","Maximum chunk length in characters. 800-1600 works well for most embedding models.","Longueur maximale d'un chunk en caractères. 800-1600 convient à la plupart des modèles d'embedding.","Longitud máxima del fragmento en caracteres. 800-1600 funciona bien para la mayoría de modelos de embeddings.","Maximale Chunk-Länge in Zeichen. 800-1600 passt zu den meisten Embedding-Modellen.")}>{t("Max","Max","Max","Máx","Max")}</HintLabel>
  <Input type="number"min={1} max={10000} value={kbDefaultsDraft.chunkingMaxSize} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, chunkingMaxSize: e.target.value }))} placeholder="1200"/>
  </div>
  <div className="space-y-1.5">
@@ -3088,7 +3089,7 @@ export default function ExtractoPage() {
  <div className="space-y-3">
  <div className="grid grid-cols-2 gap-3">
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Tipo","Kind","Type","Tipo","Typ")}</Label>
+ <HintLabel hint={t("Quale database vettoriale ricevere. Chroma e Qdrant si auto-installano facilmente; Pinecone e Typesense richiedono account/API key. Tutti supportano upsert + cosine search.","Which vector database to write to. Chroma and Qdrant are easy to self-host; Pinecone and Typesense need an account/API key. All support upsert + cosine search.","Quelle base vectorielle utiliser. Chroma et Qdrant sont faciles à auto-héberger ; Pinecone et Typesense requièrent un compte/API key. Toutes supportent upsert + recherche cosine.","Qué base vectorial usar. Chroma y Qdrant son fáciles de auto-alojar; Pinecone y Typesense necesitan cuenta/API key. Todas soportan upsert + búsqueda coseno.","Welche Vektordatenbank. Chroma und Qdrant sind leicht selbst zu hosten; Pinecone und Typesense brauchen ein Konto/API-Key. Alle unterstützen Upsert und Cosine-Suche.")}>{t("Tipo","Kind","Type","Tipo","Typ")}</HintLabel>
  <Select
  value={kbDefaultsDraft.storeKind}
  onValueChange={(value) => {
@@ -3114,12 +3115,12 @@ export default function ExtractoPage() {
  </Select>
  </div>
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Dimensioni","Dimensions","Dimensions","Dimensiones","Dimensionen")}</Label>
+ <HintLabel hint={t("Dimensione del vettore atteso dal vector store. Deve essere uguale a quella del modello di embedding sopra (es. nomic-embed-text → 768).","Vector size the store expects. Must match the embedding model's dimensions above (e.g. nomic-embed-text → 768).","Taille de vecteur attendue par le store. Doit correspondre aux dimensions du modèle d'embedding ci-dessus.","Tamaño de vector que el store espera. Debe coincidir con las dimensiones del modelo de embeddings de arriba.","Vom Store erwartete Vektorgröße. Muss zu den Dimensionen des Embedding-Modells oben passen.")}>{t("Dimensioni","Dimensions","Dimensions","Dimensiones","Dimensionen")}</HintLabel>
  <Input type="number"min={1} max={32768} value={kbDefaultsDraft.storeDimensions} onChange={(e) => setKbDefaultsDraft((p) => ({ ...p, storeDimensions: e.target.value }))} placeholder="768"/>
  </div>
  </div>
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">Base URL</Label>
+ <HintLabel hint={t("URL HTTP del vector store. Cambia il tipo sopra per popolare il default; sovrascrivi per puntare a un'istanza self-hosted o cloud.","HTTP URL of the vector store. Switching the kind above fills in the default; override to point at a self-hosted or cloud instance.","URL HTTP du vector store. Changer le type ci-dessus remplit le défaut ; modifier pour cibler une instance auto-hébergée ou cloud.","URL HTTP del vector store. Cambiar el tipo arriba rellena el valor por defecto; sobrescríbelo para apuntar a una instancia auto-alojada o en la nube.","HTTP-URL des Vektor-Stores. Beim Wechsel des Typs wird der Standard gesetzt; überschreibe ihn für eine selbst gehostete oder Cloud-Instanz.")}>Base URL</HintLabel>
  <Input
  value={kbDefaultsDraft.storeBaseUrl}
  onChange={(e) => { setStoreTestResult(null); setKbDefaultsDraft((p) => ({ ...p, storeBaseUrl: e.target.value })); }}
@@ -3144,7 +3145,7 @@ export default function ExtractoPage() {
  </p>
  </div>
  <div className="space-y-1.5">
- <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">API key</Label>
+ <HintLabel hint={t("Chiave API del vector store, se richiesta. Pinecone e Typesense la richiedono; Chroma/Qdrant/Weaviate self-hosted di solito no.","Vector store API key, when required. Pinecone and Typesense need one; self-hosted Chroma/Qdrant/Weaviate usually do not.","Clé API du vector store, si nécessaire. Requise pour Pinecone et Typesense ; Chroma/Qdrant/Weaviate auto-hébergés n'en ont généralement pas besoin.","Clave API del vector store, si la pide. Pinecone y Typesense la requieren; Chroma/Qdrant/Weaviate auto-alojados normalmente no.","API-Schlüssel des Vektor-Stores, falls nötig. Pinecone und Typesense brauchen einen; selbst gehostete Chroma/Qdrant/Weaviate meist nicht.")}>API key</HintLabel>
  <Input
  type="password"
  value={kbDefaultsDraft.storeApiKey}
