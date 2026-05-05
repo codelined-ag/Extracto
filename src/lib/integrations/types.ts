@@ -19,25 +19,37 @@ export interface IntegrationAppCredentials {
   clientSecret: string;
 }
 
-export function readDropboxAppCredentials(): IntegrationAppCredentials | null {
+export function readDropboxAppCredentialsFromEnv(): IntegrationAppCredentials | null {
   const clientId = process.env.DROPBOX_CLIENT_ID?.trim();
   const clientSecret = process.env.DROPBOX_CLIENT_SECRET?.trim();
   if (!clientId || !clientSecret) return null;
   return { clientId, clientSecret };
 }
 
-export function readGoogleDriveAppCredentials(): IntegrationAppCredentials | null {
+export function readGoogleDriveAppCredentialsFromEnv(): IntegrationAppCredentials | null {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
   if (!clientId || !clientSecret) return null;
   return { clientId, clientSecret };
 }
 
-export function readOneDriveAppCredentials(): IntegrationAppCredentials | null {
+export function readOneDriveAppCredentialsFromEnv(): IntegrationAppCredentials | null {
   const clientId = process.env.ONEDRIVE_CLIENT_ID?.trim();
   const clientSecret = process.env.ONEDRIVE_CLIENT_SECRET?.trim();
   if (!clientId || !clientSecret) return null;
   return { clientId, clientSecret };
+}
+
+export function readDropboxAppCredentials(): IntegrationAppCredentials | null {
+  return readDropboxAppCredentialsFromEnv();
+}
+
+export function readGoogleDriveAppCredentials(): IntegrationAppCredentials | null {
+  return readGoogleDriveAppCredentialsFromEnv();
+}
+
+export function readOneDriveAppCredentials(): IntegrationAppCredentials | null {
+  return readOneDriveAppCredentialsFromEnv();
 }
 
 export function getRedirectUri(provider: IntegrationProvider): string {

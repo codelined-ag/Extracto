@@ -1,9 +1,9 @@
 import {
   getRedirectUri,
-  readOneDriveAppCredentials,
   type IntegrationAppCredentials,
   type IntegrationTokenBlob,
 } from "@/lib/integrations/types";
+import { resolveAppCredentials } from "@/lib/integrations/oauth-app-store";
 import {
   loadIntegrationConnection,
   updateIntegrationTokens,
@@ -18,11 +18,12 @@ export const ONEDRIVE_SCOPES = [
   "offline_access",
 ];
 
-export function buildOneDriveAuthUrl(input: {
+export async function buildOneDriveAuthUrl(input: {
   state: string;
   codeChallenge: string;
-}): { url: string; clientId: string } {
-  const creds = requireOneDriveCredentials();
+  userId: string;
+}): Promise<{ url: string; clientId: string }> {
+  const creds = await requireOneDriveCredentials(input.userId);
   const params = new URLSearchParams({
     client_id: creds.clientId,
     response_type: "code",
@@ -39,8 +40,9 @@ export function buildOneDriveAuthUrl(input: {
 export async function exchangeAuthorizationCode(input: {
   code: string;
   codeVerifier: string;
+  userId: string;
 }): Promise<{ tokens: IntegrationTokenBlob; accountLabel: string; clientId: string }> {
-  const creds = requireOneDriveCredentials();
+  const creds = await requireOneDriveCredentials(input.userId);
   const body = new URLSearchParams({
     code: input.code,
     grant_type: "authorization_code",
@@ -95,7 +97,7 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   if (!tokens.refreshToken) {
     throw new Error("OneDrive access token expired and no refresh token is available");
   }
-  const refreshed = await refreshAccessToken(tokens.refreshToken);
+  const refreshed = await refreshAccessToken(tokens.refreshToken, userId);
   await updateIntegrationTokens(userId, "onedrive", {
     accessToken: refreshed.accessToken,
     refreshToken: refreshed.refreshToken ?? tokens.refreshToken,
@@ -104,12 +106,12 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   return refreshed.accessToken;
 }
 
-async function refreshAccessToken(refreshToken: string): Promise<{
+async function refreshAccessToken(refreshToken: string, userId: string): Promise<{
   accessToken: string;
   refreshToken?: string;
   expiresAt?: number;
 }> {
-  const creds = requireOneDriveCredentials();
+  const creds = await requireOneDriveCredentials(userId);
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: refreshToken,
@@ -233,11 +235,11 @@ export async function uploadOneDriveFile(input: {
   };
 }
 
-function requireOneDriveCredentials(): IntegrationAppCredentials {
-  const creds = readOneDriveAppCredentials();
+async function requireOneDriveCredentials(userId: string): Promise<IntegrationAppCredentials> {
+  const creds = await resolveAppCredentials("onedrive", userId);
   if (!creds) {
     throw new Error(
-      "ONEDRIVE_CLIENT_ID and ONEDRIVE_CLIENT_SECRET must be set in the environment to use OneDrive.",
+      "OneDrive is not configured. Add OAuth credentials in Settings → Integrations or set ONEDRIVE_CLIENT_ID and ONEDRIVE_CLIENT_SECRET in docker.env.",
     );
   }
   return creds;

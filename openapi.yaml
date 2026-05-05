@@ -37,7 +37,7 @@ components:
       properties:
         id: { type: string }
         userId: { type: string }
-        provider: { type: string, enum: [dropbox, google_drive, onedrive] }
+        provider: { type: string, enum: [dropbox, google_drive, onedrive, local] }
         name: { type: string }
         folderPath: { type: string }
         intervalSeconds: { type: integer }
@@ -1994,7 +1994,7 @@ paths:
               type: object
               required: [provider, name, model]
               properties:
-                provider: { type: string, enum: [dropbox, google_drive, onedrive] }
+                provider: { type: string, enum: [dropbox, google_drive, onedrive, local] }
                 name: { type: string, maxLength: 80 }
                 folderPath: { type: string, default: "" }
                 model: { type: string }
@@ -2070,3 +2070,48 @@ paths:
                   removed: { type: boolean }
         "404":
           description: Watcher not found
+
+  /api/v1/integrations/{provider}/oauth-app:
+    parameters:
+      - { name: provider, in: path, required: true, schema: { type: string, enum: [dropbox, google_drive, onedrive] } }
+    get:
+      summary: Read the user's saved OAuth app credentials status
+      operationId: getOauthApp
+      tags: [Integrations]
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  provider: { type: string }
+                  source: { type: string, enum: [user, server, none] }
+                  clientIdLast4: { type: string, nullable: true }
+                  redirectUri: { type: string }
+    put:
+      summary: Save the user's own OAuth client_id + client_secret
+      operationId: putOauthApp
+      tags: [Integrations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId, clientSecret]
+              properties:
+                clientId: { type: string, maxLength: 200 }
+                clientSecret: { type: string, maxLength: 400 }
+      responses:
+        "200":
+          description: Saved
+        "400": { $ref: "#/components/responses/BadRequest" }
+    delete:
+      summary: Clear the user's saved OAuth credentials (falls back to server-wide)
+      operationId: deleteOauthApp
+      tags: [Integrations]
+      responses:
+        "200":
+          description: Deleted

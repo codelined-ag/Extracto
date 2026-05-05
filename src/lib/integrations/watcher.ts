@@ -1,11 +1,17 @@
 import { db } from "@/lib/db";
 import {
-  CLOUD_PROVIDERS,
-  type CloudProvider,
+  WATCHER_PROVIDERS,
+  type WatcherProvider,
   downloadCloudFile,
   isCloudProvider,
+  isWatcherProvider,
   listCloudFolder,
 } from "@/lib/integrations/dispatch";
+import {
+  downloadLocalFile,
+  listLocalFolder,
+  localFileFingerprint,
+} from "@/lib/integrations/local";
 import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
 import { submitOcrJob } from "@/lib/ocr/job-submit";
 import { getApiSettings } from "@/lib/ocr/settings-store";
@@ -39,7 +45,7 @@ function inferMime(name: string, contentType: string | null): string {
 }
 
 async function ingestEntry(
-  source: { id: string; userId: string; provider: CloudProvider; model: string },
+  source: { id: string; userId: string; provider: WatcherProvider; model: string },
   remoteId: string,
   name: string,
   rev: string | null,
@@ -62,7 +68,11 @@ async function ingestEntry(
   }
   if (!claimed) return { skipped: true };
 
-  const downloaded = await downloadCloudFile(source.provider, source.userId, remoteId);
+  const downloaded = source.provider === "local"
+    ? await downloadLocalFile(source.userId, remoteId)
+    : isCloudProvider(source.provider)
+      ? await downloadCloudFile(source.provider, source.userId, remoteId)
+      : (() => { throw new Error(`Unsupported provider ${source.provider}`); })();
   if (downloaded.data.byteLength > MAX_BYTES_PER_OBJECT) {
     await db.watchedCloudObject
       .delete({ where: { sourceId_remoteId: { sourceId: source.id, remoteId } } })
@@ -126,7 +136,7 @@ async function pollSource(sourceId: string): Promise<void> {
       },
     });
     if (!source) return;
-    if (!isCloudProvider(source.provider)) return;
+    if (!isWatcherProvider(source.provider)) return;
     const interval = Math.max(MIN_INTERVAL_SECONDS, source.intervalSeconds);
     if (source.lastPolledAt && Date.now() - source.lastPolledAt.getTime() < interval * 1000) return;
 
@@ -138,12 +148,16 @@ async function pollSource(sourceId: string): Promise<void> {
     let lastError: string | null = null;
     let listFailed = false;
     try {
-      const entries = await listCloudFolder(source.provider, source.userId, source.folderPath);
+      const entries = source.provider === "local"
+        ? await listLocalFolder(source.userId, source.folderPath)
+        : await listCloudFolder(source.provider, source.userId, source.folderPath);
       for (const entry of entries) {
         if (entry.kind !== "file") continue;
         if (!isSupportedFile(entry.name)) continue;
         try {
-          const rev = entry.modified ?? String(entry.size);
+          const rev = source.provider === "local"
+            ? await localFileFingerprint(source.userId, entry.id)
+            : (entry.modified ?? String(entry.size));
           const outcome = await ingestEntry(
             { id: source.id, userId: source.userId, provider: source.provider, model: source.model },
             entry.id,
@@ -196,7 +210,7 @@ async function pollSource(sourceId: string): Promise<void> {
 
 async function pollAll(): Promise<void> {
   const sources = await db.watchedCloudFolder.findMany({
-    where: { active: true, provider: { in: [...CLOUD_PROVIDERS] } },
+    where: { active: true, provider: { in: [...WATCHER_PROVIDERS] } },
     select: { id: true },
     take: 100,
   });

@@ -45,12 +45,27 @@ model AuthUser {
   jobTemplates       OcrJobTemplate[]
   watchedS3Sources   WatchedS3Source[]
   watchedCloudFolders WatchedCloudFolder[]
+  oauthAppCredentials IntegrationAppCredential[]
   pushSubscriptions  PushSubscription[]
   tags               Tag[]
   savedSearches      SavedSearch[]
   integrationConnections IntegrationConnection[]
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
+}
+
+model IntegrationAppCredential {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider              String
+  clientId              String
+  encryptedClientSecret String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
 }
 
 model IntegrationConnection {

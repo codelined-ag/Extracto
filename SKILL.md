@@ -298,9 +298,9 @@ extracto onedrive disconnect
 
 OneDrive uses the least-privilege `Files.ReadWrite.AppFolder` scope plus `User.Read` and `offline_access`. The app gets its own `/Apps/Extracto/` subfolder under the user's personal OneDrive — work / school accounts are out of scope for v0.11.0 (they require admin consent and the `common` authority instead of `consumers`). Same surface on `POST /api/v1/integrations/onedrive/{import,push}` and the `onedrive_*` MCP tools.
 
-### Watched cloud folders
+### Watched folders
 
-Extracto can poll a Dropbox / Google Drive / OneDrive folder and auto-submit any new file (pdf, png, jpg, webp; up to 64 MiB) to the OCR queue. Configure from the Settings → Integrations tab in the browser, or via REST/CLI/MCP:
+Extracto can sweep a Dropbox / Google Drive / OneDrive folder, or a local folder under `LOCAL_WATCH_ROOT/<userId>/`, and auto-submit any new file (pdf, png, jpg, webp; up to 64 MiB) to the OCR queue. Configure from the Settings → Integrations tab in the browser, or via REST/CLI/MCP:
 
 ```bash
 extracto integrations list                                                      # connected accounts + server availability
@@ -308,12 +308,25 @@ extracto integrations watchers list                                             
 extracto integrations watchers add --provider dropbox  --name inbox --folder /Inbox --model mistral-ocr-latest --interval 300
 extracto integrations watchers add --provider google_drive --name inbox --folder <folder-id> --model mistral-ocr-latest
 extracto integrations watchers add --provider onedrive --name inbox --folder <item-id>   --model mistral-ocr-latest
+extracto integrations watchers add --provider local    --name inbox --folder inbox --model mistral-ocr-latest
 extracto integrations watchers pause  <id>
 extracto integrations watchers resume <id>
 extracto integrations watchers delete <id>
 ```
 
-REST: `GET/POST /api/v1/integrations/watchers`, `PATCH/DELETE /api/v1/integrations/watchers/{id}`. MCP: `watchers_list`, `watchers_create`, `watchers_update`, `watchers_delete`, plus `integrations_status`. Sweep cadence is global (30 s); each watcher only polls when its own `intervalSeconds` has elapsed since `lastPolledAt`. Five consecutive list failures auto-pause the watcher and surface `lastError` so the user can fix the connection.
+REST: `GET/POST /api/v1/integrations/watchers`, `PATCH/DELETE /api/v1/integrations/watchers/{id}`. MCP: `watchers_list`, `watchers_create`, `watchers_update`, `watchers_delete`, plus `integrations_status`. Sweep cadence is global (30 s); each watcher only polls when its own `intervalSeconds` has elapsed since `lastPolledAt`. Five consecutive list failures auto-pause the watcher and surface `lastError`. The `local` provider sandboxes each user under `LOCAL_WATCH_ROOT/<userId>/` (defaults to `<DATABASE_URL_DIR>/local-watch`); `..` and absolute paths are rejected.
+
+### Personal OAuth credentials
+
+When the operator has not set `DROPBOX_CLIENT_ID` / `GOOGLE_CLIENT_ID` / `ONEDRIVE_CLIENT_ID` in `docker.env`, each user can paste their own OAuth client_id and client_secret. They are encrypted with `AUTH_SECRET` and stored per-user. Server-wide creds keep working for users who do not paste their own.
+
+```bash
+extracto integrations oauth-app get   --provider dropbox          # shows source: user|server|none + redirectUri
+extracto integrations oauth-app set   --provider dropbox --client-id ID --client-secret SECRET
+extracto integrations oauth-app clear --provider dropbox
+```
+
+REST: `GET/PUT/DELETE /api/v1/integrations/{provider}/oauth-app`. MCP: `oauth_app_status`, `oauth_app_set`, `oauth_app_clear`. The redirect URI Extracto registers is `<PUBLIC_BASE_URL>/api/integrations/<provider>/callback`.
 
 ## Lifecycle commands (no token required)
 

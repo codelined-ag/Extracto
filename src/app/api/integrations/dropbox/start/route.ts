@@ -9,19 +9,19 @@ import {
   OAUTH_STATE_COOKIE,
   packOAuthState,
 } from "@/lib/integrations/oauth-state";
-import { readDropboxAppCredentials } from "@/lib/integrations/types";
+import { resolveAppCredentials } from "@/lib/integrations/oauth-app-store";
 
 export const POST = withSessionAuth("mutation", "Dropbox connect", async (_request: NextRequest, { auth }) => {
-  if (!readDropboxAppCredentials()) {
+  if (!(await resolveAppCredentials("dropbox", auth.userId))) {
     throw new ApiRouteError(
-      "Dropbox is not configured on this server. Operator must set DROPBOX_CLIENT_ID and DROPBOX_CLIENT_SECRET in docker.env.",
+      "Dropbox is not configured. Add OAuth credentials in Settings → Integrations or set DROPBOX_CLIENT_ID and DROPBOX_CLIENT_SECRET on the server.",
       503,
     );
   }
   const codeVerifier = createCodeVerifier();
   const codeChallenge = deriveCodeChallenge(codeVerifier);
   const state = packOAuthState({ userId: auth.userId, provider: "dropbox", codeVerifier });
-  const { url } = buildDropboxAuthUrl({ state, codeChallenge });
+  const { url } = await buildDropboxAuthUrl({ state, codeChallenge, userId: auth.userId });
 
   const res = NextResponse.json({ authUrl: url });
   res.cookies.set(OAUTH_STATE_COOKIE, state, {

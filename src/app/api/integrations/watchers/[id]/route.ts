@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
 import { withSessionAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-import { isCloudProvider } from "@/lib/integrations/dispatch";
+import { isWatcherProvider } from "@/lib/integrations/dispatch";
 
 const MIN_INTERVAL = 60;
 const MAX_INTERVAL = 86400;
@@ -27,7 +27,7 @@ export const PATCH = withSessionAuth<{ id: string }>(
     const body = await parseJsonBody<UpdateInput>(request);
     const existing = await db.watchedCloudFolder.findFirst({ where: { id, userId: auth.userId } });
     if (!existing) throw new ApiRouteError("Watcher not found", 404);
-    if (!isCloudProvider(existing.provider)) throw new ApiRouteError("Invalid provider", 400);
+    if (!isWatcherProvider(existing.provider)) throw new ApiRouteError("Invalid provider", 400);
 
     const update: Record<string, unknown> = {};
     if (typeof body.name === "string") {

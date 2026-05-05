@@ -41,6 +41,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     const { tokens, accountLabel, clientId } = await exchangeAuthorizationCode({
       code,
       codeVerifier: payload.codeVerifier,
+      userId: payload.userId,
     });
     await saveIntegrationConnection({
       userId: payload.userId,

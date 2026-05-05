@@ -1647,6 +1647,35 @@ cmd_integrations() {
     list|ls)
       api_get "/api/v1/integrations"
       ;;
+    oauth-app)
+      local op="${1:-}"
+      shift || true
+      local provider="" client_id="" client_secret=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --provider)      provider="${2:-}"; shift 2 ;;
+          --client-id)     client_id="${2:-}"; shift 2 ;;
+          --client-secret) client_secret="${2:-}"; shift 2 ;;
+          *) die "unknown oauth-app flag: $1" ;;
+        esac
+      done
+      [ -n "$provider" ] || die "usage: extracto integrations oauth-app {get|set|clear} --provider <dropbox|google_drive|onedrive> [--client-id ID --client-secret SECRET]"
+      case "$op" in
+        get|status)
+          api_get "/api/v1/integrations/${provider}/oauth-app"
+          ;;
+        set)
+          [ -n "$client_id" ] && [ -n "$client_secret" ] || die "--client-id and --client-secret are required"
+          api_put_json "/api/v1/integrations/${provider}/oauth-app" "{\"clientId\":\"${client_id}\",\"clientSecret\":\"${client_secret}\"}"
+          ;;
+        clear|delete)
+          api_delete "/api/v1/integrations/${provider}/oauth-app"
+          ;;
+        *)
+          die "usage: extracto integrations oauth-app {get|set|clear} ..."
+          ;;
+      esac
+      ;;
     watchers)
       local op="${1:-}"
       shift || true
@@ -1669,7 +1698,7 @@ cmd_integrations() {
               *) die "unknown watchers add flag: $1" ;;
             esac
           done
-          [ -n "$provider" ] || die "usage: extracto integrations watchers add --provider <dropbox|google_drive|onedrive> --name N --folder F --model M [--interval SEC] [--template ID] [--auto-kb] [--auto-s3]"
+          [ -n "$provider" ] || die "usage: extracto integrations watchers add --provider <dropbox|google_drive|onedrive|local> --name N --folder F --model M [--interval SEC] [--template ID] [--auto-kb] [--auto-s3]"
           [ -n "$name" ] || die "--name is required"
           [ -n "$model" ] || die "--model is required"
           local template_field=""

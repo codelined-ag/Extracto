@@ -755,6 +755,41 @@ server.tool(
 );
 
 server.tool(
+  "oauth_app_status",
+  "Show whether the user has personal OAuth credentials saved for a provider, falling back to server creds. Returns source ('user' | 'server' | 'none'), clientIdLast4, and the redirectUri to register with the provider.",
+  { provider: z.enum(["dropbox", "google_drive", "onedrive"]) },
+  async ({ provider }) =>
+    asTextResult(await call(`/api/v1/integrations/${provider}/oauth-app`)),
+);
+
+server.tool(
+  "oauth_app_set",
+  "Save the user's own OAuth client_id + client_secret for a provider. Stored encrypted. Overrides any server-wide credentials.",
+  {
+    provider: z.enum(["dropbox", "google_drive", "onedrive"]),
+    clientId: z.string(),
+    clientSecret: z.string(),
+  },
+  async ({ provider, clientId, clientSecret }) =>
+    asTextResult(
+      await call(`/api/v1/integrations/${provider}/oauth-app`, {
+        method: "PUT",
+        body: { clientId, clientSecret },
+      }),
+    ),
+);
+
+server.tool(
+  "oauth_app_clear",
+  "Delete the user's saved OAuth credentials for a provider. Falls back to server-wide creds if any.",
+  { provider: z.enum(["dropbox", "google_drive", "onedrive"]) },
+  async ({ provider }) =>
+    asTextResult(
+      await call(`/api/v1/integrations/${provider}/oauth-app`, { method: "DELETE" }),
+    ),
+);
+
+server.tool(
   "watchers_list",
   "List the user's cloud watched folders (Dropbox / Google Drive / OneDrive). Each entry surfaces provider, name, folderPath, model, intervalSeconds, active, lastPolledAt, lastError.",
   {},
@@ -763,9 +798,9 @@ server.tool(
 
 server.tool(
   "watchers_create",
-  "Create a cloud watched folder. Extracto will sweep it on the chosen interval and submit any new file (pdf, png, jpg, webp; up to 64 MiB) to the OCR queue using the chosen model. Folder syntax: Dropbox uses /Inbox-style paths, Google Drive and OneDrive use folder ids (or 'root').",
+  "Create a watched folder. Extracto sweeps it on the chosen interval and submits any new file (pdf, png, jpg, webp; up to 64 MiB) to the OCR queue using the chosen model. Folder syntax: Dropbox uses /Inbox-style paths, Google Drive and OneDrive use folder ids (or 'root'), local uses a sub-folder name under LOCAL_WATCH_ROOT/<userId>/.",
   {
-    provider: z.enum(["dropbox", "google_drive", "onedrive"]),
+    provider: z.enum(["dropbox", "google_drive", "onedrive", "local"]),
     name: z.string().describe("Display name; unique per provider per user."),
     folderPath: z.string().default(""),
     model: z.string(),

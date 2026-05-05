@@ -5,6 +5,7 @@ import { buildGoogleDriveAuthUrl, GOOGLE_DRIVE_SCOPES } from "@/lib/integrations
 import { buildOneDriveAuthUrl, ONEDRIVE_SCOPES } from "@/lib/integrations/onedrive";
 
 const FIXTURE_AUTH_SECRET = "f".repeat(64);
+const FIXTURE_USER_ID = "auth-url-test-user";
 
 beforeEach(() => {
   process.env.AUTH_SECRET = FIXTURE_AUTH_SECRET;
@@ -28,10 +29,10 @@ describe("Dropbox", () => {
     );
   });
 
-  it("buildDropboxAuthUrl emits PKCE + offline-token and the configured redirect", () => {
+  it("buildDropboxAuthUrl emits PKCE + offline-token and the configured redirect", async () => {
     process.env.DROPBOX_CLIENT_ID = "dx-client";
     process.env.DROPBOX_CLIENT_SECRET = "dx-secret";
-    const { url } = buildDropboxAuthUrl({ state: "S", codeChallenge: "C" });
+    const { url } = await buildDropboxAuthUrl({ state: "S", codeChallenge: "C", userId: FIXTURE_USER_ID });
     const parsed = new URL(url);
     expect(parsed.host).toBe("www.dropbox.com");
     expect(parsed.searchParams.get("response_type")).toBe("code");
@@ -45,8 +46,10 @@ describe("Dropbox", () => {
     expect(parsed.searchParams.get("state")).toBe("S");
   });
 
-  it("throws when client credentials are not configured", () => {
-    expect(() => buildDropboxAuthUrl({ state: "S", codeChallenge: "C" })).toThrow(/DROPBOX_CLIENT_ID/);
+  it("rejects when client credentials are not configured", async () => {
+    await expect(
+      buildDropboxAuthUrl({ state: "S", codeChallenge: "C", userId: FIXTURE_USER_ID }),
+    ).rejects.toThrow(/Dropbox is not configured/);
   });
 });
 
@@ -56,10 +59,10 @@ describe("Google Drive", () => {
     expect(GOOGLE_DRIVE_SCOPES).not.toContain("https://www.googleapis.com/auth/drive");
   });
 
-  it("buildGoogleDriveAuthUrl forces refresh-token issuance via prompt=consent + access_type=offline", () => {
+  it("buildGoogleDriveAuthUrl forces refresh-token issuance via prompt=consent + access_type=offline", async () => {
     process.env.GOOGLE_CLIENT_ID = "gd-client";
     process.env.GOOGLE_CLIENT_SECRET = "gd-secret";
-    const { url } = buildGoogleDriveAuthUrl({ state: "S", codeChallenge: "C" });
+    const { url } = await buildGoogleDriveAuthUrl({ state: "S", codeChallenge: "C", userId: FIXTURE_USER_ID });
     const parsed = new URL(url);
     expect(parsed.host).toBe("accounts.google.com");
     expect(parsed.searchParams.get("access_type")).toBe("offline");
@@ -70,8 +73,10 @@ describe("Google Drive", () => {
     );
   });
 
-  it("throws when client credentials are not configured", () => {
-    expect(() => buildGoogleDriveAuthUrl({ state: "S", codeChallenge: "C" })).toThrow(/GOOGLE_CLIENT_ID/);
+  it("rejects when client credentials are not configured", async () => {
+    await expect(
+      buildGoogleDriveAuthUrl({ state: "S", codeChallenge: "C", userId: FIXTURE_USER_ID }),
+    ).rejects.toThrow(/Google Drive is not configured/);
   });
 });
 
@@ -82,10 +87,10 @@ describe("OneDrive", () => {
     expect(ONEDRIVE_SCOPES).not.toContain("Files.ReadWrite.All");
   });
 
-  it("buildOneDriveAuthUrl uses the consumers authority and S256 PKCE", () => {
+  it("buildOneDriveAuthUrl uses the consumers authority and S256 PKCE", async () => {
     process.env.ONEDRIVE_CLIENT_ID = "od-client";
     process.env.ONEDRIVE_CLIENT_SECRET = "od-secret";
-    const { url } = buildOneDriveAuthUrl({ state: "S", codeChallenge: "C" });
+    const { url } = await buildOneDriveAuthUrl({ state: "S", codeChallenge: "C", userId: FIXTURE_USER_ID });
     const parsed = new URL(url);
     expect(parsed.host).toBe("login.microsoftonline.com");
     expect(parsed.pathname).toContain("/consumers/");
@@ -95,7 +100,9 @@ describe("OneDrive", () => {
     );
   });
 
-  it("throws when client credentials are not configured", () => {
-    expect(() => buildOneDriveAuthUrl({ state: "S", codeChallenge: "C" })).toThrow(/ONEDRIVE_CLIENT_ID/);
+  it("rejects when client credentials are not configured", async () => {
+    await expect(
+      buildOneDriveAuthUrl({ state: "S", codeChallenge: "C", userId: FIXTURE_USER_ID }),
+    ).rejects.toThrow(/OneDrive is not configured/);
   });
 });

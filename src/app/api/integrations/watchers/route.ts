@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
 import { withSessionAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-import { isCloudProvider } from "@/lib/integrations/dispatch";
+import { isWatcherProvider } from "@/lib/integrations/dispatch";
 
 const MIN_INTERVAL = 60;
 const MAX_INTERVAL = 86400;
@@ -22,7 +22,7 @@ interface WatcherInput extends Record<string, unknown> {
 
 function normalize(input: WatcherInput) {
   const provider = typeof input.provider === "string" ? input.provider.trim() : "";
-  if (!isCloudProvider(provider)) throw new ApiRouteError("provider must be dropbox, google_drive, or onedrive", 400);
+  if (!isWatcherProvider(provider)) throw new ApiRouteError("provider must be dropbox, google_drive, onedrive, or local", 400);
   const name = typeof input.name === "string" ? input.name.trim().slice(0, 80) : "";
   if (!name) throw new ApiRouteError("name is required", 400);
   const model = typeof input.model === "string" ? input.model.trim() : "";

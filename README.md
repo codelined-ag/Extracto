@@ -30,7 +30,9 @@
   </picture>
 </p>
 
-> **v1.0.0**: side-by-side multi-model comparison with server-computed word-level diff, model recommendations from your own OCR history, PII auto-redaction with audit trail, form-field extraction, LaTeX equation extraction, and an E2E encryption scaffold (RSA SPKI public-key registration + AES-256-GCM envelope). v1.0 is the end of the roadmap; see the [changelog](./CHANGELOG.md).
+> **v1.1.0**: cloud integrations end-to-end. Connect Dropbox / Google Drive / OneDrive from the UI (paste your own OAuth client_id+secret if the operator hasn't), browse and import any file from the cloud, send any OCR result back as `md`, `docx`, `xlsx`, `obsidian`, or `zip`, and configure watched folders (cloud or local) that auto-submit new files for OCR. See the [changelog](./CHANGELOG.md).
+>
+> **v1.0.0**: side-by-side multi-model comparison with server-computed word-level diff, model recommendations from your own OCR history, PII auto-redaction with audit trail, form-field extraction, LaTeX equation extraction, and an E2E encryption scaffold (RSA SPKI public-key registration + AES-256-GCM envelope).
 
 ---
 
@@ -44,13 +46,14 @@ Most document-to-AI tools are SaaS. They cost per page, they see your documents,
 
 A complete pipeline from raw document to retrievable knowledge, in one container:
 
-1. **Ingest** any PDF, image, or watched folder.
+1. **Ingest** any PDF, image, watched local folder, or watched Dropbox / Google Drive / OneDrive folder.
 2. **Extract** with the vision model of your choice (Ollama, Mistral OCR, OpenRouter, any OpenAI-compatible endpoint).
 3. **Post-process** with a second LLM pass (clean to markdown or strict JSON, with your own instruction).
 4. **Chunk + embed + store** into Chroma, Qdrant, Weaviate, Milvus, OpenSearch, Pinecone, or Typesense.
 5. **Retrieve** through a stable v1 REST API, an OpenAI-Chat-Completions adapter, an MCP server, a typed CLI, or the browser UI.
+6. **Push** any result back to Dropbox / Google Drive / OneDrive, S3/MinIO, or download as `md`, `json`, `docx`, `rtf`, `csv`, `xlsx`, `obsidian`, or per-page `zip`.
 
-Everything else (per-user accounts, scoped API keys, rate limits, signed webhooks, S3/MinIO offload, Prometheus metrics, multi-language UI) is documented at [extracto.help](https://extracto.help).
+Everything else (per-user accounts, scoped API keys, rate limits, signed webhooks, S3/MinIO offload, Prometheus metrics, multi-language UI, per-user OAuth credentials when the operator hasn't preconfigured them) is documented at [extracto.help](https://extracto.help).
 
 ---
 

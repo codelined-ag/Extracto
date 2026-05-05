@@ -1,9 +1,9 @@
 import {
   getRedirectUri,
-  readDropboxAppCredentials,
   type IntegrationAppCredentials,
   type IntegrationTokenBlob,
 } from "@/lib/integrations/types";
+import { resolveAppCredentials } from "@/lib/integrations/oauth-app-store";
 import {
   loadIntegrationConnection,
   updateIntegrationTokens,
@@ -21,11 +21,12 @@ export const DROPBOX_SCOPES = [
   "account_info.read",
 ];
 
-export function buildDropboxAuthUrl(input: {
+export async function buildDropboxAuthUrl(input: {
   state: string;
   codeChallenge: string;
-}): { url: string; clientId: string } {
-  const creds = requireDropboxCredentials();
+  userId: string;
+}): Promise<{ url: string; clientId: string }> {
+  const creds = await requireDropboxCredentials(input.userId);
   const params = new URLSearchParams({
     response_type: "code",
     client_id: creds.clientId,
@@ -42,8 +43,9 @@ export function buildDropboxAuthUrl(input: {
 export async function exchangeAuthorizationCode(input: {
   code: string;
   codeVerifier: string;
+  userId: string;
 }): Promise<{ tokens: IntegrationTokenBlob; accountLabel: string; clientId: string }> {
-  const creds = requireDropboxCredentials();
+  const creds = await requireDropboxCredentials(input.userId);
   const body = new URLSearchParams({
     code: input.code,
     grant_type: "authorization_code",
@@ -104,7 +106,7 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   if (!tokens.refreshToken) {
     throw new Error("Dropbox access token expired and no refresh token is available");
   }
-  const refreshed = await refreshAccessToken(tokens.refreshToken);
+  const refreshed = await refreshAccessToken(tokens.refreshToken, userId);
   await updateIntegrationTokens(userId, "dropbox", {
     accessToken: refreshed.accessToken,
     expiresAt: refreshed.expiresAt,
@@ -112,8 +114,8 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   return refreshed.accessToken;
 }
 
-async function refreshAccessToken(refreshToken: string): Promise<{ accessToken: string; expiresAt?: number }> {
-  const creds = requireDropboxCredentials();
+async function refreshAccessToken(refreshToken: string, userId: string): Promise<{ accessToken: string; expiresAt?: number }> {
+  const creds = await requireDropboxCredentials(userId);
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: refreshToken,
@@ -232,11 +234,11 @@ export async function uploadDropboxFile(
   };
 }
 
-function requireDropboxCredentials(): IntegrationAppCredentials {
-  const creds = readDropboxAppCredentials();
+async function requireDropboxCredentials(userId: string): Promise<IntegrationAppCredentials> {
+  const creds = await resolveAppCredentials("dropbox", userId);
   if (!creds) {
     throw new Error(
-      "DROPBOX_CLIENT_ID and DROPBOX_CLIENT_SECRET must be set in the environment to use the Dropbox integration.",
+      "Dropbox is not configured. Add OAuth credentials in Settings → Integrations or set DROPBOX_CLIENT_ID and DROPBOX_CLIENT_SECRET in docker.env.",
     );
   }
   return creds;

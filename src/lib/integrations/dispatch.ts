@@ -25,6 +25,14 @@ export function isCloudProvider(value: unknown): value is CloudProvider {
   return typeof value === "string" && (CLOUD_PROVIDERS as readonly string[]).includes(value);
 }
 
+export type WatcherProvider = CloudProvider | "local";
+
+export const WATCHER_PROVIDERS: ReadonlyArray<WatcherProvider> = ["dropbox", "google_drive", "onedrive", "local"];
+
+export function isWatcherProvider(value: unknown): value is WatcherProvider {
+  return typeof value === "string" && (WATCHER_PROVIDERS as readonly string[]).includes(value);
+}
+
 export interface CloudEntry {
   kind: "file" | "folder";
   id: string;

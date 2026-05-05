@@ -6,6 +6,18 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-05
+
+### Added
+- Per-user OAuth credentials: paste your own Dropbox / Google / Microsoft client_id+secret in Settings → Integrations when the operator hasn't preconfigured them. Stored encrypted with AUTH_SECRET.
+- Local watched folder: a fourth watcher provider that sweeps a sandboxed sub-folder under LOCAL_WATCH_ROOT/<userId>/ and pushes any new file (pdf, png, jpg, webp; up to 64 MiB) into the OCR queue.
+- New REST surface for OAuth credentials: GET / PUT / DELETE /api/v1/integrations/{provider}/oauth-app, mirrored on /api/integrations.
+- New MCP tools: oauth_app_status, oauth_app_set, oauth_app_clear.
+- New CLI: extracto integrations oauth-app {get,set,clear}.
+
+### Changed
+- Connect buttons no longer dead-end when the server has no OAuth credentials: each provider card now exposes an inline OAuth-app form.
+
 ## [1.1.0] - 2026-05-05
 
 ### Added

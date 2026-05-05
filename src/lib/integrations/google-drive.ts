@@ -1,9 +1,9 @@
 import {
   getRedirectUri,
-  readGoogleDriveAppCredentials,
   type IntegrationAppCredentials,
   type IntegrationTokenBlob,
 } from "@/lib/integrations/types";
+import { resolveAppCredentials } from "@/lib/integrations/oauth-app-store";
 import {
   loadIntegrationConnection,
   updateIntegrationTokens,
@@ -21,11 +21,12 @@ export const GOOGLE_DRIVE_SCOPES = [
   "email",
 ];
 
-export function buildGoogleDriveAuthUrl(input: {
+export async function buildGoogleDriveAuthUrl(input: {
   state: string;
   codeChallenge: string;
-}): { url: string; clientId: string } {
-  const creds = requireGoogleDriveCredentials();
+  userId: string;
+}): Promise<{ url: string; clientId: string }> {
+  const creds = await requireGoogleDriveCredentials(input.userId);
   const params = new URLSearchParams({
     response_type: "code",
     client_id: creds.clientId,
@@ -44,8 +45,9 @@ export function buildGoogleDriveAuthUrl(input: {
 export async function exchangeAuthorizationCode(input: {
   code: string;
   codeVerifier: string;
+  userId: string;
 }): Promise<{ tokens: IntegrationTokenBlob; accountLabel: string; clientId: string }> {
-  const creds = requireGoogleDriveCredentials();
+  const creds = await requireGoogleDriveCredentials(input.userId);
   const body = new URLSearchParams({
     code: input.code,
     grant_type: "authorization_code",
@@ -99,7 +101,7 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   if (!tokens.refreshToken) {
     throw new Error("Google Drive access token expired and no refresh token is available");
   }
-  const refreshed = await refreshAccessToken(tokens.refreshToken);
+  const refreshed = await refreshAccessToken(tokens.refreshToken, userId);
   await updateIntegrationTokens(userId, "google_drive", {
     accessToken: refreshed.accessToken,
     expiresAt: refreshed.expiresAt,
@@ -107,8 +109,8 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   return refreshed.accessToken;
 }
 
-async function refreshAccessToken(refreshToken: string): Promise<{ accessToken: string; expiresAt?: number }> {
-  const creds = requireGoogleDriveCredentials();
+async function refreshAccessToken(refreshToken: string, userId: string): Promise<{ accessToken: string; expiresAt?: number }> {
+  const creds = await requireGoogleDriveCredentials(userId);
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: refreshToken,
@@ -230,11 +232,11 @@ export async function uploadGoogleDriveFile(input: {
   };
 }
 
-function requireGoogleDriveCredentials(): IntegrationAppCredentials {
-  const creds = readGoogleDriveAppCredentials();
+async function requireGoogleDriveCredentials(userId: string): Promise<IntegrationAppCredentials> {
+  const creds = await resolveAppCredentials("google_drive", userId);
   if (!creds) {
     throw new Error(
-      "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set in the environment to use Google Drive.",
+      "Google Drive is not configured. Add OAuth credentials in Settings → Integrations or set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in docker.env.",
     );
   }
   return creds;

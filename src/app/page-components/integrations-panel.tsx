@@ -12,11 +12,17 @@ import { useToast } from "@/hooks/use-toast";
 import type { Translator } from "@/app/page-components/types";
 
 export type CloudProvider = "dropbox" | "google_drive" | "onedrive";
+export type WatcherProvider = CloudProvider | "local";
 
 const PROVIDERS: ReadonlyArray<{ id: CloudProvider; label: string }> = [
   { id: "dropbox", label: "Dropbox" },
   { id: "google_drive", label: "Google Drive" },
   { id: "onedrive", label: "OneDrive" },
+];
+
+const WATCHER_OPTIONS: ReadonlyArray<{ id: WatcherProvider; label: string }> = [
+  ...PROVIDERS,
+  { id: "local", label: "Local folder" },
 ];
 
 interface ConnectionStatus {
@@ -29,6 +35,7 @@ interface ConnectionStatus {
 
 interface StatusResponse {
   available: Record<CloudProvider, boolean>;
+  oauthApp: Record<CloudProvider, { source: "user" | "server" | "none"; clientIdLast4: string | null }>;
   connections: ConnectionStatus[];
 }
 
@@ -135,43 +142,51 @@ export function IntegrationsPanel({ t }: { t: Translator }) {
       </div>
       <div className="grid gap-2">
         {PROVIDERS.map((p) => {
-          const available = status?.available?.[p.id];
+          const oauthApp = status?.oauthApp?.[p.id];
+          const available = oauthApp ? oauthApp.source !== "none" : status?.available?.[p.id];
           const connection = status?.connections?.find((c) => c.provider === p.id);
           const connected = connectedSet.has(p.id);
           return (
             <Card key={p.id}>
-              <CardContent className="p-3 flex items-center gap-3">
-                <Cloud className="size-4 text-muted-foreground" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">{p.label}</div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {connected
-                      ? connection?.accountLabel || t("Connesso", "Connected", "Connecté", "Conectado", "Verbunden")
-                      : available
-                        ? t("Non connesso", "Not connected", "Non connecté", "No conectado", "Nicht verbunden")
-                        : t("Non configurato sul server", "Not configured on this server", "Non configuré sur le serveur", "No configurado en este servidor", "Auf diesem Server nicht konfiguriert")}
+              <CardContent className="p-3 flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <Cloud className="size-4 text-muted-foreground" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">{p.label}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {connected
+                        ? connection?.accountLabel || t("Connesso", "Connected", "Connecté", "Conectado", "Verbunden")
+                        : oauthApp?.source === "user"
+                          ? t(`OAuth app personale (…${oauthApp.clientIdLast4})`, `Your OAuth app (…${oauthApp.clientIdLast4})`)
+                          : oauthApp?.source === "server"
+                            ? t("OAuth app del server", "Server OAuth app", "Application OAuth du serveur", "Aplicación OAuth del servidor", "Server-OAuth-App")
+                            : t("Aggiungi le tue credenziali OAuth per collegarti", "Add your OAuth credentials to connect", "Ajoutez vos identifiants OAuth pour connecter", "Añade tus credenciales OAuth para conectar", "Eigene OAuth-Daten hinzufügen, um zu verbinden")}
+                    </div>
                   </div>
+                  {connected ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void onDisconnect(p.id)}
+                      disabled={busyProvider === p.id}
+                    >
+                      <Trash2 className="size-3.5 mr-1.5" />
+                      {t("Disconnetti", "Disconnect", "Déconnecter", "Desconectar", "Trennen")}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={() => void onConnect(p.id)}
+                      disabled={!available || busyProvider === p.id}
+                    >
+                      <Plug className="size-3.5 mr-1.5" />
+                      {t("Connetti", "Connect", "Connecter", "Conectar", "Verbinden")}
+                    </Button>
+                  )}
                 </div>
-                {connected ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void onDisconnect(p.id)}
-                    disabled={busyProvider === p.id}
-                  >
-                    <Trash2 className="size-3.5 mr-1.5" />
-                    {t("Disconnetti", "Disconnect", "Déconnecter", "Desconectar", "Trennen")}
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    onClick={() => void onConnect(p.id)}
-                    disabled={!available || busyProvider === p.id}
-                  >
-                    <Plug className="size-3.5 mr-1.5" />
-                    {t("Connetti", "Connect", "Connecter", "Conectar", "Verbinden")}
-                  </Button>
-                )}
+                {!connected ? (
+                  <OAuthAppConfig provider={p.id} t={t} onChanged={refresh} hasUserCreds={oauthApp?.source === "user"} />
+                ) : null}
               </CardContent>
             </Card>
           );
@@ -313,8 +328,8 @@ function CreateWatcherForm({
   onCreated: () => Promise<void>;
 }) {
   const { toast } = useToast();
-  const firstConnected = PROVIDERS.find((p) => connections.has(p.id))?.id ?? "dropbox";
-  const [provider, setProvider] = React.useState<CloudProvider>(firstConnected);
+  const firstConnected = PROVIDERS.find((p) => connections.has(p.id))?.id ?? "local";
+  const [provider, setProvider] = React.useState<WatcherProvider>(firstConnected);
   const [name, setName] = React.useState("");
   const [folderPath, setFolderPath] = React.useState("");
   const [model, setModel] = React.useState("");
@@ -362,15 +377,18 @@ function CreateWatcherForm({
               <Label className="text-xs">{t("Provider", "Provider", "Fournisseur", "Proveedor", "Anbieter")}</Label>
               <select
                 value={provider}
-                onChange={(e) => setProvider(e.target.value as CloudProvider)}
+                onChange={(e) => setProvider(e.target.value as WatcherProvider)}
                 className="w-full h-9 px-2 rounded-md border border-input bg-background text-sm"
               >
-                {PROVIDERS.map((p) => (
-                  <option key={p.id} value={p.id} disabled={!connections.has(p.id)}>
-                    {p.label}
-                    {!connections.has(p.id) ? ` (${t("non connesso", "not connected", "non connecté", "no conectado", "nicht verbunden")})` : ""}
-                  </option>
-                ))}
+                {WATCHER_OPTIONS.map((p) => {
+                  const disabled = p.id !== "local" && !connections.has(p.id);
+                  return (
+                    <option key={p.id} value={p.id} disabled={disabled}>
+                      {p.label}
+                      {disabled ? ` (${t("non connesso", "not connected", "non connecté", "no conectado", "nicht verbunden")})` : ""}
+                    </option>
+                  );
+                })}
               </select>
             </div>
             <div>
@@ -383,9 +401,11 @@ function CreateWatcherForm({
               <Label className="text-xs">
                 {provider === "dropbox"
                   ? t("Percorso (es. /Inbox)", "Path (e.g. /Inbox)", "Chemin (ex. /Inbox)", "Ruta (p.ej. /Inbox)", "Pfad (z. B. /Inbox)")
-                  : t("ID cartella", "Folder ID", "ID dossier", "ID de carpeta", "Ordner-ID")}
+                  : provider === "local"
+                    ? t("Sotto-cartella in LOCAL_WATCH_ROOT", "Sub-folder under LOCAL_WATCH_ROOT", "Sous-dossier sous LOCAL_WATCH_ROOT", "Subcarpeta bajo LOCAL_WATCH_ROOT", "Unterordner unter LOCAL_WATCH_ROOT")
+                    : t("ID cartella", "Folder ID", "ID dossier", "ID de carpeta", "Ordner-ID")}
               </Label>
-              <Input value={folderPath} onChange={(e) => setFolderPath(e.target.value)} placeholder={provider === "dropbox" ? "/Inbox" : "root"} />
+              <Input value={folderPath} onChange={(e) => setFolderPath(e.target.value)} placeholder={provider === "dropbox" ? "/Inbox" : provider === "local" ? "inbox" : "root"} />
             </div>
             <div>
               <Label className="text-xs">{t("Modello", "Model", "Modèle", "Modelo", "Modell")}</Label>
@@ -421,5 +441,125 @@ function CreateWatcherForm({
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+function OAuthAppConfig({
+  provider,
+  t,
+  onChanged,
+  hasUserCreds,
+}: {
+  provider: CloudProvider;
+  t: Translator;
+  onChanged: () => Promise<void>;
+  hasUserCreds: boolean;
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = React.useState(false);
+  const [clientId, setClientId] = React.useState("");
+  const [clientSecret, setClientSecret] = React.useState("");
+  const [redirectUri, setRedirectUri] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const fetchInfo = React.useCallback(async () => {
+    try {
+      const res = await fetch(`/api/integrations/${provider}/oauth-app`);
+      if (!res.ok) return;
+      const json = (await res.json()) as { redirectUri?: string };
+      if (json.redirectUri) setRedirectUri(json.redirectUri);
+    } catch { /* ignore */ }
+  }, [provider]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchInfo();
+  }, [open, fetchInfo]);
+
+  const onSave = async () => {
+    if (!clientId.trim() || !clientSecret.trim()) {
+      toast({ title: t("Compila entrambi i campi", "Fill in both fields", "Remplis les deux champs", "Rellena ambos campos", "Fülle beide Felder aus"), variant: "destructive" });
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/integrations/${provider}/oauth-app`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: clientId.trim(), clientSecret: clientSecret.trim() }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error((json as { error?: string }).error || `HTTP ${res.status}`);
+      }
+      setClientId("");
+      setClientSecret("");
+      setOpen(false);
+      await onChanged();
+      toast({ title: t("Credenziali OAuth salvate", "OAuth credentials saved", "Identifiants OAuth enregistrés", "Credenciales OAuth guardadas", "OAuth-Daten gespeichert") });
+    } catch (err) {
+      toast({
+        title: t("Errore", "Error", "Erreur", "Error", "Fehler"),
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onClear = async () => {
+    setBusy(true);
+    try {
+      await fetch(`/api/integrations/${provider}/oauth-app`, { method: "DELETE" });
+      await onChanged();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <div className="flex items-center justify-end gap-2">
+        {hasUserCreds ? (
+          <Button size="sm" variant="ghost" onClick={() => void onClear()} disabled={busy}>
+            {t("Rimuovi credenziali OAuth", "Remove OAuth credentials", "Retirer les identifiants OAuth", "Quitar credenciales OAuth", "OAuth-Daten entfernen")}
+          </Button>
+        ) : null}
+        <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+          {hasUserCreds
+            ? t("Modifica OAuth app", "Edit OAuth app", "Modifier OAuth app", "Editar OAuth app", "OAuth-App bearbeiten")
+            : t("Aggiungi OAuth app", "Add OAuth app", "Ajouter OAuth app", "Añadir OAuth app", "OAuth-App hinzufügen")}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border bg-secondary/30 p-3">
+      <div>
+        <Label className="text-xs">
+          {t("URI di reindirizzamento (incollalo nella console del provider)", "Redirect URI (paste this in the provider console)", "URI de redirection (à coller dans la console du fournisseur)", "URI de redirección (pégalo en la consola del proveedor)", "Weiterleitungs-URI (im Provider-Dashboard einfügen)")}
+        </Label>
+        <Input readOnly value={redirectUri} onFocus={(e) => e.currentTarget.select()} />
+      </div>
+      <div>
+        <Label className="text-xs">Client ID</Label>
+        <Input value={clientId} onChange={(e) => setClientId(e.target.value)} autoComplete="off" />
+      </div>
+      <div>
+        <Label className="text-xs">Client secret</Label>
+        <Input type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} autoComplete="off" />
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
+          {t("Annulla", "Cancel", "Annuler", "Cancelar", "Abbrechen")}
+        </Button>
+        <Button size="sm" onClick={() => void onSave()} disabled={busy}>
+          {t("Salva", "Save", "Enregistrer", "Guardar", "Speichern")}
+        </Button>
+      </div>
+    </div>
   );
 }
