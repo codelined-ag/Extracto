@@ -243,12 +243,6 @@ export function CameraCaptureDialog({
   };
 
   const handleOpenChange = (next: boolean) => {
-    if (!next) {
-      stopStream();
-      setSnapshot(null);
-      setStatus("starting");
-      setShots([]);
-    }
     onOpenChange(next);
   };
 

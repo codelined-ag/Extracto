@@ -93,9 +93,8 @@ export async function POST(request: NextRequest) {
             `The link expires in 30 minutes. Ignore this message if you did not request a reset.`,
         });
         mailDelivered = send.delivered;
-      } else {
-        console.log(`[auth.password.forgot] SMTP unconfigured; reset link for ${user.email}: ${link}`);
-        if (expose) leakSafeConfirmUrl = link;
+      } else if (expose) {
+        leakSafeConfirmUrl = link;
       }
     }
 

@@ -1,4 +1,5 @@
 import type { ApiProviderSettings, ProviderKind } from "@/lib/api-types";
+import { filterChatModels } from "@/lib/ocr/embedding-models";
 import { getOllamaModels } from "@/lib/ocr/ollama-dispatch";
 import {
   getDefaultOpenAICompatApiUrl,
@@ -49,9 +50,11 @@ export async function getModelCatalog(
   }
 
   if (!provider || provider === "ollama") {
-    catalog.ollama = await discoverModelsOrEmpty(
-      () => getOllamaModels(settings.apiEndpoint).then((r) => r.models),
-      "Ollama model catalog",
+    catalog.ollama = filterChatModels(
+      await discoverModelsOrEmpty(
+        () => getOllamaModels(settings.apiEndpoint).then((r) => r.models),
+        "Ollama model catalog",
+      ),
     );
   }
 
@@ -68,10 +71,11 @@ export async function getModelCatalog(
           "OpenRouter model catalog",
         )
       : [];
-    catalog.openrouter =
+    catalog.openrouter = filterChatModels(
       openRouterModels.length === 0 && settings.provider === "openrouter"
         ? [...getDefaultOpenRouterFallbackModels()]
-        : openRouterModels;
+        : openRouterModels,
+    );
   }
 
   const openAICompatEndpoint =
@@ -87,10 +91,11 @@ export async function getModelCatalog(
           "OpenAI-compatible model catalog",
         )
       : [];
-    catalog.openai_compat =
+    catalog.openai_compat = filterChatModels(
       openAICompatModels.length === 0 && settings.provider === "openai_compat"
         ? [...getDefaultOpenAICompatFallbackModels()]
-        : openAICompatModels;
+        : openAICompatModels,
+    );
   }
 
   return catalog;

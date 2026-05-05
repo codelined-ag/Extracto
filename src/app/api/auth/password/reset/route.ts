@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 
 import { ApiRouteError, handleApiError, parseJsonBody } from "@/lib/api-error";
 import { db } from "@/lib/db";
@@ -17,13 +17,6 @@ interface ResetBody extends Record<string, unknown> {
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
-}
-
-function constantTimeEq(a: string, b: string): boolean {
-  const ab = Buffer.from(a, "hex");
-  const bb = Buffer.from(b, "hex");
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
 }
 
 export async function POST(request: NextRequest) {
@@ -47,18 +40,14 @@ export async function POST(request: NextRequest) {
       throw new ApiRouteError("New password must be at least 12 characters", 400);
     }
 
-    const candidates = await db.authUser.findMany({
+    const provided = hashToken(token);
+    const match = await db.authUser.findFirst({
       where: {
-        passwordResetTokenHash: { not: null },
+        passwordResetTokenHash: provided,
         passwordResetExpiresAt: { gt: new Date() },
       },
-      select: { id: true, passwordResetTokenHash: true },
+      select: { id: true },
     });
-
-    const provided = hashToken(token);
-    const match = candidates.find(
-      (c) => c.passwordResetTokenHash && constantTimeEq(c.passwordResetTokenHash, provided),
-    );
     if (!match) throw new ApiRouteError("Invalid or expired token", 400);
 
     await updateUserPassword(match.id, newPassword);

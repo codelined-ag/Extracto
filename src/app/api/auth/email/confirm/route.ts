@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 
 import { ApiRouteError, handleApiError, parseJsonBody } from "@/lib/api-error";
 import { db } from "@/lib/db";
@@ -15,13 +15,6 @@ const CONFIRM_WINDOW_MS = 60 * 60 * 1000;
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
-}
-
-function constantTimeEq(a: string, b: string): boolean {
-  const ab = Buffer.from(a, "hex");
-  const bb = Buffer.from(b, "hex");
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
 }
 
 export async function POST(request: NextRequest) {
@@ -41,24 +34,19 @@ export async function POST(request: NextRequest) {
     const token = typeof body.token === "string" ? body.token.trim() : "";
     if (!token) throw new ApiRouteError("token is required", 400);
 
-    const candidates = await db.authUser.findMany({
+    const provided = hashToken(token);
+    const match = await db.authUser.findFirst({
       where: {
-        pendingEmail: { not: null },
+        emailChangeTokenHash: provided,
         emailChangeExpiresAt: { gt: new Date() },
+        pendingEmail: { not: null },
       },
       select: {
         id: true,
         email: true,
         pendingEmail: true,
-        emailChangeTokenHash: true,
-        emailChangeExpiresAt: true,
       },
     });
-
-    const provided = hashToken(token);
-    const match = candidates.find(
-      (c) => c.emailChangeTokenHash && constantTimeEq(c.emailChangeTokenHash, provided),
-    );
     if (!match || !match.pendingEmail) {
       throw new ApiRouteError("Invalid or expired token", 400);
     }
