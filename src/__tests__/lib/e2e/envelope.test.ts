@@ -7,7 +7,7 @@ import {
 } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { computeFingerprint, encryptForUser } from "@/lib/e2e/envelope";
+import { computeFingerprint, encryptForUser, validateE2ePublicKey } from "@/lib/e2e/envelope";
 
 const FIXTURE_KEYPAIR = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -59,5 +59,30 @@ describe("encryptForUser + decrypt round-trip", () => {
       privateKeyEncoding: { type: "pkcs8", format: "pem" },
     });
     expect(computeFingerprint(FIXTURE_KEYPAIR.publicKey)).not.toBe(computeFingerprint(other.publicKey));
+  });
+});
+
+describe("validateE2ePublicKey", () => {
+  it("accepts a 2048-bit RSA SPKI key and returns its fingerprint and modulus size", () => {
+    const result = validateE2ePublicKey(FIXTURE_KEYPAIR.publicKey);
+    expect(result.fingerprint).toMatch(/^sha256:/);
+    expect(result.modulusBits).toBe(2048);
+  });
+
+  it("rejects a 1024-bit RSA key as too small", () => {
+    const weak = generateKeyPairSync("rsa", {
+      modulusLength: 1024,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+    expect(() => validateE2ePublicKey(weak.publicKey)).toThrow(/modulus too small/);
+  });
+
+  it("rejects an Ed25519 SPKI key", () => {
+    const ed = generateKeyPairSync("ed25519", {
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+    expect(() => validateE2ePublicKey(ed.publicKey)).toThrow(/RSA/);
   });
 });

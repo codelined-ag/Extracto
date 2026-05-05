@@ -7,6 +7,7 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn(),
       update: vi.fn().mockResolvedValue({}),
       create: vi.fn().mockResolvedValue({}),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
   },
 }));
@@ -23,6 +24,7 @@ import { db } from "@/lib/db";
 import {
   WEBHOOK_MAX_ATTEMPTS,
   WEBHOOK_RETRY_BACKOFF_SECONDS,
+  pruneOldWebhookDeliveries,
   sweepDueWebhookRetries,
 } from "@/lib/background/webhooks";
 
@@ -152,5 +154,22 @@ describe("sweepDueWebhookRetries", () => {
     const result = await sweepDueWebhookRetries();
     expect(result.retried).toBe(0);
     expect(mockedFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("pruneOldWebhookDeliveries", () => {
+  it("deletes only delivered or exhausted rows older than the retention cutoff", async () => {
+    const mDeleteMany = db.webhookDelivery.deleteMany as ReturnType<typeof vi.fn>;
+    mDeleteMany.mockReset().mockResolvedValueOnce({ count: 7 });
+
+    const fixedNow = new Date("2026-05-06T00:00:00Z");
+    const result = await pruneOldWebhookDeliveries(fixedNow);
+
+    expect(result.deleted).toBe(7);
+    expect(mDeleteMany).toHaveBeenCalledTimes(1);
+    const where = mDeleteMany.mock.calls[0][0].where;
+    expect(where.status).toEqual({ in: ["delivered", "exhausted"] });
+    const expectedCutoff = new Date(fixedNow.getTime() - 30 * 24 * 60 * 60 * 1000);
+    expect((where.attemptedAt.lt as Date).toISOString()).toBe(expectedCutoff.toISOString());
   });
 });

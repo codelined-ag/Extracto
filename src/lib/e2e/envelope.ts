@@ -57,6 +57,40 @@ export function computeFingerprint(publicKeyPem: string): string {
   return `sha256:${hash.subarray(0, 16).toString("base64url")}`;
 }
 
+export const MIN_RSA_MODULUS_BITS = 2048;
+
+function rsaModulusBits(key: ReturnType<typeof createPublicKey>): number {
+  const fromDetails = (key.asymmetricKeyDetails?.modulusLength ?? 0) as number;
+  if (fromDetails > 0) return fromDetails;
+  const jwk = key.export({ format: "jwk" }) as { n?: string };
+  if (!jwk.n) return 0;
+  const modulus = Buffer.from(jwk.n, "base64url");
+  let leadingZeros = 0;
+  for (const byte of modulus) {
+    if (byte !== 0) break;
+    leadingZeros += 1;
+  }
+  return (modulus.byteLength - leadingZeros) * 8;
+}
+
+export function validateE2ePublicKey(publicKeyPem: string): { fingerprint: string; modulusBits: number } {
+  const normalized = publicKeyPem.trim().replace(/\r\n/g, "\n");
+  const key = createPublicKey(normalized);
+  if (key.asymmetricKeyType !== "rsa") {
+    throw new Error(`Only RSA public keys are accepted (got ${key.asymmetricKeyType ?? "unknown"})`);
+  }
+  const modulusBits = rsaModulusBits(key);
+  if (!modulusBits || modulusBits < MIN_RSA_MODULUS_BITS) {
+    throw new Error(`RSA modulus too small (got ${modulusBits} bits, need at least ${MIN_RSA_MODULUS_BITS})`);
+  }
+  const der = key.export({ type: "spki", format: "der" }) as Buffer;
+  const hash = createHash("sha256").update(der).digest();
+  return {
+    fingerprint: `sha256:${hash.subarray(0, 16).toString("base64url")}`,
+    modulusBits,
+  };
+}
+
 export function isAuthTagSize(value: number): boolean {
   return value === TAG_BYTES;
 }

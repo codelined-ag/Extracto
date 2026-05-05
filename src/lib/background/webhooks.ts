@@ -458,7 +458,15 @@ async function attemptWebhookDelivery({ webhook, event, body, timestamp, deliver
 
 const RETRY_SWEEP_MS = 60_000;
 const RETRY_BATCH_SIZE = 50;
+const RETENTION_SWEEP_MS = 6 * 60 * 60 * 1000;
+
+function getDeliveryRetentionDays(): number {
+  const raw = Number(process.env.WEBHOOK_DELIVERY_RETENTION_DAYS ?? "30");
+  if (!Number.isFinite(raw) || raw <= 0) return 30;
+  return Math.min(Math.floor(raw), 3650);
+}
 let retrySweepStarted = false;
+let retentionSweepStarted = false;
 let sweepInFlight = false;
 
 export async function sweepDueWebhookRetries(now: Date = new Date()): Promise<{ retried: number }> {
@@ -517,4 +525,24 @@ export function startWebhookRetrySweep(): void {
   setInterval(() => {
     void sweepDueWebhookRetries().catch((err) => console.error("[webhook-retry] sweep failed", err));
   }, RETRY_SWEEP_MS).unref?.();
+}
+
+export async function pruneOldWebhookDeliveries(now: Date = new Date()): Promise<{ deleted: number }> {
+  const cutoff = new Date(now.getTime() - getDeliveryRetentionDays() * 24 * 60 * 60 * 1000);
+  const result = await db.webhookDelivery.deleteMany({
+    where: {
+      attemptedAt: { lt: cutoff },
+      status: { in: ["delivered", "exhausted"] },
+    },
+  });
+  return { deleted: result.count };
+}
+
+export function startWebhookRetentionSweep(): void {
+  if (retentionSweepStarted) return;
+  retentionSweepStarted = true;
+  void pruneOldWebhookDeliveries().catch((err) => console.error("[webhook-retention] initial sweep failed", err));
+  setInterval(() => {
+    void pruneOldWebhookDeliveries().catch((err) => console.error("[webhook-retention] sweep failed", err));
+  }, RETENTION_SWEEP_MS).unref?.();
 }

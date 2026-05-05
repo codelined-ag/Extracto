@@ -13,6 +13,7 @@ export async function register() {
   const { startCloudWatcher } = await import("@/lib/integrations/watcher");
   startCloudWatcher();
 
-  const { startWebhookRetrySweep } = await import("@/lib/background/webhooks");
+  const { startWebhookRetrySweep, startWebhookRetentionSweep } = await import("@/lib/background/webhooks");
   startWebhookRetrySweep();
+  startWebhookRetentionSweep();
 }

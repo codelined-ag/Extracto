@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiRouteError } from "@/lib/api-error";
 import { withAuth, withSessionAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-import { computeFingerprint } from "@/lib/e2e/envelope";
+import { validateE2ePublicKey } from "@/lib/e2e/envelope";
 
 export const GET = withAuth("ocr:read", async (_request: NextRequest, { auth }) => {
   const row = await db.authUser.findUnique({
@@ -32,9 +32,13 @@ export const PUT = withSessionAuth("mutation", "E2E key", async (request: NextRe
   }
   let fingerprint: string;
   try {
-    fingerprint = computeFingerprint(pem);
-  } catch {
-    throw new ApiRouteError("publicKeyPem could not be parsed as RSA SPKI", 400);
+    fingerprint = validateE2ePublicKey(pem).fingerprint;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    const safe = /^(Only RSA|RSA modulus too small)/.test(message)
+      ? message
+      : "publicKeyPem could not be parsed as a valid RSA SPKI public key";
+    throw new ApiRouteError(safe, 400);
   }
   await db.authUser.update({
     where: { id: auth.userId },
