@@ -54,9 +54,10 @@ export function UploadArea({
     }
   };
 
-  const acceptCapturedFile = (file: File) => {
+  const acceptCapturedFiles = (files: File[]) => {
+    if (files.length === 0) return;
     const dt = new DataTransfer();
-    dt.items.add(file);
+    files.forEach((file) => dt.items.add(file));
     onPickFiles(dt.files);
   };
 
@@ -146,7 +147,7 @@ export function UploadArea({
       <CameraCaptureDialog
         open={cameraDialogOpen}
         onOpenChange={setCameraDialogOpen}
-        onCapture={acceptCapturedFile}
+        onCapture={acceptCapturedFiles}
         t={t}
       />
     </>

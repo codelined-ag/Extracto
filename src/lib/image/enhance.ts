@@ -10,6 +10,14 @@ const DEFAULTS: Required<EnhanceOptions> = {
   whiteCutoff: 240,
 };
 
+export type CaptureMode = "document" | "receipt" | "whiteboard";
+
+export const CAPTURE_MODE_PRESETS: Record<CaptureMode, Required<EnhanceOptions>> = {
+  document: { blackPercentile: 0.05, whitePercentile: 0.95, whiteCutoff: 240 },
+  receipt: { blackPercentile: 0.02, whitePercentile: 0.92, whiteCutoff: 230 },
+  whiteboard: { blackPercentile: 0.05, whitePercentile: 0.9, whiteCutoff: 215 },
+};
+
 export interface PercentilePoints {
   blackPoint: number;
   whitePoint: number;

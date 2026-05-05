@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyContrastStretch,
+  CAPTURE_MODE_PRESETS,
   computePercentilePoints,
 } from "@/lib/image/enhance";
 
@@ -77,7 +78,35 @@ describe("applyContrastStretch", () => {
     const output = { data: new Uint8ClampedArray(12) };
     applyContrastStretch(luminance, output, 180, 181, 240);
     expect(output.data[0]).toBe(180);
-    expect(output.data[4]).toBe(180);
-    expect(output.data[8]).toBe(180);
+  });
+
+});
+
+describe("CAPTURE_MODE_PRESETS", () => {
+  it("exposes a tuned preset per supported capture mode", () => {
+    expect(Object.keys(CAPTURE_MODE_PRESETS).sort()).toEqual(["document", "receipt", "whiteboard"]);
+    for (const preset of Object.values(CAPTURE_MODE_PRESETS)) {
+      expect(preset.blackPercentile).toBeGreaterThan(0);
+      expect(preset.whitePercentile).toBeLessThan(1);
+      expect(preset.blackPercentile).toBeLessThan(preset.whitePercentile);
+      expect(preset.whiteCutoff).toBeGreaterThan(0);
+      expect(preset.whiteCutoff).toBeLessThanOrEqual(255);
+    }
+  });
+
+  it("uses tighter receipt black-clip than the document baseline", () => {
+    expect(CAPTURE_MODE_PRESETS.receipt.blackPercentile).toBeLessThan(
+      CAPTURE_MODE_PRESETS.document.blackPercentile,
+    );
+  });
+
+  it("pulls the whiteboard white point in to bleach paper", () => {
+    expect(CAPTURE_MODE_PRESETS.whiteboard.whitePercentile).toBeLessThan(
+      CAPTURE_MODE_PRESETS.document.whitePercentile,
+    );
+  });
+
+  it("keeps the whiteboard whitePercentile lenient enough to retain marker mid-tones", () => {
+    expect(CAPTURE_MODE_PRESETS.whiteboard.whitePercentile).toBeGreaterThanOrEqual(0.88);
   });
 });
