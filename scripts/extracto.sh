@@ -914,6 +914,10 @@ cmd_jobs() {
         || die "export failed (job=${ex_job_id} format=${ex_format})"
       ok "wrote ${ex_out}"
       ;;
+    form-fields)
+      [ -n "${1:-}" ] || die "usage: extracto jobs form-fields <job-id>"
+      api_get "/api/v1/jobs/${1}/form-fields"
+      ;;
     edit-page)
       [ -n "${1:-}" ] && [ -n "${2:-}" ] || die "usage: extracto jobs edit-page <job-id> <page-number> (--text TEXT | --from-file PATH)"
       local ep_job_id="$1"
@@ -972,7 +976,7 @@ cmd_jobs() {
       api_put_json "/api/v1/jobs/${job_id}/tags" "$(printf '{"tagIds":%s}' "$ids_json")"
       ;;
     *)
-      die "usage: extracto jobs <list|get|export|delete|cancel|wait|set-tags|bulk-tag|edit-page|page-history> [args...]"
+      die "usage: extracto jobs <list|get|export|form-fields|delete|cancel|wait|set-tags|bulk-tag|edit-page|page-history> [args...]"
       ;;
   esac
 }

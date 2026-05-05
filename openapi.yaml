@@ -572,6 +572,48 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /api/v1/jobs/{id}/form-fields:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Extract structured form fields from a COMPLETED form-shaped job
+      operationId: getJobFormFields
+      tags: [OCR]
+      responses:
+        "200":
+          description: Extracted form fields
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId: { type: string }
+                  documentType: { type: string, nullable: true }
+                  source:
+                    type: string
+                    enum: [result.structured.fields.form, page-fields, absent]
+                  fields:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        field: { type: string }
+                        value: {}
+                        page: { type: integer, nullable: true }
+                  byField:
+                    type: object
+                    additionalProperties: {}
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Job not COMPLETED
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /api/v1/pii/redact:
     post:
       summary: Run server-side PII redaction over arbitrary text

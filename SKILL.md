@@ -130,6 +130,14 @@ extracto jobs wait <job-id>
 
 `wait` polls every 2 seconds and prints the final state when the status leaves `QUEUED`/`RUNNING`.
 
+### Get form fields from a form-shaped job
+
+```bash
+extracto jobs form-fields <job-id>
+```
+
+`extracto jobs form-fields` calls `GET /api/v1/jobs/{id}/form-fields`. Reads the job's structured result and returns the `form` block flattened into `{ field, value, page? }` entries plus a flat `byField` map. Works best when the job ran with `documentPreset: "form"` so the OCR prompt asks the model to populate `fields.form`. Returns `source: "absent"` when no form data was captured.
+
 ### Edit a page (with version history)
 
 ```bash

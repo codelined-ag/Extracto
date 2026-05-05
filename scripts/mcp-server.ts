@@ -187,6 +187,14 @@ server.tool(
 );
 
 server.tool(
+  "job_form_fields",
+  "Extract structured form fields from a COMPLETED OCR job whose result includes a form-shaped block (typically when documentPreset='form' was used). Returns each field as { field, value, page? } plus a flat byField map.",
+  { jobId: z.string() },
+  async ({ jobId }) =>
+    asTextResult(await call(`/api/v1/jobs/${encodeURIComponent(jobId)}/form-fields`)),
+);
+
+server.tool(
   "pii_redact",
   "Run server-side PII redaction over a chunk of text. Replaces emails, phones (>=7 digits), Luhn-valid credit cards, IBAN-shaped strings, IPv4 addresses, URLs, dates of birth, and SSNs with [REDACTED:KIND:N] placeholders. Returns the redacted text plus the audit (kind + char offsets only, no original values).",
   { text: z.string().min(1) },
