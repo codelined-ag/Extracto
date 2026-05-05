@@ -13,6 +13,14 @@ const UI_LANGUAGE_STORAGE_KEY = "extracto:ui-language";
 type State = "idle" | "loading" | "success" | "error";
 
 export default function ConfirmEmailPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <ConfirmEmailInner />
+    </React.Suspense>
+  );
+}
+
+function ConfirmEmailInner() {
   const params = useSearchParams();
   const token = params.get("token") ?? "";
   const [state, setState] = React.useState<State>("idle");

@@ -12,6 +12,14 @@ import type { UiLanguage } from "@/app/page-components/types";
 const UI_LANGUAGE_STORAGE_KEY = "extracto:ui-language";
 
 export default function ResetPasswordPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <ResetPasswordInner />
+    </React.Suspense>
+  );
+}
+
+function ResetPasswordInner() {
   const params = useSearchParams();
   const token = params.get("token") ?? "";
   const [password, setPassword] = React.useState("");
