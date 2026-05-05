@@ -58,11 +58,22 @@ export async function runPostProcessingStage(
     await warmupOllamaModel(getOllamaCandidatesForOcr(deps.settings.apiEndpoint), deps.postProcessingModel);
   }
 
+  const startedAtMs = Date.now();
+  const startedAtIso = new Date(startedAtMs).toISOString();
   state.progressEvents = appendProgressEvent(
     state.progressEvents,
     "post_processing",
     `Running post-processing with ${deps.postProcessingModel}`,
   );
+  state.postProcessingMeta = {
+    enabled: true,
+    outputFormat: deps.postProcessingPayload.outputFormat,
+    instruction: deps.postProcessingPayload.instruction,
+    model: deps.postProcessingModel,
+    provider: postProcessingProvider,
+    startedAt: startedAtIso,
+    elapsedMs: 0,
+  };
   state.latestMetadata = deps.snapshot({
     stage: "post_processing",
     message: `Applying post-processing with ${deps.postProcessingModel}`,
@@ -85,6 +96,42 @@ export async function runPostProcessingStage(
   let finalMarkdown = deps.extractedMarkdown;
   let postProcessedText: string | undefined;
   let postProcessedJson: unknown;
+
+  let heartbeatCancelled = false;
+  let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+  const tickHeartbeat = async () => {
+    if (heartbeatCancelled) return;
+    const elapsed = Date.now() - startedAtMs;
+    const elapsedSec = Math.floor(elapsed / 1000);
+    const softPct = Math.min(99, POST_PROCESSING_KICKOFF_PCT + Math.floor(elapsed / 1500));
+    state.postProcessingMeta = {
+      ...(state.postProcessingMeta ?? {}),
+      enabled: true,
+      outputFormat: deps.postProcessingPayload.outputFormat,
+      instruction: deps.postProcessingPayload.instruction,
+      model: deps.postProcessingModel,
+      provider: postProcessingProvider,
+      startedAt: startedAtIso,
+      elapsedMs: elapsed,
+    };
+    const snap = deps.snapshot({
+      stage: "post_processing",
+      message: `Post-processing... ${elapsedSec}s elapsed`,
+      progressPct: softPct,
+      etaSeconds: null,
+    });
+    if (heartbeatCancelled) return;
+    state.latestMetadata = snap;
+    try {
+      await db.ocrJob.update({
+        where: { id: deps.jobId },
+        data: { metadata: toJsonValue(snap) },
+      });
+    } catch { /* heartbeat write failures are non-fatal */ }
+    if (heartbeatCancelled) return;
+    heartbeatTimer = setTimeout(() => { void tickHeartbeat(); }, 1500);
+  };
+  heartbeatTimer = setTimeout(() => { void tickHeartbeat(); }, 1500);
 
   const postProcessAbort = new AbortController();
   registerOcrJobAbortController(deps.jobId, postProcessAbort);
@@ -118,6 +165,8 @@ export async function runPostProcessingStage(
       instruction: deps.postProcessingPayload.instruction,
       model: deps.postProcessingModel,
       provider: postProcessingProvider,
+      startedAt: startedAtIso,
+      elapsedMs: Date.now() - startedAtMs,
     };
     return {
       finalMarkdown,
@@ -138,12 +187,16 @@ export async function runPostProcessingStage(
       model: deps.postProcessingModel,
       provider: postProcessingProvider,
       error: errorMessage(error, "Post-processing failed"),
+      startedAt: startedAtIso,
+      elapsedMs: Date.now() - startedAtMs,
     };
     return {
       finalMarkdown,
       postProcessingForExtractedMetadata: state.postProcessingMeta,
     };
   } finally {
+    heartbeatCancelled = true;
+    if (heartbeatTimer) clearTimeout(heartbeatTimer);
     unregisterOcrJobAbortController(deps.jobId, postProcessAbort);
   }
 }

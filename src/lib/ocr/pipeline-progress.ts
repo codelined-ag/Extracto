@@ -47,6 +47,8 @@ export interface OcrProgressMetadata {
     model?: string;
     provider?: ProviderKind;
     error?: string;
+    elapsedMs?: number;
+    startedAt?: string;
   };
 }
 

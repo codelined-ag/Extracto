@@ -6,7 +6,17 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
-## [1.2.1] - 2026-05-05
+## [1.2.2] - 2026-05-05
+
+### Added
+- Advanced Options panel state, post-processing toggle, instructions, model, and output format now persist across refresh.
+- Post-processing progress card with elapsed seconds, model, and output format renders in the workspace while the stage is running. The progress bar advances on a 1.5 s heartbeat instead of sitting at 70%.
+
+### Fixed
+- Heartbeat updates no longer race the success snapshot; cancellation gates write attempts before and after the DB call and a self-rescheduling timer prevents pile-ups under DB latency.
+- Hydration mismatch on the Advanced Options collapsible: SSR renders closed; localStorage rehydrates after first paint.
+
+
 
 ### Added
 - Inline hover tooltips for every setting in the OCR, Knowledge base, and Storage tabs (provider, endpoint, API key, model, parallelism, embedding fields, chunking strategy, vector-store kind, S3 fields).

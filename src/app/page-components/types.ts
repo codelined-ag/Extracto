@@ -71,6 +71,14 @@ export interface ProcessingFile {
   etaSeconds?: number | null;
   stage?: string;
   stageMessage?: string;
+  postProcessing?: {
+    enabled: boolean;
+    model?: string;
+    outputFormat?: string;
+    elapsedMs?: number;
+    startedAt?: string;
+    error?: string;
+  };
   jobId?: string;
   checkpoints?: OcrPageCheckpointView[];
   events?: OcrProgressEventView[];

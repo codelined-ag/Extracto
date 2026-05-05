@@ -556,14 +556,45 @@ export default function ExtractoPage() {
  autoRetryMaxAttempts: 1,
  piiRedaction: false,
  });
- const [postProcessing, setPostProcessing] = React.useState<PostProcessingSettings>({
- enabled: false,
- instruction:"",
- outputFormat:"markdown",
- model:"",
- template: "custom",
- targetLanguage: "",
+ const [postProcessing, setPostProcessing] = React.useState<PostProcessingSettings>(() => {
+ const fallback: PostProcessingSettings = {
+   enabled: false,
+   instruction: "",
+   outputFormat: "markdown",
+   model: "",
+   template: "custom",
+   targetLanguage: "",
+ };
+ if (typeof window === "undefined") return fallback;
+ try {
+   const raw = window.localStorage.getItem("extracto.postProcessing");
+   if (!raw) return fallback;
+   const parsed = JSON.parse(raw) as Partial<PostProcessingSettings>;
+   return { ...fallback, ...parsed };
+ } catch {
+   return fallback;
+ }
  });
+ const [advancedOptionsOpen, setAdvancedOptionsOpen] = React.useState<boolean>(false);
+ React.useEffect(() => {
+   try {
+     if (window.localStorage.getItem("extracto.advancedOpen") === "1") {
+       setAdvancedOptionsOpen(true);
+     }
+   } catch { /* ignore */ }
+ }, []);
+ React.useEffect(() => {
+   if (typeof window === "undefined") return;
+   try {
+     window.localStorage.setItem("extracto.postProcessing", JSON.stringify(postProcessing));
+   } catch { /* ignore quota */ }
+ }, [postProcessing]);
+ React.useEffect(() => {
+   if (typeof window === "undefined") return;
+   try {
+     window.localStorage.setItem("extracto.advancedOpen", advancedOptionsOpen ? "1" : "0");
+   } catch { /* ignore quota */ }
+ }, [advancedOptionsOpen]);
 
  // KB export defaults — loaded from /api/kb/defaults on mount, edited
  // via the Database header button, used when the user clicks "Send to
@@ -2182,6 +2213,21 @@ export default function ExtractoPage() {
  .filter(Boolean) as OcrProgressEventView[]
  : [];
 
+ const ppRaw = value.postProcessing;
+ const postProcessing = ppRaw && typeof ppRaw === "object" && !Array.isArray(ppRaw)
+   ? (() => {
+       const pp = ppRaw as Record<string, unknown>;
+       return {
+         enabled: Boolean(pp.enabled),
+         model: typeof pp.model === "string" ? pp.model : undefined,
+         outputFormat: typeof pp.outputFormat === "string" ? pp.outputFormat : undefined,
+         elapsedMs: typeof pp.elapsedMs === "number" ? pp.elapsedMs : undefined,
+         startedAt: typeof pp.startedAt === "string" ? pp.startedAt : undefined,
+         error: typeof pp.error === "string" ? pp.error : undefined,
+       };
+     })()
+   : undefined;
+
  return {
  stage: typeof value.stage ==="string"? value.stage : undefined,
  message: typeof value.message ==="string"? value.message : undefined,
@@ -2189,6 +2235,7 @@ export default function ExtractoPage() {
  pageCount: typeof value.pageCount ==="number"? value.pageCount : undefined,
  processedPages: typeof value.processedPages ==="number"? value.processedPages : undefined,
  etaSeconds: typeof value.etaSeconds ==="number"? value.etaSeconds : null,
+ postProcessing,
  checkpoints,
  events,
  };
@@ -2242,6 +2289,16 @@ export default function ExtractoPage() {
  : entry.etaSeconds,
  stage: progressMeta?.stage || entry.stage,
  stageMessage: progressMeta?.message || entry.stageMessage,
+ postProcessing: progressMeta?.postProcessing
+   ? {
+       enabled: progressMeta.postProcessing.enabled,
+       model: progressMeta.postProcessing.model,
+       outputFormat: progressMeta.postProcessing.outputFormat,
+       elapsedMs: progressMeta.postProcessing.elapsedMs,
+       startedAt: progressMeta.postProcessing.startedAt,
+       error: progressMeta.postProcessing.error,
+     }
+   : entry.postProcessing,
  checkpoints: progressMeta?.checkpoints ?? entry.checkpoints,
  events: progressMeta?.events ?? entry.events,
  result:
@@ -3470,7 +3527,7 @@ export default function ExtractoPage() {
               }
             />
 
- <Collapsible defaultOpen={false}>
+ <Collapsible open={advancedOptionsOpen} onOpenChange={setAdvancedOptionsOpen}>
  <Card>
  <CollapsibleTrigger asChild>
  <button type="button"className="group w-full flex items-center justify-between gap-2 px-4 py-3 text-left rounded-2xl">
@@ -3722,6 +3779,25 @@ export default function ExtractoPage() {
  {models.find((m) => m.id === selectedModel)?.name || selectedModel}
  </div>
  </div>
+ {selectedFile.stage === "post_processing" && selectedFile.postProcessing?.enabled && !selectedFile.postProcessing.error ? (
+ <div className="surface-soft rounded-xl px-3 py-2.5 flex items-center gap-3" data-testid="post-processing-card">
+ <LoaderCircleIcon size={16} className="inline-flex items-center justify-center text-primary animate-spin"/>
+ <div className="flex-1 min-w-0">
+ <p className="text-xs font-medium">
+ {t("Post-processing in corso","Post-processing in progress","Post-traitement en cours","Post-procesamiento en curso","Nachverarbeitung läuft")}
+ </p>
+ <p className="text-[11px] text-muted-foreground truncate">
+ {selectedFile.postProcessing?.model || t("modello in elaborazione","model running","modèle en cours","modelo en curso","Modell läuft")}
+ {selectedFile.postProcessing?.outputFormat ? ` · ${selectedFile.postProcessing.outputFormat}` : ""}
+ </p>
+ </div>
+ {typeof selectedFile.postProcessing?.elapsedMs === "number" ? (
+ <Badge variant="outline" className="tabular text-[10px]">
+ {Math.floor(selectedFile.postProcessing.elapsedMs / 1000)}s
+ </Badge>
+ ) : null}
+ </div>
+ ) : null}
  </div>
  <div className="grid md:grid-cols-[1fr_280px] flex-1 min-h-0 overflow-hidden">
  <div className="h-full min-h-0 overflow-y-auto scrollbar-hide">
