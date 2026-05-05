@@ -6,7 +6,7 @@ export type Translator = (
   de?: string,
 ) => string;
 
-export type SettingsTab = "ocr" | "kb" | "storage" | "templates";
+export type SettingsTab = "ocr" | "kb" | "storage" | "templates" | "integrations";
 
 export type ResultViewMode = "preview" | "split" | "result";
 

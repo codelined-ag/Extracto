@@ -44,6 +44,7 @@ model AuthUser {
   ocrSettings        OcrSetting[]
   jobTemplates       OcrJobTemplate[]
   watchedS3Sources   WatchedS3Source[]
+  watchedCloudFolders WatchedCloudFolder[]
   pushSubscriptions  PushSubscription[]
   tags               Tag[]
   savedSearches      SavedSearch[]
@@ -65,6 +66,44 @@ model IntegrationConnection {
 
   @@unique([userId, provider])
   @@index([userId])
+}
+
+model WatchedCloudFolder {
+  id                  String                @id @default(cuid())
+  userId              String
+  user                AuthUser              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider            String
+  name                String
+  folderPath          String                @default("")
+  intervalSeconds     Int                   @default(300)
+  active              Boolean               @default(true)
+  model               String
+  templateId          String?
+  autoKbExport        Boolean               @default(false)
+  autoS3Export        Boolean               @default(false)
+  lastPolledAt        DateTime?
+  lastError           String?
+  consecutiveFailures Int                   @default(0)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  objects             WatchedCloudObject[]
+
+  @@unique([userId, provider, name])
+  @@index([userId, active])
+}
+
+model WatchedCloudObject {
+  id           String              @id @default(cuid())
+  sourceId     String
+  source       WatchedCloudFolder  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  remoteId     String
+  name         String
+  rev          String?
+  jobId        String?
+  ingestedAt   DateTime            @default(now())
+
+  @@unique([sourceId, remoteId])
+  @@index([sourceId, ingestedAt(sort: Desc)])
 }
 
 model ApiKey {

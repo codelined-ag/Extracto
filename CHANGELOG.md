@@ -6,6 +6,17 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-05-05
+
+### Added
+- Settings → Integrations tab to connect, disconnect, and manage Dropbox / Google Drive / OneDrive accounts.
+- Import from cloud panel that browses any connected provider and queues the picked file for OCR.
+- Send to Dropbox / Google Drive / OneDrive items in the per-job Actions menu, with the same Configure-toast pattern as KB and S3.
+- Watched cloud folders: Extracto sweeps a chosen folder per provider on a configurable interval and auto-submits new files for OCR. Configure from the Settings UI, REST, MCP, or CLI.
+- New REST surface: /api/integrations/{provider}/{list,push,import} and /api/integrations/watchers CRUD on session cookies, mirrored on /api/v1/integrations/watchers for bearer keys.
+- New MCP tools: integrations_status, watchers_list, watchers_create, watchers_update, watchers_delete.
+- New CLI: extracto integrations list, extracto integrations watchers {list,add,delete,pause,resume}.
+
 ## [1.0.1] - 2026-05-05
 
 ### Added

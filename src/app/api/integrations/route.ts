@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { withAuth } from "@/lib/auth/request";
+import { withSessionAuth } from "@/lib/auth/request";
 import { listIntegrationConnections } from "@/lib/integrations/store";
 import {
   readDropboxAppCredentials,
@@ -8,7 +8,7 @@ import {
   readOneDriveAppCredentials,
 } from "@/lib/integrations/types";
 
-export const GET = withAuth("integrations:read", async (_request: NextRequest, { auth }) => {
+export const GET = withSessionAuth("read", "Integrations", async (_request: NextRequest, { auth }) => {
   const connections = await listIntegrationConnections(auth.userId);
   return NextResponse.json({
     available: {

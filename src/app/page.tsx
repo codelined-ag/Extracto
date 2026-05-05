@@ -9,6 +9,7 @@ import {
  ImageOff,
  Cloud,
  Layers,
+ Plug,
 } from"lucide-react";
 
 import { ArchiveIcon } from"@/components/ui/archive";
@@ -95,6 +96,8 @@ import { SetupWizard, isSetupCompleted, markSetupCompleted } from "@/app/page-co
 import { S3SettingsSection } from "@/app/page-components/s3-settings-section";
 import { WatchersSection } from "@/app/page-components/watchers-section";
 import { TemplatesSection } from "@/app/page-components/templates-section";
+import { IntegrationsPanel } from "@/app/page-components/integrations-panel";
+import { CloudImportDialog } from "@/app/page-components/cloud-import-dialog";
 import { clearQueue, deletePagePreviews, loadAllPagePreviews, loadQueue, persistPagePreviews, persistQueue, reconcileJobFromServer } from "@/app/page-components/queue-persistence";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
 import { useHistory } from "@/app/page-components/use-history";
@@ -1598,6 +1601,105 @@ export default function ExtractoPage() {
  }
  };
 
+ const [cloudConnected, setCloudConnected] = React.useState<{ dropbox: boolean; google_drive: boolean; onedrive: boolean }>({ dropbox: false, google_drive: false, onedrive: false });
+ const [cloudImportOpen, setCloudImportOpen] = React.useState(false);
+
+ React.useEffect(() => {
+   let cancelled = false;
+   void (async () => {
+     try {
+       const res = await fetch("/api/integrations");
+       if (!res.ok) return;
+       const json = (await res.json()) as { connections?: Array<{ provider: string }> };
+       if (cancelled) return;
+       const set = new Set((json.connections ?? []).map((c) => c.provider));
+       setCloudConnected({
+         dropbox: set.has("dropbox"),
+         google_drive: set.has("google_drive"),
+         onedrive: set.has("onedrive"),
+       });
+     } catch { /* ignore */ }
+   })();
+   return () => { cancelled = true; };
+ }, [apiSettingsOpen]);
+
+ const exportFileToCloud = async (file: ProcessingFile, provider: "dropbox" | "google_drive" | "onedrive") => {
+ if (!file.jobId) {
+ toast({
+ title: t("Nessun jobId","Missing jobId","jobId manquant","Falta jobId","jobId fehlt"),
+ description: t(
+"Solo i lavori OCR completati possono essere inviati.",
+"Only completed OCR jobs can be sent.",
+"Seuls les jobs OCR terminés peuvent être envoyés.",
+"Solo se pueden enviar trabajos OCR completados.",
+"Nur abgeschlossene OCR-Jobs können gesendet werden.",
+ ),
+ variant:"destructive",
+ });
+ return;
+ }
+ if (!cloudConnected[provider]) {
+ toast({
+ title: t(
+ `${provider === "dropbox" ? "Dropbox" : provider === "google_drive" ? "Google Drive" : "OneDrive"} non connesso`,
+ `${provider === "dropbox" ? "Dropbox" : provider === "google_drive" ? "Google Drive" : "OneDrive"} not connected`,
+ ),
+ description: t("Connetti l'account in Impostazioni → Integrazioni.","Connect the account from Settings → Integrations.","Connectez le compte dans Paramètres → Intégrations.","Conecta la cuenta en Ajustes → Integraciones.","Verbinde das Konto in Einstellungen → Integrationen."),
+ variant:"destructive",
+ action: (
+ <ToastAction
+ altText={t("Configura","Configure","Configurer","Configurar","Konfigurieren")}
+ onClick={() => { openSettingsTab("integrations"); }}
+ >
+ {t("Configura","Configure","Configurer","Configurar","Konfigurieren")}
+ </ToastAction>
+ ),
+ });
+ return;
+ }
+ const folderPlaceholder = provider === "dropbox" ? "/Extracto" : "root";
+ const folder = window.prompt(
+ t(
+ provider === "dropbox" ? "Cartella Dropbox (es. /Extracto)" : provider === "google_drive" ? "ID cartella Google Drive (root o un id)" : "ID cartella OneDrive (root o un id)",
+ provider === "dropbox" ? "Dropbox folder (e.g. /Extracto)" : provider === "google_drive" ? "Google Drive folder ID (root or an id)" : "OneDrive folder ID (root or an id)",
+ ),
+ folderPlaceholder,
+ );
+ if (folder === null) return;
+ const format = window.prompt(
+ t("Formato (md, json, txt, html, docx, rtf, csv, xlsx, obsidian, zip)","Format (md, json, txt, html, docx, rtf, csv, xlsx, obsidian, zip)"),
+ "md",
+ );
+ if (!format) return;
+ try {
+ const resp = await fetch(`/api/integrations/${provider}/push`, {
+ method:"POST",
+ headers:{"Content-Type":"application/json"},
+ body: JSON.stringify({ jobId: file.jobId, folder: folder.trim(), format: format.trim() }),
+ });
+ const payload = (await resp.json().catch(() => ({}))) as { error?: string; path?: string; size?: number };
+ if (!resp.ok) throw new Error(payload.error || `HTTP ${resp.status}`);
+ toast({
+ title: t(`Inviato a ${provider === "dropbox" ? "Dropbox" : provider === "google_drive" ? "Google Drive" : "OneDrive"}`,`Sent to ${provider === "dropbox" ? "Dropbox" : provider === "google_drive" ? "Google Drive" : "OneDrive"}`),
+ description: payload.path,
+ });
+ } catch (err) {
+ toast({
+ title: t("Invio fallito","Push failed","Échec de l'envoi","Error al enviar","Senden fehlgeschlagen"),
+ description: err instanceof Error ? err.message : String(err),
+ variant:"destructive",
+ action: (
+ <ToastAction
+ altText={t("Configura","Configure","Configurer","Configurar","Konfigurieren")}
+ onClick={() => { openSettingsTab("integrations"); }}
+ >
+ {t("Configura","Configure","Configurer","Configurar","Konfigurieren")}
+ </ToastAction>
+ ),
+ });
+ }
+ };
+
  const pullEmbeddingModel = async (model: string, file: ProcessingFile) => {
  toast({
  title: t(`Scaricamento ${model}...`,`Pulling ${model}...`,`Téléchargement de ${model}...`,`Descargando ${model}...`,`${model} wird geladen...`),
@@ -2577,6 +2679,7 @@ export default function ExtractoPage() {
  <TabsTrigger value="ocr"className="gap-1.5 px-2.5"><SparklesIcon size={14} className="inline-flex items-center justify-center"/>OCR</TabsTrigger>
  <TabsTrigger value="kb"className="gap-1.5 px-2.5"><DatabaseBackupIcon size={14} className="inline-flex items-center justify-center"/>{t("Knowledge base","Knowledge base","Base de connaissances","Base de conocimiento","Wissensdatenbank")}</TabsTrigger>
  <TabsTrigger value="storage"className="gap-1.5 px-2.5"><Cloud className="size-3.5"/>{t("Archiviazione","Storage","Stockage","Almacenamiento","Speicher")}</TabsTrigger>
+ <TabsTrigger value="integrations"className="gap-1.5 px-2.5"><Plug className="size-3.5"/>{t("Integrazioni","Integrations","Intégrations","Integraciones","Integrationen")}</TabsTrigger>
  <TabsTrigger value="templates"className="gap-1.5 px-2.5"><Layers className="size-3.5"/>{t("Template","Templates","Modèles","Plantillas","Vorlagen")}</TabsTrigger>
  </TabsList>
  </div>
@@ -3138,6 +3241,10 @@ export default function ExtractoPage() {
  </SettingsAccordion>
  </TabsContent>
 
+ <TabsContent value="integrations"className="mt-4">
+ <IntegrationsPanel t={t} />
+ </TabsContent>
+
  <TabsContent value="templates"className="space-y-5 mt-4">
  <TemplatesSection t={t} />
  </TabsContent>
@@ -3152,6 +3259,14 @@ export default function ExtractoPage() {
  </DialogFooter>
  </DialogContent>
  </Dialog>
+
+      <CloudImportDialog
+        open={cloudImportOpen}
+        onOpenChange={setCloudImportOpen}
+        defaultModel={selectedModel || ""}
+        connected={cloudConnected}
+        t={t}
+      />
 
       <HistoryDialog
         open={historyOpen}
@@ -3223,6 +3338,8 @@ export default function ExtractoPage() {
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onPickFiles={handleFiles}
+              onCloudImport={() => setCloudImportOpen(true)}
+              cloudConnected={cloudConnected.dropbox || cloudConnected.google_drive || cloudConnected.onedrive}
               t={t}
             />
 
@@ -3483,6 +3600,8 @@ export default function ExtractoPage() {
                     onDownload={downloadResult}
                     onExportToKb={exportFileToKb}
                     onSendToS3={exportFileToS3}
+                    onSendToCloud={exportFileToCloud}
+                    cloudConnected={cloudConnected}
                     t={t}
                   />
 

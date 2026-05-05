@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion } from "motion/react";
-import { Camera, FileUp, Upload } from "lucide-react";
+import { Camera, Cloud, FileUp, Upload } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,8 @@ export interface UploadAreaProps {
   onDragLeave: (e: React.DragEvent<HTMLDivElement>) => void;
   onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
   onPickFiles: (files: FileList) => void;
+  onCloudImport?: () => void;
+  cloudConnected?: boolean;
   t: Translator;
 }
 
@@ -26,6 +28,8 @@ export function UploadArea({
   onDragLeave,
   onDrop,
   onPickFiles,
+  onCloudImport,
+  cloudConnected,
   t,
 }: UploadAreaProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -133,6 +137,19 @@ export function UploadArea({
             {t("Scatta una foto", "Take a photo", "Prendre une photo", "Hacer una foto", "Foto aufnehmen")}
           </Button>
         </>
+      ) : null}
+
+      {onCloudImport && cloudConnected ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={(e) => { e.stopPropagation(); onCloudImport(); }}
+          className="self-center"
+          data-tour="import-cloud"
+        >
+          <Cloud className="size-3.5 mr-1.5" />
+          {t("Importa dal cloud", "Import from cloud", "Importer depuis le cloud", "Importar desde la nube", "Aus der Cloud importieren")}
+        </Button>
       ) : null}
 
       <input

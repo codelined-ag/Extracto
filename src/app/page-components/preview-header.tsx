@@ -41,6 +41,8 @@ export interface PreviewHeaderProps {
   onDownload: (format: ResultFormat) => void;
   onExportToKb: (file: ProcessingFile) => void;
   onSendToS3: (file: ProcessingFile) => void;
+  onSendToCloud: (file: ProcessingFile, provider: "dropbox" | "google_drive" | "onedrive") => void;
+  cloudConnected: { dropbox: boolean; google_drive: boolean; onedrive: boolean };
   t: Translator;
 }
 
@@ -53,6 +55,8 @@ export function PreviewHeader({
   onDownload,
   onExportToKb,
   onSendToS3,
+  onSendToCloud,
+  cloudConnected,
   t,
 }: PreviewHeaderProps) {
   const viewModes: Array<{
@@ -296,6 +300,31 @@ export function PreviewHeader({
                               "Enviar a S3",
                               "An S3 senden",
                             )}
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>
+                      {t("Cloud", "Cloud", "Cloud", "Nube", "Cloud")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => onSendToCloud(selectedFile, "dropbox")}>
+                      <Cloud className="size-4" />
+                      <span>
+                        {t("Invia a Dropbox", "Send to Dropbox", "Envoyer vers Dropbox", "Enviar a Dropbox", "An Dropbox senden")}
+                        {cloudConnected.dropbox ? "" : ` · ${t("non connesso", "not connected", "non connecté", "no conectado", "nicht verbunden")}`}
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onSendToCloud(selectedFile, "google_drive")}>
+                      <Cloud className="size-4" />
+                      <span>
+                        {t("Invia a Google Drive", "Send to Google Drive", "Envoyer vers Google Drive", "Enviar a Google Drive", "An Google Drive senden")}
+                        {cloudConnected.google_drive ? "" : ` · ${t("non connesso", "not connected", "non connecté", "no conectado", "nicht verbunden")}`}
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onSendToCloud(selectedFile, "onedrive")}>
+                      <Cloud className="size-4" />
+                      <span>
+                        {t("Invia a OneDrive", "Send to OneDrive", "Envoyer vers OneDrive", "Enviar a OneDrive", "An OneDrive senden")}
+                        {cloudConnected.onedrive ? "" : ` · ${t("non connesso", "not connected", "non connecté", "no conectado", "nicht verbunden")}`}
                       </span>
                     </DropdownMenuItem>
                   </>

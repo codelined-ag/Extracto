@@ -31,6 +31,26 @@ components:
       description: Separate token, set via `METRICS_TOKEN` env.
 
   schemas:
+    CloudWatcher:
+      type: object
+      required: [id, userId, provider, name, intervalSeconds, active, model, createdAt]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        provider: { type: string, enum: [dropbox, google_drive, onedrive] }
+        name: { type: string }
+        folderPath: { type: string }
+        intervalSeconds: { type: integer }
+        active: { type: boolean }
+        model: { type: string }
+        templateId: { type: string, nullable: true }
+        autoKbExport: { type: boolean }
+        autoS3Export: { type: boolean }
+        lastPolledAt: { type: string, format: date-time, nullable: true }
+        lastError: { type: string, nullable: true }
+        consecutiveFailures: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     OcrJob:
       type: object
       required: [id, status, fileName, model, createdAt]
@@ -1944,3 +1964,109 @@ paths:
           description: Token mismatch
         "503":
           description: METRICS_TOKEN not configured
+
+  /api/v1/integrations/watchers:
+    get:
+      summary: List the user's cloud watched folders
+      operationId: listCloudWatchers
+      tags: [Integrations]
+      responses:
+        "200":
+          description: List of watched folders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  watchers:
+                    type: array
+                    items: { $ref: "#/components/schemas/CloudWatcher" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      summary: Create a cloud watched folder
+      operationId: createCloudWatcher
+      tags: [Integrations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, name, model]
+              properties:
+                provider: { type: string, enum: [dropbox, google_drive, onedrive] }
+                name: { type: string, maxLength: 80 }
+                folderPath: { type: string, default: "" }
+                model: { type: string }
+                intervalSeconds:
+                  type: integer
+                  minimum: 60
+                  maximum: 86400
+                  default: 300
+                active: { type: boolean, default: true }
+                templateId: { type: string, nullable: true }
+                autoKbExport: { type: boolean, default: false }
+                autoS3Export: { type: boolean, default: false }
+      responses:
+        "201":
+          description: Watcher created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  watcher: { $ref: "#/components/schemas/CloudWatcher" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: A watcher with that name already exists for this provider
+
+  /api/v1/integrations/watchers/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    patch:
+      summary: Update a cloud watched folder
+      operationId: updateCloudWatcher
+      tags: [Integrations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 80 }
+                folderPath: { type: string }
+                model: { type: string }
+                intervalSeconds: { type: integer, minimum: 60, maximum: 86400 }
+                active: { type: boolean }
+                templateId: { type: string, nullable: true }
+                autoKbExport: { type: boolean }
+                autoS3Export: { type: boolean }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  watcher: { $ref: "#/components/schemas/CloudWatcher" }
+        "404":
+          description: Watcher not found
+    delete:
+      summary: Delete a cloud watched folder
+      operationId: deleteCloudWatcher
+      tags: [Integrations]
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  removed: { type: boolean }
+        "404":
+          description: Watcher not found

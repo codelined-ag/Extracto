@@ -747,5 +747,72 @@ server.tool(
     ),
 );
 
+server.tool(
+  "integrations_status",
+  "Show which cloud integrations (Dropbox, Google Drive, OneDrive) are available on this server and which the user has connected. Returns availability flags + each connection's account label and connected-at timestamp.",
+  {},
+  async () => asTextResult(await call("/api/v1/integrations")),
+);
+
+server.tool(
+  "watchers_list",
+  "List the user's cloud watched folders (Dropbox / Google Drive / OneDrive). Each entry surfaces provider, name, folderPath, model, intervalSeconds, active, lastPolledAt, lastError.",
+  {},
+  async () => asTextResult(await call("/api/v1/integrations/watchers")),
+);
+
+server.tool(
+  "watchers_create",
+  "Create a cloud watched folder. Extracto will sweep it on the chosen interval and submit any new file (pdf, png, jpg, webp; up to 64 MiB) to the OCR queue using the chosen model. Folder syntax: Dropbox uses /Inbox-style paths, Google Drive and OneDrive use folder ids (or 'root').",
+  {
+    provider: z.enum(["dropbox", "google_drive", "onedrive"]),
+    name: z.string().describe("Display name; unique per provider per user."),
+    folderPath: z.string().default(""),
+    model: z.string(),
+    intervalSeconds: z.number().int().min(60).max(86400).default(300),
+    active: z.boolean().default(true),
+    templateId: z.string().nullable().default(null),
+    autoKbExport: z.boolean().default(false),
+    autoS3Export: z.boolean().default(false),
+  },
+  async (input) =>
+    asTextResult(
+      await call("/api/v1/integrations/watchers", { method: "POST", body: input }),
+    ),
+);
+
+server.tool(
+  "watchers_update",
+  "Update one watched-folder. Pass only the fields to change. Re-activating clears any auto-pause failure counter.",
+  {
+    id: z.string(),
+    name: z.string().optional(),
+    folderPath: z.string().optional(),
+    model: z.string().optional(),
+    intervalSeconds: z.number().int().min(60).max(86400).optional(),
+    active: z.boolean().optional(),
+    templateId: z.string().nullable().optional(),
+    autoKbExport: z.boolean().optional(),
+    autoS3Export: z.boolean().optional(),
+  },
+  async ({ id, ...rest }) =>
+    asTextResult(
+      await call(`/api/v1/integrations/watchers/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: rest,
+      }),
+    ),
+);
+
+server.tool(
+  "watchers_delete",
+  "Delete a cloud watched folder. Already-ingested file fingerprints are removed too; if the same file appears again it will be re-ingested.",
+  { id: z.string() },
+  async ({ id }) =>
+    asTextResult(
+      await call(`/api/v1/integrations/watchers/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    ),
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);

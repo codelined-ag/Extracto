@@ -1640,6 +1640,76 @@ cmd_s3() {
   esac
 }
 
+cmd_integrations() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    list|ls)
+      api_get "/api/v1/integrations"
+      ;;
+    watchers)
+      local op="${1:-}"
+      shift || true
+      case "$op" in
+        list|ls)
+          api_get "/api/v1/integrations/watchers"
+          ;;
+        add|create)
+          local provider="" name="" folder="" model="" interval="300" template="" auto_kb=0 auto_s3=0
+          while [ $# -gt 0 ]; do
+            case "$1" in
+              --provider)      provider="${2:-}"; shift 2 ;;
+              --name)          name="${2:-}"; shift 2 ;;
+              --folder)        folder="${2:-}"; shift 2 ;;
+              --model)         model="${2:-}"; shift 2 ;;
+              --interval)      interval="${2:-}"; shift 2 ;;
+              --template)      template="${2:-}"; shift 2 ;;
+              --auto-kb)       auto_kb=1; shift ;;
+              --auto-s3)       auto_s3=1; shift ;;
+              *) die "unknown watchers add flag: $1" ;;
+            esac
+          done
+          [ -n "$provider" ] || die "usage: extracto integrations watchers add --provider <dropbox|google_drive|onedrive> --name N --folder F --model M [--interval SEC] [--template ID] [--auto-kb] [--auto-s3]"
+          [ -n "$name" ] || die "--name is required"
+          [ -n "$model" ] || die "--model is required"
+          local template_field=""
+          if [ -n "$template" ]; then
+            template_field=",\"templateId\":\"${template}\""
+          fi
+          local body
+          body=$(printf '{"provider":"%s","name":"%s","folderPath":"%s","model":"%s","intervalSeconds":%s,"active":true,"autoKbExport":%s,"autoS3Export":%s%s}' \
+            "$provider" "$name" "$folder" "$model" "$interval" \
+            "$( [ $auto_kb -eq 1 ] && echo true || echo false )" \
+            "$( [ $auto_s3 -eq 1 ] && echo true || echo false )" \
+            "$template_field")
+          api_post_json "/api/v1/integrations/watchers" "$body"
+          ;;
+        delete|rm)
+          local id="${1:-}"
+          [ -n "$id" ] || die "usage: extracto integrations watchers delete <id>"
+          api_delete "/api/v1/integrations/watchers/${id}"
+          ;;
+        pause)
+          local id="${1:-}"
+          [ -n "$id" ] || die "usage: extracto integrations watchers pause <id>"
+          api_patch_json "/api/v1/integrations/watchers/${id}" '{"active":false}'
+          ;;
+        resume)
+          local id="${1:-}"
+          [ -n "$id" ] || die "usage: extracto integrations watchers resume <id>"
+          api_patch_json "/api/v1/integrations/watchers/${id}" '{"active":true}'
+          ;;
+        *)
+          die "usage: extracto integrations watchers {list|add|delete|pause|resume}"
+          ;;
+      esac
+      ;;
+    *)
+      die "usage: extracto integrations {list|watchers ...}"
+      ;;
+  esac
+}
+
 cmd_uninstall() {
   ensure_project
   run_step "Removing Extracto containers and volumes..." compose down -v --remove-orphans
@@ -1752,9 +1822,10 @@ main() {
     settings)  shift; cmd_settings "$@" ;;
     kb)        shift; cmd_kb "$@" ;;
     s3)        shift; cmd_s3 "$@" ;;
-    dropbox)   shift; cmd_dropbox "$@" ;;
-    gdrive)    shift; cmd_gdrive "$@" ;;
-    onedrive)  shift; cmd_onedrive "$@" ;;
+    dropbox)      shift; cmd_dropbox "$@" ;;
+    gdrive)       shift; cmd_gdrive "$@" ;;
+    onedrive)     shift; cmd_onedrive "$@" ;;
+    integrations) shift; cmd_integrations "$@" ;;
     -h|--help|help|"")
       print_help
       ;;

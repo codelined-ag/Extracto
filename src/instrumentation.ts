@@ -9,4 +9,7 @@ export async function register() {
 
   const { startS3Watcher } = await import("@/lib/s3/watcher");
   startS3Watcher();
+
+  const { startCloudWatcher } = await import("@/lib/integrations/watcher");
+  startCloudWatcher();
 }
