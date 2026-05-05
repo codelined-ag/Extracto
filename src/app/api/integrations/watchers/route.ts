@@ -54,7 +54,18 @@ export const GET = withSessionAuth(
       where: { userId: auth.userId },
       orderBy: { createdAt: "desc" },
     });
-    return NextResponse.json({ watchers });
+    const counts = watchers.length === 0
+      ? new Map<string, number>()
+      : await db.watchedCloudObject
+          .groupBy({
+            by: ["sourceId"],
+            where: { sourceId: { in: watchers.map((w) => w.id) } },
+            _count: { sourceId: true },
+          })
+          .then((rows) => new Map(rows.map((r) => [r.sourceId, r._count.sourceId])));
+    return NextResponse.json({
+      watchers: watchers.map((w) => ({ ...w, ingestedCount: counts.get(w.id) ?? 0 })),
+    });
   },
 );
 

@@ -50,6 +50,7 @@ interface Watcher {
   lastPolledAt: string | null;
   lastError: string | null;
   consecutiveFailures: number;
+  ingestedCount?: number;
 }
 
 export function IntegrationsPanel({ t }: { t: Translator }) {
@@ -314,6 +315,14 @@ function WatcherSection({
                   <div className="text-sm font-medium truncate">{w.name}</div>
                   <div className="text-xs text-muted-foreground truncate">
                     {w.provider} · {w.folderPath || "/"} · {w.intervalSeconds}s · {w.model}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground/80 truncate">
+                    {w.lastPolledAt
+                      ? `${t("ultimo controllo", "last checked", "dernier passage", "último chequeo", "zuletzt geprüft")}: ${new Date(w.lastPolledAt).toLocaleString()}`
+                      : t("non ancora controllato", "not checked yet", "jamais vérifié", "aún sin chequear", "noch nicht geprüft")}
+                    {typeof w.ingestedCount === "number"
+                      ? ` · ${w.ingestedCount} ${t("file", "items", "fichiers", "elementos", "Dateien")}`
+                      : ""}
                   </div>
                   {w.lastError ? (
                     <div className="text-xs text-destructive truncate">{w.lastError}</div>
