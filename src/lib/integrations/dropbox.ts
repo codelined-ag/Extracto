@@ -18,7 +18,6 @@ export const DROPBOX_SCOPES = [
   "files.content.read",
   "files.content.write",
   "files.metadata.read",
-  "files.metadata.write",
   "account_info.read",
 ];
 
@@ -205,7 +204,6 @@ export async function uploadDropboxFile(
   userId: string,
   path: string,
   bytes: Buffer | Uint8Array,
-  contentType = "application/octet-stream",
 ): Promise<{ pathDisplay: string; size: number }> {
   const accessToken = await getValidAccessToken(userId);
   const arg = JSON.stringify({
@@ -228,7 +226,6 @@ export async function uploadDropboxFile(
     throw new Error(`Dropbox upload failed: ${res.status} ${text.slice(0, 240)}`);
   }
   const json = (await res.json()) as { path_display?: string; size?: number };
-  void contentType;
   return {
     pathDisplay: json.path_display ?? path,
     size: json.size ?? bytes.byteLength,

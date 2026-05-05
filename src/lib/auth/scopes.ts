@@ -12,6 +12,8 @@ export const ALL_SCOPES = [
   "kb:write",
   "s3:read",
   "s3:write",
+  "integrations:read",
+  "integrations:write",
 ] as const;
 
 export type Scope = (typeof ALL_SCOPES)[number];

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiRouteError } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-import { uploadGoogleDriveFile } from "@/lib/integrations/google-drive";
+import { uploadOneDriveFile } from "@/lib/integrations/onedrive";
 import { isExportFormat, renderJobExport } from "@/lib/export";
 import { readResultJson, readResultText } from "@/lib/ocr/result-store";
 
@@ -56,7 +56,7 @@ export const POST = withMutationAuth("integrations:write", async (request: NextR
     result,
   });
 
-  const uploaded = await uploadGoogleDriveFile({
+  const uploaded = await uploadOneDriveFile({
     userId: auth.userId,
     parentId: parentId || null,
     name: rendered.filename,

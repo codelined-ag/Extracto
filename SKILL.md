@@ -232,6 +232,16 @@ extracto gdrive disconnect
 
 Google Drive uses the least-privilege `drive.file` scope: the app can only see files the user picks via the connected app or files the app itself created. While the operator's OAuth project is in Google's "Testing" status, refresh tokens expire after 7 days; submit the project for Basic Verification (no security audit) to remove that limit. Same surface on `POST /api/v1/integrations/google_drive/{import,push}` and the `google_drive_*` MCP tools.
 
+```bash
+extracto onedrive list                                       # list App folder root
+extracto onedrive list <item-id>                             # list a folder by item id
+extracto onedrive import --file <item-id> --model openai/gpt-4o
+extracto onedrive push --job <job-id> --parent <item-id> --format docx
+extracto onedrive disconnect
+```
+
+OneDrive uses the least-privilege `Files.ReadWrite.AppFolder` scope plus `User.Read` and `offline_access`. The app gets its own `/Apps/Extracto/` subfolder under the user's personal OneDrive — work / school accounts are out of scope for v0.11.0 (they require admin consent and the `common` authority instead of `consumers`). Same surface on `POST /api/v1/integrations/onedrive/{import,push}` and the `onedrive_*` MCP tools.
+
 ## Lifecycle commands (no token required)
 
 ```bash

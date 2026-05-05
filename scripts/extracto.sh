@@ -566,6 +566,67 @@ print(json.dumps({
   esac
 }
 
+cmd_onedrive() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    list)
+      local folder_id="${1:-}"
+      api_get "/api/v1/integrations/onedrive/list?folderId=$(printf %s "$folder_id" | python3 -c 'import sys,urllib.parse; sys.stdout.write(urllib.parse.quote(sys.stdin.read()))')"
+      ;;
+    import)
+      local od_file="" od_model=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --file)  od_file="${2:-}"; shift 2 ;;
+          --model) od_model="${2:-}"; shift 2 ;;
+          *) die "unknown onedrive import flag: $1" ;;
+        esac
+      done
+      [ -n "$od_file" ] || die "usage: extracto onedrive import --file <onedrive-item-id> --model NAME"
+      [ -n "$od_model" ] || die "--model is required"
+      local body
+      body="$(EXTRACTO_OD_FILE="$od_file" EXTRACTO_OD_MODEL="$od_model" python3 -c '
+import json, os
+print(json.dumps({"fileId": os.environ["EXTRACTO_OD_FILE"], "model": os.environ["EXTRACTO_OD_MODEL"]}))
+')"
+      api_post_json "/api/v1/integrations/onedrive/import" "$body"
+      ;;
+    push)
+      local od_job="" od_parent="" od_format="md"
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --job)    od_job="${2:-}"; shift 2 ;;
+          --parent) od_parent="${2:-}"; shift 2 ;;
+          --format) od_format="${2:-}"; shift 2 ;;
+          *) die "unknown onedrive push flag: $1" ;;
+        esac
+      done
+      [ -n "$od_job" ] || die "usage: extracto onedrive push --job <job-id> [--parent <item-id>] [--format md|...|obsidian]"
+      case "$od_format" in
+        md|json|txt|html|docx|rtf|csv|xlsx|obsidian) ;;
+        *) die "--format must be one of: md, json, txt, html, docx, rtf, csv, xlsx, obsidian" ;;
+      esac
+      local body
+      body="$(EXTRACTO_OD_JOB="$od_job" EXTRACTO_OD_PARENT="$od_parent" EXTRACTO_OD_FORMAT="$od_format" python3 -c '
+import json, os
+print(json.dumps({
+  "jobId": os.environ["EXTRACTO_OD_JOB"],
+  "parentId": os.environ.get("EXTRACTO_OD_PARENT",""),
+  "format": os.environ["EXTRACTO_OD_FORMAT"],
+}))
+')"
+      api_post_json "/api/v1/integrations/onedrive/push" "$body"
+      ;;
+    disconnect)
+      api_delete "/api/v1/integrations/onedrive"
+      ;;
+    *)
+      die "usage: extracto onedrive {list [folder-id]|import --file ID --model M|push --job ID [--parent ID] [--format X]|disconnect}"
+      ;;
+  esac
+}
+
 cmd_estimate() {
   command -v python3 >/dev/null 2>&1 || die "python3 is required by 'extracto estimate' for safe JSON construction"
   local file="" pages="" model="" provider="" endpoint="" pp_model="" pp_format="" out_tokens="" in_tokens=""
@@ -1545,6 +1606,7 @@ main() {
     s3)        shift; cmd_s3 "$@" ;;
     dropbox)   shift; cmd_dropbox "$@" ;;
     gdrive)    shift; cmd_gdrive "$@" ;;
+    onedrive)  shift; cmd_onedrive "$@" ;;
     -h|--help|help|"")
       print_help
       ;;

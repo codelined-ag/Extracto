@@ -636,5 +636,42 @@ server.tool(
     ),
 );
 
+server.tool(
+  "onedrive_list_folder",
+  "List a OneDrive folder. Pass an empty string to list the App folder root. Returns each entry's id, name, kind (file/folder), mimeType, size, and modified timestamp.",
+  { folderId: z.string().default("") },
+  async ({ folderId }) =>
+    asTextResult(
+      await call(`/api/v1/integrations/onedrive/list?folderId=${encodeURIComponent(folderId)}`),
+    ),
+);
+
+server.tool(
+  "onedrive_import",
+  "Download a file from the user's OneDrive (by item id) and submit it for OCR. Returns a jobId. Supports pdf, png, jpg, webp up to 32 MiB.",
+  {
+    fileId: z.string().describe("OneDrive item id."),
+    model: z.string(),
+  },
+  async (input) =>
+    asTextResult(
+      await call("/api/v1/integrations/onedrive/import", { method: "POST", body: input }),
+    ),
+);
+
+server.tool(
+  "onedrive_push",
+  "Push a COMPLETED job's text back into OneDrive in the chosen format. Pass `parentId` to control the destination folder (empty falls back to the App folder root).",
+  {
+    jobId: z.string(),
+    parentId: z.string().default(""),
+    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx", "obsidian"]).default("md"),
+  },
+  async (input) =>
+    asTextResult(
+      await call("/api/v1/integrations/onedrive/push", { method: "POST", body: input }),
+    ),
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
