@@ -742,6 +742,66 @@ print(json.dumps(out))
   api_post_json "/api/v1/ocr/estimate" "$body"
 }
 
+cmd_compare() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    get)
+      [ -n "${1:-}" ] || die "usage: extracto compare get <comparison-id>"
+      local enc
+      if command -v python3 >/dev/null 2>&1; then
+        enc="$(printf %s "$1" | python3 -c 'import sys,urllib.parse; sys.stdout.write(urllib.parse.quote(sys.stdin.read()))')"
+      else
+        enc="$1"
+      fi
+      api_get "/api/v1/ocr/compare?id=${enc}"
+      ;;
+    run|"")
+      command -v python3 >/dev/null 2>&1 || die "python3 is required by 'extracto compare run'"
+      local file="" models=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --file)   file="${2:-}"; shift 2 ;;
+          --models) models="${2:-}"; shift 2 ;;
+          *) die "unknown compare flag: $1" ;;
+        esac
+      done
+      [ -n "$file" ] || die "usage: extracto compare run --file PATH --models a,b[,c[,d]]"
+      [ -n "$models" ] || die "--models is required (comma-separated, 2-4 model ids)"
+      [ -f "$file" ] || die "file not found: $file"
+      local mime
+      case "${file##*.}" in
+        pdf|PDF) mime="application/pdf" ;;
+        png|PNG) mime="image/png" ;;
+        jpg|jpeg|JPG|JPEG) mime="image/jpeg" ;;
+        webp|WEBP) mime="image/webp" ;;
+        *) die "unsupported file type: ${file##*.}" ;;
+      esac
+      local b64
+      if base64 --help 2>&1 | grep -q -- "-w"; then
+        b64="$(base64 -w 0 < "$file")"
+      else
+        b64="$(base64 < "$file" | tr -d '\n')"
+      fi
+      local file_basename
+      file_basename="$(basename "$file")"
+      local body
+      body="$(EXTRACTO_CMP_NAME="$file_basename" EXTRACTO_CMP_PREVIEW="data:${mime};base64,${b64}" EXTRACTO_CMP_MODELS="$models" python3 -c '
+import json, os
+print(json.dumps({
+  "fileName": os.environ["EXTRACTO_CMP_NAME"],
+  "preview": os.environ["EXTRACTO_CMP_PREVIEW"],
+  "models": [m for m in os.environ["EXTRACTO_CMP_MODELS"].split(",") if m.strip()],
+}))
+')"
+      api_post_json "/api/v1/ocr/compare" "$body"
+      ;;
+    *)
+      die "usage: extracto compare {run --file PATH --models a,b[,c[,d]]|get <comparison-id>}"
+      ;;
+  esac
+}
+
 cmd_jobs() {
   local sub="${1:-list}"
   shift || true
@@ -1597,6 +1657,7 @@ main() {
     uninstall) cmd_uninstall ;;
     ocr)       shift; cmd_ocr "$@" ;;
     estimate)  shift; cmd_estimate "$@" ;;
+    compare)   shift; cmd_compare "$@" ;;
     jobs)      shift; cmd_jobs "$@" ;;
     tags)      shift; cmd_tags "$@" ;;
     presets)   shift; cmd_presets "$@" ;;

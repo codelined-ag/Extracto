@@ -78,6 +78,15 @@ extracto ocr ./meeting.pdf --model openai/gpt-4o --post-template extract-actions
 
 `--post-template` selects a server-built post-processing instruction so you don't have to write it yourself. Supported: `translate` (requires `--target-language`), `summarize-3sentence`, `summarize-executive`, `extract-actions`, or `custom` (the default; pairs with the free-form instruction in your stored settings). `--post-model` overrides the post-processing model; `--post-format` selects markdown or json output. The same fields are accepted on `POST /api/v1/ocr/batch` (`postProcessing.template`, `postProcessing.targetLanguage`) and the `ocr_submit` MCP tool.
 
+### Compare multiple models on the same input
+
+```bash
+extracto compare run --file ./invoice.pdf --models "mistral-ocr-latest,openai/gpt-4o,anthropic/claude-sonnet-4.6"
+extracto compare get <comparison-id>
+```
+
+`extracto compare run` calls `POST /api/v1/ocr/compare` with the file + 2 to 4 model ids. Returns a `comparisonId` plus the per-model `jobId`s. `extracto compare get` returns each model's job (status, extractedText, processingMs, error if any) and a server-computed word-level diff between the first model's output (baseline) and each other completed job. Diffs are an array of `{ op: "equal"|"insert"|"delete", text }` segments plus a summary `{ equalChars, insertedChars, deletedChars, similarity }`.
+
 ### List recent jobs
 
 ```bash

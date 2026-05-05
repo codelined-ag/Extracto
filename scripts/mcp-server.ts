@@ -187,6 +187,31 @@ server.tool(
 );
 
 server.tool(
+  "ocr_compare",
+  "Submit one input file to N models in parallel and get a comparisonId. Use ocr_comparison_get to fetch the per-model outputs and the server-computed word-level diff against the first model.",
+  {
+    fileName: z.string(),
+    preview: z.string().describe("Data URL (data:image/* or data:application/pdf;base64,...)"),
+    models: z.array(z.string()).min(2).max(4).describe("2 to 4 model ids to compare"),
+    pages: z.array(z.string()).optional(),
+    pageNumbers: z.array(z.number().int().min(1)).optional(),
+    sourcePdf: z.string().max(180_000_000).optional(),
+  },
+  async (input) =>
+    asTextResult(await call("/api/v1/ocr/compare", { method: "POST", body: input })),
+);
+
+server.tool(
+  "ocr_comparison_get",
+  "Fetch a comparison by id. Returns each model's job + extractedText, plus a word-level diff between the first (baseline) job and each other completed job.",
+  { comparisonId: z.string() },
+  async ({ comparisonId }) =>
+    asTextResult(
+      await call(`/api/v1/ocr/compare?id=${encodeURIComponent(comparisonId)}`),
+    ),
+);
+
+server.tool(
   "ocr_estimate",
   "Estimate the dollar cost of running OCR on a set of pages before submitting. Pricing is fetched live (OpenRouter, LiteLLM mirror), static (Mistral OCR per-page rates), or $0 (Ollama, unknown self-hosted). Returns a breakdown with per-page rate, total, and warnings about pricing-source confidence.",
   {

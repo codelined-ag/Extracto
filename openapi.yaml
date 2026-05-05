@@ -104,6 +104,89 @@ components:
         createdAt: { type: string, format: date-time }
         jobCount: { type: integer, description: "Only present in tags list responses" }
 
+    CompareRequest:
+      type: object
+      required: [fileName, preview, models]
+      properties:
+        fileName: { type: string }
+        preview: { type: string, description: "Data URL." }
+        models:
+          type: array
+          minItems: 2
+          maxItems: 4
+          items: { type: string }
+        pages:
+          type: array
+          items: { type: string }
+        pageNumbers:
+          type: array
+          items: { type: integer, minimum: 1 }
+        sourcePdf: { type: string }
+
+    CompareResponse:
+      type: object
+      required: [comparisonId, jobs]
+      properties:
+        comparisonId: { type: string }
+        jobs:
+          type: array
+          items:
+            type: object
+            properties:
+              model: { type: string }
+              jobId: { type: string }
+        failures:
+          type: array
+          items:
+            type: object
+            properties:
+              model: { type: string }
+              error: { type: string }
+
+    DiffSegment:
+      type: object
+      properties:
+        op: { type: string, enum: [equal, insert, delete] }
+        text: { type: string }
+
+    DiffSummary:
+      type: object
+      properties:
+        equalChars: { type: integer }
+        insertedChars: { type: integer }
+        deletedChars: { type: integer }
+        similarity: { type: number }
+
+    CompareGetResponse:
+      type: object
+      required: [comparisonId, jobs]
+      properties:
+        comparisonId: { type: string }
+        jobs:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              model: { type: string }
+              status: { type: string }
+              extractedText: { type: string, nullable: true }
+              processingMs: { type: integer, nullable: true }
+              completedAt: { type: string, format: date-time, nullable: true }
+              errorMessage: { type: string, nullable: true }
+        diffs:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              baselineJobId: { type: string }
+              candidateJobId: { type: string }
+              segments:
+                type: array
+                items: { $ref: "#/components/schemas/DiffSegment" }
+              summary: { $ref: "#/components/schemas/DiffSummary" }
+
     OcrEstimateRequest:
       type: object
       required: [files, model]
@@ -454,6 +537,50 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/ocr/compare:
+    post:
+      summary: Run the same input through 2 to 4 models in parallel
+      operationId: submitOcrComparison
+      tags: [OCR]
+      description: |
+        Fans out one input to multiple model variants under a shared
+        comparisonId. Use GET /api/v1/ocr/compare?id=<id> to fetch the
+        per-model results plus a server-computed word-level diff
+        between the first (baseline) job and each other completed job.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompareRequest" }
+      responses:
+        "200":
+          description: All model variants accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompareResponse" }
+        "207":
+          description: Partial success (some variants failed to submit)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompareResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    get:
+      summary: Fetch a comparison's per-model results and word-level diff
+      operationId: getOcrComparison
+      tags: [OCR]
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Comparison
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompareGetResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/ocr/estimate:
     post:

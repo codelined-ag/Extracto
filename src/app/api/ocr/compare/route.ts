@@ -5,6 +5,7 @@ import { OcrJobStatus } from "@prisma/client";
 import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
 import { withAuth, withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
+import { diffWords, summarizeDiff } from "@/lib/diff/word-diff";
 import { resolveOcrJobInputs } from "@/lib/ocr/job-submit-prep";
 import { submitOcrJob } from "@/lib/ocr/job-submit";
 import {
@@ -56,12 +57,6 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
     );
   }
 
-  const ip = getClientIpAddress(request);
-  for (let i = 0; i < models.length; i++) {
-    const limited = await enforceOcrSubmitRateLimit(auth, ip);
-    if (limited) return limited;
-  }
-
   const inputPreviews = normalizeOcrInputPreviews(body.pages, preview);
   const pageNumbers = normalizeOcrPageNumbers(body.pageNumbers, inputPreviews.length);
   const sourcePdf = normalizeSourcePdfForAnchoring(body.sourcePdf, pageNumbers, inputPreviews.length);
@@ -69,10 +64,16 @@ export const POST = withMutationAuth("ocr:submit", async (request: NextRequest, 
 
   const comparisonId = `cmp_${randomBytes(8).toString("hex")}`;
   const apiKeyId = auth.method === "api-key" ? auth.apiKeyId ?? null : null;
+  const ip = getClientIpAddress(request);
 
   const submissions: Array<{ model: string; jobId: string }> = [];
   const failures: Array<{ model: string; error: string }> = [];
   for (const model of models) {
+    const limited = await enforceOcrSubmitRateLimit(auth, ip);
+    if (limited) {
+      failures.push({ model, error: `Rate limit exceeded for ${model}` });
+      continue;
+    }
     try {
       const inputs = await resolveOcrJobInputs({ userId: auth.userId, model });
       const { jobId } = await submitOcrJob({
@@ -119,5 +120,32 @@ export const GET = withAuth("ocr:read", async (request: NextRequest, { auth }) =
       completedAt: true,
     },
   });
-  return NextResponse.json({ comparisonId, jobs });
+  const completed = jobs.filter((j) => j.status === OcrJobStatus.COMPLETED && typeof j.extractedText === "string");
+  const MAX_DIFF_CHARS = 200_000;
+  type DiffEntry = {
+    baselineJobId: string;
+    candidateJobId: string;
+    segments?: import("@/lib/diff/word-diff").DiffSegment[];
+    summary?: import("@/lib/diff/word-diff").DiffSummary;
+    truncated?: boolean;
+  };
+  let diffs: DiffEntry[] | undefined;
+  if (completed.length >= 2) {
+    const [baseline, ...rest] = completed;
+    const baselineText = baseline.extractedText ?? "";
+    diffs = rest.map((candidate) => {
+      const candidateText = candidate.extractedText ?? "";
+      if (baselineText.length > MAX_DIFF_CHARS || candidateText.length > MAX_DIFF_CHARS) {
+        return { baselineJobId: baseline.id, candidateJobId: candidate.id, truncated: true };
+      }
+      const segments = diffWords(baselineText, candidateText);
+      return {
+        baselineJobId: baseline.id,
+        candidateJobId: candidate.id,
+        segments,
+        summary: summarizeDiff(segments),
+      };
+    });
+  }
+  return NextResponse.json({ comparisonId, jobs, diffs });
 });
