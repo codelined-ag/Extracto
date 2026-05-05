@@ -6,6 +6,28 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-05-05
+
+### Added
+- Two-factor authentication on accounts with TOTP enrollment, recovery codes, and a sign-in challenge step.
+- Self-serve email change with a confirmation link that the new mailbox has to click.
+- Forgot-password flow over SMTP with a one-shot signed reset link.
+- In-app camera capture in the workspace, with a fallback to the platform file picker when getUserMedia is unavailable.
+- Auto-contrast and shadow flattening pass on captured frames, toggleable in the preview.
+- Capture modes for documents, receipts, and whiteboards, each with its own enhance preset.
+- Multi-shot batch capture with a thumbnail tray, per-shot remove, and a single submit at the end.
+- Offline queue that stops short of the API while disconnected and replays every queued item the moment the browser reconnects.
+- Print scanning sidekick that finds the page corners in the live preview and warps the captured frame into a top-down rectangle, opt-in.
+
+### Changed
+- The OCR model picker no longer offers embedding-only models from Ollama, OpenRouter, or OpenAI-compatible providers.
+
+### Fixed
+- Concurrent OCR runs cannot overlap when the browser regains connectivity mid-batch.
+- Repeated taps on Use these photos in the camera dialog no longer enqueue duplicate files.
+- The email confirmation endpoint enforces the same per-IP rate limit the password reset endpoint already had.
+- Token lookups for password reset and email change use an indexed match instead of scanning every user with a pending token.
+
 ## [0.9.1] - 2026-05-05
 
 ### Fixed
