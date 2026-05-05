@@ -116,7 +116,7 @@ export function SettingsAccordionItem({ value, title, hint, right, children }: S
         </CollapsibleTrigger>
         {right ? <div className="shrink-0">{right}</div> : null}
       </div>
-      <CollapsibleContent className="collapsible-content data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0">
+      <CollapsibleContent className="collapsible-content">
         <div className="px-4 pb-4 pt-3 space-y-3 hairline-t">
           {children}
         </div>

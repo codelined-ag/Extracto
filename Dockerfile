@@ -3,7 +3,8 @@ ARG BUN_IMAGE=oven/bun:1.3.5@sha256:e90cdbaf9ccdb3d4bd693aa335c3310a6004286a880f
 FROM ${BUN_IMAGE} AS deps
 WORKDIR /app
 
-COPY package.json bun.lock prisma ./
+COPY package.json bun.lock ./
+COPY prisma ./prisma
 RUN bun install --frozen-lockfile
 RUN bun run db:generate
 
@@ -16,7 +17,8 @@ RUN apt-get update \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json bun.lock prisma ./
+COPY package.json bun.lock ./
+COPY prisma ./prisma
 COPY . .
 RUN node node_modules/.bin/next build \
   && cp -r .next/static .next/standalone/.next/ \
@@ -25,7 +27,8 @@ RUN node node_modules/.bin/next build \
 FROM ${BUN_IMAGE} AS runtime-deps
 WORKDIR /app
 
-COPY package.json bun.lock prisma ./
+COPY package.json bun.lock ./
+COPY prisma ./prisma
 RUN bun install --frozen-lockfile --production
 RUN bun run db:generate
 
