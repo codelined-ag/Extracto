@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { History, Plus, RefreshCw, Trash2, Webhook } from "lucide-react";
+import { History, Plus, RefreshCw, Send, Trash2, Webhook } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,6 +81,24 @@ export function WebhooksSection({ t }: { t: Translator }) {
     }
   };
 
+  const sendTest = async (id: string) => {
+    try {
+      const res = await fetch(`/api/v1/webhooks/${id}/test`, { method: "POST" });
+      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; statusCode?: number | null; errorMessage?: string | null };
+      if (!res.ok) throw new Error(json.errorMessage || `HTTP ${res.status}`);
+      toast({
+        title: json.ok
+          ? t("Test inviato", "Test delivered", "Test envoyé", "Test enviado", "Test gesendet")
+          : t("Test fallito", "Test failed", "Test échoué", "Prueba fallida", "Test fehlgeschlagen"),
+        description: json.statusCode ? `HTTP ${json.statusCode}` : json.errorMessage ?? undefined,
+        variant: json.ok ? "default" : "destructive",
+      });
+      await refresh();
+    } catch (err) {
+      toast({ title: t("Errore", "Error", "Erreur", "Error", "Fehler"), description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    }
+  };
+
   const fetchDeliveries = async (id: string) => {
     if (openDeliveries === id) {
       setOpenDeliveries(null);
@@ -151,6 +169,9 @@ export function WebhooksSection({ t }: { t: Translator }) {
                     </div>
                   </div>
                   <Switch checked={w.active} onCheckedChange={() => void toggleActive(w)} />
+                  <Button size="icon" variant="ghost" onClick={() => void sendTest(w.id)} className="h-7 w-7" aria-label={t("Invia consegna di test", "Send test delivery", "Envoyer une livraison de test", "Enviar entrega de prueba", "Testauslieferung senden")}>
+                    <Send className="size-3.5" />
+                  </Button>
                   <Button size="icon" variant="ghost" onClick={() => void fetchDeliveries(w.id)} className="h-7 w-7" aria-label={t("Cronologia consegne", "Delivery history", "Historique de livraison", "Historial de entregas", "Auslieferungsverlauf")}>
                     <History className="size-3.5" />
                   </Button>

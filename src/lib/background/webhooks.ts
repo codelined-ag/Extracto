@@ -321,6 +321,52 @@ interface AttemptInput {
   timestamp: number;
 }
 
+export async function dispatchTestWebhook(
+  userId: string,
+  webhookId: string,
+): Promise<{ ok: boolean; statusCode: number | null; errorMessage: string | null }> {
+  const webhook = await db.webhook.findFirst({
+    where: { id: webhookId, userId },
+    select: { id: true, url: true, secret: true, events: true },
+  });
+  if (!webhook) {
+    return { ok: false, statusCode: null, errorMessage: "Webhook not found" };
+  }
+  let events: WebhookEvent[] = [];
+  try {
+    const parsed = JSON.parse(webhook.events);
+    if (Array.isArray(parsed)) {
+      events = parsed.filter((e): e is WebhookEvent => typeof e === "string" && isSupportedWebhookEvent(e));
+    }
+  } catch {
+    events = [];
+  }
+  const event = events[0] ?? "job.completed";
+  const timestamp = Math.floor(Date.now() / 1000);
+  const body = JSON.stringify({
+    event,
+    occurredAt: new Date().toISOString(),
+    test: true,
+    webhookId: webhook.id,
+    message: "Synthetic delivery from POST /api/v1/webhooks/{id}/test",
+  });
+  const before = await db.webhookDelivery.count({ where: { webhookId: webhook.id } });
+  await attemptWebhookDelivery({ webhook, event, body, timestamp });
+  const after = await db.webhookDelivery.findFirst({
+    where: { webhookId: webhook.id },
+    orderBy: { attemptedAt: "desc" },
+    select: { ok: true, statusCode: true, errorMessage: true },
+  });
+  if (!after || (await db.webhookDelivery.count({ where: { webhookId: webhook.id } })) === before) {
+    return { ok: false, statusCode: null, errorMessage: "Delivery row missing" };
+  }
+  return {
+    ok: after.ok,
+    statusCode: after.statusCode ?? null,
+    errorMessage: after.errorMessage ?? null,
+  };
+}
+
 async function attemptWebhookDelivery({ webhook, event, body, timestamp }: AttemptInput): Promise<void> {
   const signature = signPayload(webhook.secret, body, timestamp);
   const controller = new AbortController();
