@@ -388,3 +388,52 @@
   }
   :is(.dark) .paper-grain::after { opacity: 0.04; mix-blend-mode: screen; }
 }
+
+@layer components {
+  .tg-dialog,
+  .extracto-tourguide {
+    background-color: var(--card) !important;
+    color: var(--card-foreground) !important;
+    border: 1px solid color-mix(in oklab, var(--primary), transparent 80%) !important;
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--primary), transparent 70%),
+      0 16px 40px color-mix(in oklab, var(--foreground), transparent 80%) !important;
+    border-radius: 0.75rem !important;
+  }
+  .tg-dialog-header,
+  .tg-dialog-title,
+  .tg-dialog-body,
+  .tg-dialog-footer,
+  .tg-step-counter,
+  .tg-prev-btn,
+  .tg-next-btn,
+  .tg-finish-btn,
+  .tg-x-btn {
+    color: var(--card-foreground) !important;
+  }
+  .tg-prev-btn,
+  .tg-next-btn,
+  .tg-finish-btn {
+    background-color: var(--primary) !important;
+    color: var(--primary-foreground) !important;
+    border-radius: 9999px !important;
+    padding: 0.4rem 0.9rem !important;
+    border: none !important;
+  }
+  .tg-prev-btn {
+    background-color: color-mix(in oklab, var(--card-foreground), transparent 88%) !important;
+    color: var(--card-foreground) !important;
+  }
+  .tg-x-btn {
+    background: transparent !important;
+    border: none !important;
+    opacity: 0.7;
+  }
+  .tg-x-btn:hover { opacity: 1; }
+  .tg-arrow {
+    border-color: var(--card) transparent !important;
+  }
+  .tg-backdrop {
+    background-color: color-mix(in oklab, var(--background), transparent 35%) !important;
+  }
+}

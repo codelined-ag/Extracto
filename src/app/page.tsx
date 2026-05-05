@@ -2651,7 +2651,7 @@ export default function ExtractoPage() {
  </SettingsAccordionItem>
  </SettingsAccordion>
 
- <div className="sticky bottom-0 -mx-6 px-6 py-3 bg-background/85 backdrop-blur-sm hairline-t flex justify-end z-10">
+ <div className="sticky bottom-0 -mx-6 px-6 py-3 bg-card/85 backdrop-blur-sm hairline-t flex justify-end z-10">
  <Button onClick={saveApiSettings} disabled={isSavingApiSettings}>
  {isSavingApiSettings ? <LoaderCircleIcon size={16} className="inline-flex items-center justify-center mr-1.5 animate-spin"/> : null}
  {t("Salva provider","Save provider","Enregistrer le fournisseur","Guardar proveedor","Provider speichern")}
@@ -2983,7 +2983,7 @@ export default function ExtractoPage() {
  </SettingsAccordionItem>
  </SettingsAccordion>
 
- <div className="sticky bottom-0 -mx-6 px-6 py-3 bg-background/85 backdrop-blur-sm hairline-t flex justify-end z-10">
+ <div className="sticky bottom-0 -mx-6 px-6 py-3 bg-card/85 backdrop-blur-sm hairline-t flex justify-end z-10">
  <Button onClick={saveKbDefaults} disabled={isSavingKbDefaults}>
  {isSavingKbDefaults ? <LoaderCircleIcon size={16} className="inline-flex items-center justify-center mr-1.5 animate-spin"/> : null}
  {t("Salva knowledge base","Save knowledge base","Enregistrer KB","Guardar KB","KB speichern")}
