@@ -85,4 +85,30 @@ describe("extractFormFields", () => {
   it("returns absent when the form object is empty", () => {
     expect(extractFormFields({ structured: { fields: { form: {} } } }).source).toBe("absent");
   });
+
+  it("falls back to fields.invoice for invoice presets", () => {
+    const result = {
+      structured: {
+        fields: {
+          invoice: { vendor: "ACME", total: 199.99, date: "2026-04-01" },
+        },
+      },
+    };
+    const r = extractFormFields(result);
+    expect(r.source).toBe("result.structured.fields.form");
+    expect(r.byField.vendor).toBe("ACME");
+    expect(r.byField.total).toBe(199.99);
+  });
+
+  it("falls back to flat fields when no preset wrapper exists", () => {
+    const result = {
+      structured: {
+        fields: { name: "Bob", email: "bob@example.com" },
+      },
+    };
+    const r = extractFormFields(result);
+    expect(r.source).toBe("result.structured.fields.form");
+    expect(r.byField.name).toBe("Bob");
+    expect(r.byField.email).toBe("bob@example.com");
+  });
 });

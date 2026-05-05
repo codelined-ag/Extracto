@@ -48,18 +48,30 @@ export function JobExtrasPanel({ jobId, documentPreset, t }: JobExtrasPanelProps
 
   React.useEffect(() => {
     let cancelled = false;
-    void (async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+    const fetchOnce = async (): Promise<void> => {
+      attempt += 1;
       try {
         const [fr, er] = await Promise.all([
           fetch(`/api/v1/jobs/${encodeURIComponent(jobId)}/form-fields`),
           fetch(`/api/v1/jobs/${encodeURIComponent(jobId)}/equations`),
         ]);
         if (cancelled) return;
-        if (fr.ok) setFields((await fr.json()) as FormFieldsResponse);
-        if (er.ok) setEquations((await er.json()) as EquationsResponse);
+        const fOk = fr.ok;
+        const eOk = er.ok;
+        if (fOk) setFields((await fr.json()) as FormFieldsResponse);
+        if (eOk) setEquations((await er.json()) as EquationsResponse);
+        if ((!fOk || !eOk) && attempt < 3) {
+          timer = setTimeout(() => { void fetchOnce(); }, 1500 * attempt);
+        }
       } catch { /* extras are best-effort; silently skip */ }
-    })();
-    return () => { cancelled = true; };
+    };
+    void fetchOnce();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [jobId]);
 
   const showFields = fields && fields.fields.length > 0;

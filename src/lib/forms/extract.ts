@@ -46,10 +46,19 @@ export function extractFormFields(result: unknown): FormFieldsResult {
 }
 
 function readFormObject(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object") return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
   if (v.form && typeof v.form === "object" && !Array.isArray(v.form)) {
     return v.form as Record<string, unknown>;
+  }
+  for (const candidate of ["invoice", "receipt", "contract", "id", "academic"]) {
+    const inner = v[candidate];
+    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+      return inner as Record<string, unknown>;
+    }
+  }
+  if (Object.keys(v).length > 0) {
+    return v;
   }
   return null;
 }
