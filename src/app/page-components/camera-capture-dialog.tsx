@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Camera, RotateCcw, Check, X, Loader2 } from "lucide-react";
+import { Camera, RotateCcw, Check, X, Loader2, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { enhanceForOcr } from "@/lib/image/enhance";
 
 import type { Translator } from "@/app/page-components/types";
 
@@ -31,10 +32,12 @@ export function CameraCaptureDialog({
   const { toast } = useToast();
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const rawCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
   const [status, setStatus] = React.useState<"starting" | "ready" | "preview" | "error">("starting");
   const [errorMessage, setErrorMessage] = React.useState("");
   const [snapshot, setSnapshot] = React.useState<string | null>(null);
+  const [enhance, setEnhance] = React.useState(true);
 
   const stopStream = React.useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -75,20 +78,48 @@ export function CameraCaptureDialog({
     return () => stopStream();
   }, [open, startStream, stopStream]);
 
+  const renderFromRaw = React.useCallback((useEnhance: boolean) => {
+    const raw = rawCanvasRef.current;
+    const out = canvasRef.current;
+    if (!raw || !out) return null;
+    out.width = raw.width;
+    out.height = raw.height;
+    const ctx = out.getContext("2d");
+    if (!ctx) return null;
+    if (useEnhance) {
+      const enhanced = enhanceForOcr(raw, raw.width, raw.height);
+      ctx.drawImage(enhanced, 0, 0);
+    } else {
+      ctx.drawImage(raw, 0, 0);
+    }
+    return out;
+  }, []);
+
   const takePhoto = () => {
     const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+    if (!video) return;
     const w = video.videoWidth;
     const h = video.videoHeight;
     if (!w || !h) return;
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0, w, h);
+    const raw = document.createElement("canvas");
+    raw.width = w;
+    raw.height = h;
+    const rawCtx = raw.getContext("2d");
+    if (!rawCtx) return;
+    rawCtx.drawImage(video, 0, 0, w, h);
+    rawCanvasRef.current = raw;
+    const canvas = renderFromRaw(enhance);
+    if (!canvas) return;
     setSnapshot(canvas.toDataURL("image/jpeg", 0.92));
     setStatus("preview");
+  };
+
+  const toggleEnhance = (next: boolean) => {
+    setEnhance(next);
+    if (status === "preview") {
+      const canvas = renderFromRaw(next);
+      if (canvas) setSnapshot(canvas.toDataURL("image/jpeg", 0.92));
+    }
   };
 
   const retake = () => {
@@ -180,6 +211,29 @@ export function CameraCaptureDialog({
             </div>
           ) : null}
           <canvas ref={canvasRef} className="hidden" />
+        </div>
+        <div className="px-6 pt-3 pb-1 flex items-center gap-2">
+          <Button
+            type="button"
+            variant={enhance ? "default" : "outline"}
+            size="sm"
+            onClick={() => toggleEnhance(!enhance)}
+            data-testid="enhance-toggle"
+          >
+            <Sparkles className="size-3.5 mr-1.5" />
+            {enhance
+              ? t("Migliora attivo", "Enhance on", "Amélioration activée", "Mejora activada", "Verbesserung aktiv")
+              : t("Migliora disattivo", "Enhance off", "Amélioration désactivée", "Mejora desactivada", "Verbesserung aus")}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {t(
+              "Bilanciamento e contrasto automatico per documenti.",
+              "Auto-contrast and shadow flattening for documents.",
+              "Contraste auto et atténuation des ombres pour les documents.",
+              "Contraste automático y reducción de sombras para documentos.",
+              "Auto-Kontrast und Schatten-Glättung für Dokumente.",
+            )}
+          </span>
         </div>
         <DialogFooter className="px-6 py-4 flex flex-row sm:flex-row sm:justify-between gap-2">
           <Button variant="ghost" onClick={() => handleOpenChange(false)}>
