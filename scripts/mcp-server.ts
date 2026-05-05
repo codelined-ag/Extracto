@@ -146,10 +146,10 @@ server.tool(
 
 server.tool(
   "job_export",
-  "Render a COMPLETED job's text into a downloadable file. Supported formats: md (markdown), json (full structured result), txt (plain text), html, docx, rtf, csv (markdown tables, falls back to one-line dump for prose), xlsx (each markdown table is a separate sheet, prose dumps to a single sheet). Returns the file as base64.",
+  "Render a COMPLETED job's text into a downloadable file. Supported formats: md (markdown), json (full structured result), txt (plain text), html, docx, rtf, csv (markdown tables, falls back to one-line dump for prose), xlsx (each markdown table is a separate sheet, prose dumps to a single sheet), obsidian (zip with a per-job folder containing the index note, per-page notes, and attachments; ready to drop into a vault). Returns the file as base64.",
   {
     jobId: z.string(),
-    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx"]),
+    format: z.enum(["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx", "obsidian"]),
   },
   async ({ jobId, format }) => {
     const url = `/api/v1/jobs/${encodeURIComponent(jobId)}/export?format=${encodeURIComponent(format)}`;

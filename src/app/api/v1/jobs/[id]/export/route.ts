@@ -32,10 +32,15 @@ export const GET = withAuth<{ id: string }>(
         id: true,
         status: true,
         fileName: true,
+        model: true,
+        sourcePreview: true,
+        createdAt: true,
+        completedAt: true,
         extractedText: true,
         extractedTextLocation: true,
         result: true,
         resultLocation: true,
+        metadata: true,
       },
     });
     if (!job) throw new ApiRouteError("Job not found", 404);
@@ -46,10 +51,19 @@ export const GET = withAuth<{ id: string }>(
     const text = (await readResultText(job.extractedTextLocation, job.extractedText)) ?? "";
     const result = await readResultJson(job.resultLocation, job.result);
 
+    const meta = (job.metadata && typeof job.metadata === "object" ? job.metadata : {}) as Record<string, unknown>;
+    const provider = typeof meta.provider === "string" ? meta.provider : "unknown";
+
     let rendered;
     try {
       rendered = await renderJobExport(formatRaw, {
+        jobId: job.id,
         fileName: job.fileName,
+        provider,
+        model: job.model,
+        createdAt: job.createdAt,
+        completedAt: job.completedAt,
+        sourcePreview: job.sourcePreview,
         extractedText: text,
         result,
       });

@@ -1,10 +1,21 @@
 import { markdownToCsv } from "@/lib/export/csv";
 import { markdownToDocx } from "@/lib/export/docx";
 import { markdownToHtml } from "@/lib/export/html";
+import { buildObsidianVaultZip, type ObsidianJobInput } from "@/lib/export/obsidian";
 import { markdownToRtf } from "@/lib/export/rtf";
 import { markdownToXlsx } from "@/lib/export/xlsx";
 
-export const SUPPORTED_EXPORT_FORMATS = ["md", "json", "txt", "html", "docx", "rtf", "csv", "xlsx"] as const;
+export const SUPPORTED_EXPORT_FORMATS = [
+  "md",
+  "json",
+  "txt",
+  "html",
+  "docx",
+  "rtf",
+  "csv",
+  "xlsx",
+  "obsidian",
+] as const;
 
 export const MAX_EXPORT_INPUT_BYTES = 25 * 1024 * 1024;
 
@@ -32,18 +43,31 @@ const CONTENT_TYPE: Record<ExportFormat, string> = {
   rtf: "application/rtf",
   csv: "text/csv; charset=utf-8",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  obsidian: "application/zip",
 };
 
 export function isExportFormat(value: unknown): value is ExportFormat {
   return typeof value === "string" && (SUPPORTED_EXPORT_FORMATS as readonly string[]).includes(value);
 }
 
+export interface JobExportSource {
+  fileName?: string | null;
+  extractedText: string;
+  result?: unknown;
+  jobId?: string;
+  provider?: string;
+  model?: string;
+  createdAt?: Date | string;
+  completedAt?: Date | string | null;
+  sourcePreview?: string | null;
+}
+
 export async function renderJobExport(
   format: ExportFormat,
-  job: { fileName?: string | null; extractedText: string; result?: unknown },
+  job: JobExportSource,
 ): Promise<ExportResult> {
   const stem = baseName(job.fileName ?? "extracto-job");
-  const filename = `${stem}.${format}`;
+  const filename = format === "obsidian" ? `${stem}-vault.zip` : `${stem}.${format}`;
   const contentType = CONTENT_TYPE[format];
   const md = job.extractedText ?? "";
   if (Buffer.byteLength(md, "utf-8") > MAX_EXPORT_INPUT_BYTES) {
@@ -74,6 +98,20 @@ export async function renderJobExport(
   }
   if (format === "xlsx") {
     return { filename, contentType, body: await markdownToXlsx(md) };
+  }
+  if (format === "obsidian") {
+    const vaultInput: ObsidianJobInput = {
+      jobId: job.jobId ?? "unknown",
+      fileName: job.fileName ?? null,
+      provider: job.provider ?? "unknown",
+      model: job.model ?? "",
+      createdAt: job.createdAt ?? new Date(),
+      completedAt: job.completedAt ?? null,
+      extractedText: md,
+      result: job.result,
+      sourcePreview: job.sourcePreview ?? null,
+    };
+    return { filename, contentType, body: await buildObsidianVaultZip(vaultInput) };
   }
   throw new Error(`Unsupported format: ${format}`);
 }

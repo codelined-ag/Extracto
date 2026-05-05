@@ -607,7 +607,7 @@ cmd_jobs() {
       printf "%s\n" "$body"
       ;;
     export)
-      [ -n "${1:-}" ] || die "usage: extracto jobs export <job-id> [--format md|json|txt|html|docx|rtf|csv|xlsx] [--out PATH]"
+      [ -n "${1:-}" ] || die "usage: extracto jobs export <job-id> [--format md|json|txt|html|docx|rtf|csv|xlsx|obsidian] [--out PATH]"
       local ex_job_id="$1"; shift
       local ex_format="md" ex_out=""
       while [ $# -gt 0 ]; do
@@ -618,10 +618,16 @@ cmd_jobs() {
         esac
       done
       case "$ex_format" in
-        md|json|txt|html|docx|rtf|csv|xlsx) ;;
-        *) die "--format must be one of: md, json, txt, html, docx, rtf, csv, xlsx" ;;
+        md|json|txt|html|docx|rtf|csv|xlsx|obsidian) ;;
+        *) die "--format must be one of: md, json, txt, html, docx, rtf, csv, xlsx, obsidian" ;;
       esac
-      [ -n "$ex_out" ] || ex_out="${ex_job_id}.${ex_format}"
+      if [ -z "$ex_out" ]; then
+        if [ "$ex_format" = "obsidian" ]; then
+          ex_out="${ex_job_id}-vault.zip"
+        else
+          ex_out="${ex_job_id}.${ex_format}"
+        fi
+      fi
       api_get_raw "/api/v1/jobs/${ex_job_id}/export?format=${ex_format}" "$ex_out" \
         || die "export failed (job=${ex_job_id} format=${ex_format})"
       ok "wrote ${ex_out}"
