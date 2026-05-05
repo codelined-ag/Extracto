@@ -38,7 +38,7 @@ jobs:
       - name: Set up test SQLite schema
         run: |
           mkdir -p prisma/db
-          bunx prisma db push --skip-generate
+          bunx prisma migrate deploy </dev/null
         env:
           DATABASE_URL: file:./db/custom.db
 
