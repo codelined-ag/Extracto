@@ -101,6 +101,7 @@ import { IntegrationsPanel } from "@/app/page-components/integrations-panel";
 import { CloudImportDialog } from "@/app/page-components/cloud-import-dialog";
 import { CompareDialog } from "@/app/page-components/compare-dialog";
 import { RecommendationsDialog } from "@/app/page-components/recommendations-dialog";
+import { JobExtrasPanel } from "@/app/page-components/job-extras-panel";
 import { FieldHint, HintLabel } from "@/app/page-components/field-hint";
 import { clearQueue, deletePagePreviews, loadAllPagePreviews, loadQueue, persistPagePreviews, persistQueue, reconcileJobFromServer } from "@/app/page-components/queue-persistence";
 import { HistoryDialog } from "@/app/page-components/history-dialog";
@@ -2880,6 +2881,28 @@ export default function ExtractoPage() {
  >
  {postProcessing.enabled ? (
  <div className="space-y-3">
+ <div className="grid grid-cols-2 gap-3">
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Template","Template","Modèle","Plantilla","Vorlage")}</Label>
+ <Select value={postProcessing.template} onValueChange={(v) => setPostProcessing((prev) => ({ ...prev, template: v as typeof prev.template }))}>
+ <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ <SelectItem value="custom">{t("Personalizzato","Custom","Personnalisé","Personalizado","Eigene")}</SelectItem>
+ <SelectItem value="translate">{t("Traduci","Translate","Traduire","Traducir","Übersetzen")}</SelectItem>
+ <SelectItem value="summarize-3sentence">{t("Riassunto in 3 frasi","Three-sentence summary","Résumé en 3 phrases","Resumen en 3 frases","Drei-Satz-Zusammenfassung")}</SelectItem>
+ <SelectItem value="summarize-executive">{t("Riassunto esecutivo","Executive summary","Résumé exécutif","Resumen ejecutivo","Executive Summary")}</SelectItem>
+ <SelectItem value="extract-actions">{t("Estrai azioni","Extract action items","Extraire les actions","Extraer acciones","Aktionen extrahieren")}</SelectItem>
+ </SelectContent>
+ </Select>
+ </div>
+ {postProcessing.template === "translate" ? (
+ <div className="space-y-1.5">
+ <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Lingua di destinazione","Target language","Langue cible","Idioma destino","Zielsprache")}</Label>
+ <Input value={postProcessing.targetLanguage} onChange={(e) => setPostProcessing((prev) => ({ ...prev, targetLanguage: e.target.value }))} placeholder="Italian, French, Japanese..." />
+ </div>
+ ) : null}
+ </div>
+ {postProcessing.template === "custom" ? (
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">
  {t("Istruzione","Instruction","Instruction","Instrucción","Anweisung")}
@@ -2896,6 +2919,7 @@ export default function ExtractoPage() {
  onChange={(e) => setPostProcessing((prev) => ({ ...prev, instruction: e.target.value }))}
  className="min-h-24 text-xs"/>
  </div>
+ ) : null}
  <div className="grid grid-cols-2 gap-3">
  <div className="space-y-1.5">
  <Label className="text-xs uppercase tracking-wider text-muted-foreground/80">{t("Modello","Model","Modèle","Modelo","Modell")}</Label>
@@ -3624,11 +3648,26 @@ export default function ExtractoPage() {
  </div>
  {postProcessing.enabled ? (
  <div className="space-y-2">
+ <Select value={postProcessing.template} onValueChange={(v) => setPostProcessing((prev) => ({ ...prev, template: v as typeof prev.template }))}>
+ <SelectTrigger className="h-8 text-xs w-full"><SelectValue /></SelectTrigger>
+ <SelectContent>
+ <SelectItem value="custom">{t("Personalizzato","Custom","Personnalisé","Personalizado","Eigene")}</SelectItem>
+ <SelectItem value="translate">{t("Traduci","Translate","Traduire","Traducir","Übersetzen")}</SelectItem>
+ <SelectItem value="summarize-3sentence">{t("Riassunto 3 frasi","3-sentence summary","Résumé 3 phrases","Resumen 3 frases","3-Satz-Zusammenfassung")}</SelectItem>
+ <SelectItem value="summarize-executive">{t("Riassunto esecutivo","Executive summary","Résumé exécutif","Resumen ejecutivo","Executive Summary")}</SelectItem>
+ <SelectItem value="extract-actions">{t("Estrai azioni","Extract actions","Extraire actions","Extraer acciones","Aktionen extrahieren")}</SelectItem>
+ </SelectContent>
+ </Select>
+ {postProcessing.template === "translate" ? (
+ <Input value={postProcessing.targetLanguage} onChange={(e) => setPostProcessing((prev) => ({ ...prev, targetLanguage: e.target.value }))} placeholder="Italian, French, Japanese..." className="h-8 text-xs bg-card"/>
+ ) : null}
+ {postProcessing.template === "custom" ? (
  <Textarea
  placeholder={t("Es: estrai numero fattura, scadenza, totali. Restituisci una tabella.","Ex: extract invoice number, due date, totals. Return one table.","Ex : extraire numéro, échéance, totaux. Renvoyer un tableau.","Ej: número, vencimiento, totales. Devuelve una tabla.","Bsp.: Rechnungsnummer, Fälligkeit, Summen. Eine Tabelle zurückgeben.")}
  value={postProcessing.instruction}
  onChange={(e) => setPostProcessing((prev) => ({ ...prev, instruction: e.target.value }))}
  className="min-h-[60px] text-xs bg-card"/>
+ ) : null}
  <div className="grid grid-cols-2 gap-2">
  <Select value={postProcessModelValue} onValueChange={(value) => setPostProcessing((prev) => ({ ...prev, model: value ==="__same__"?"": value }))}>
  <SelectTrigger className="h-8 text-xs w-full"><SelectValue /></SelectTrigger>
@@ -3779,6 +3818,11 @@ export default function ExtractoPage() {
  </ScrollArea>
  </TabsContent>
  </Tabs>
+ {selectedFile.jobId ? (
+ <div className="px-3 pb-3">
+ <JobExtrasPanel jobId={selectedFile.jobId} documentPreset={settings.documentPreset} t={t} />
+ </div>
+ ) : null}
  </div>
  )}
  </div>

@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApiKeysSection } from "@/app/page-components/api-keys-section";
+import { E2eKeySection } from "@/app/page-components/e2e-key-section";
 import { EmailChangeSection } from "@/app/page-components/email-change-section";
 import { NotificationsSection } from "@/app/page-components/notifications-section";
 import { SecuritySection } from "@/app/page-components/security-section";
 import { UsageSection } from "@/app/page-components/usage-section";
+import { WebhooksSection } from "@/app/page-components/webhooks-section";
 import {
   SettingsAccordion,
   SettingsAccordionItem,
@@ -98,6 +100,34 @@ export function AccountDialog({ open, onOpenChange, t, uiLanguage, setUiLanguage
                 )}
               >
                 <ApiKeysSection t={t} />
+              </SettingsAccordionItem>
+
+              <SettingsAccordionItem
+                value="webhooks"
+                title={t("Webhook", "Webhooks", "Webhooks", "Webhooks", "Webhooks")}
+                hint={t(
+                  "Endpoint HTTP che ricevono POST firmati HMAC quando i job cambiano stato.",
+                  "HTTP endpoints that receive HMAC-signed POSTs when jobs change state.",
+                  "Endpoints HTTP qui reçoivent des POST signés HMAC quand les jobs changent d'état.",
+                  "Endpoints HTTP que reciben POST firmados HMAC cuando los trabajos cambian de estado.",
+                  "HTTP-Endpunkte, die HMAC-signierte POSTs erhalten, wenn Jobs ihren Status ändern.",
+                )}
+              >
+                <WebhooksSection t={t} />
+              </SettingsAccordionItem>
+
+              <SettingsAccordionItem
+                value="e2e"
+                title={t("Cifratura E2E", "End-to-end encryption", "Chiffrement bout en bout", "Cifrado E2E", "Ende-zu-Ende-Verschlüsselung")}
+                hint={t(
+                  "Registra una chiave RSA pubblica: il server cifra i risultati di /api/v1/e2e/encrypt che solo tu puoi aprire.",
+                  "Register an RSA public key. The server seals /api/v1/e2e/encrypt responses so only you can open them.",
+                  "Enregistre une clé RSA publique : le serveur scelle les réponses /api/v1/e2e/encrypt que seul toi peux ouvrir.",
+                  "Registra una clave RSA pública: el servidor sella las respuestas /api/v1/e2e/encrypt que solo tú puedes abrir.",
+                  "Registriere einen öffentlichen RSA-Schlüssel. Der Server versiegelt /api/v1/e2e/encrypt-Antworten, die nur du öffnen kannst.",
+                )}
+              >
+                <E2eKeySection t={t} />
               </SettingsAccordionItem>
 
               <SettingsAccordionItem

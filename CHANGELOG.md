@@ -6,6 +6,8 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+- Wire up the previously REST-only v1.0 features that never got browser UI: form-fields and equations panels on completed jobs, RSA SPKI public-key registration in Account → End-to-end encryption, webhooks list / create / pause / delete / delivery history in Account → Webhooks, and the post-processing template picker (`custom`, `translate`, `summarize-3sentence`, `summarize-executive`, `extract-actions`) plus a target-language input.
+
 ## [1.3.0] - 2026-05-05
 
 ### Added
