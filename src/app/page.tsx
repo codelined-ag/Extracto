@@ -71,6 +71,7 @@ import { useToast } from"@/hooks/use-toast";
 import { ToastAction } from"@/components/ui/toast";
 import { normalizeProvider, type ProviderKind, type ClientApiSettings } from"@/lib/api-types";
 import { type AdvancedSettings, type PostProcessingSettings, type PostProcessOutputFormat } from"@/lib/ocr/settings";
+import { resolveTemplateInstruction } from"@/lib/ocr/post-processing-templates";
 import {
   collectDroppedFiles,
   formatEta,
@@ -664,8 +665,13 @@ export default function ExtractoPage() {
  const pendingCount = files.filter((f) => f.status ==="pending").length;
  const activeProcessingFile = files.find((f) => f.status ==="processing") || null;
  const resumableSelectedFile = selectedFile?.status ==="paused"? selectedFile : null;
+ const resolvedPostProcessInstruction = resolveTemplateInstruction({
+ template: postProcessing.template,
+ targetLanguage: postProcessing.targetLanguage,
+ customInstruction: postProcessing.instruction,
+ });
  const isPostProcessingReady =
- !postProcessing.enabled || postProcessing.instruction.trim().length > 0;
+ !postProcessing.enabled || resolvedPostProcessInstruction.length > 0;
  const isRunReady = isPostProcessingReady;
  const postProcessModelValue = postProcessing.model ||"__same__";
  const selectedPostProcessModelExists = postProcessing.model
@@ -2466,9 +2472,14 @@ export default function ExtractoPage() {
  return;
  }
  if (!isRunReady) {
+ const isTranslate = postProcessing.template === "translate";
  toast({
- title: t("Istruzione post-processing mancante","Missing post-processing instruction","Instruction de post-traitement manquante","Falta instrucción de post-procesamiento","Anweisung für Nachverarbeitung fehlt"),
- description: t("Aggiungi un'istruzione o disattiva il post-processing prima di avviare l'OCR.","Add an instruction or disable post-processing before running OCR.","Ajoutez une instruction ou désactivez le post-traitement avant de lancer l'OCR.","Añade una instrucción o desactiva el post-procesamiento antes de iniciar OCR.","Anweisung hinzufügen oder Nachverarbeitung deaktivieren, bevor OCR gestartet wird."),
+ title: isTranslate
+ ? t("Lingua di destinazione mancante", "Target language missing", "Langue cible manquante", "Falta idioma de destino", "Zielsprache fehlt")
+ : t("Istruzione post-processing mancante","Missing post-processing instruction","Instruction de post-traitement manquante","Falta instrucción de post-procesamiento","Anweisung für Nachverarbeitung fehlt"),
+ description: isTranslate
+ ? t("Indica la lingua di destinazione (es. Italiano, Francese) prima di avviare l'OCR.", "Enter a target language (e.g. Italian, French) before running OCR.", "Indique la langue cible (ex. Italien, Français) avant de lancer l'OCR.", "Indica el idioma de destino (p. ej. Italiano, Francés) antes de iniciar OCR.", "Zielsprache angeben (z. B. Italienisch, Französisch), bevor OCR gestartet wird.")
+ : t("Aggiungi un'istruzione o disattiva il post-processing prima di avviare l'OCR.","Add an instruction or disable post-processing before running OCR.","Ajoutez une instruction ou désactivez le post-traitement avant de lancer l'OCR.","Añade una instrucción o desactiva el post-procesamiento antes de iniciar OCR.","Anweisung hinzufügen oder Nachverarbeitung deaktivieren, bevor OCR gestartet wird."),
  variant:"destructive",
  });
  return;
