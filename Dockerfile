@@ -9,10 +9,18 @@ RUN bun run db:generate
 
 FROM ${BUN_IMAGE} AS builder
 WORKDIR /app
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+  && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+  && apt-get install -y --no-install-recommends nodejs \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json bun.lock prisma ./
 COPY . .
-RUN bun run build
+RUN node node_modules/.bin/next build \
+  && cp -r .next/static .next/standalone/.next/ \
+  && cp -r public .next/standalone/
 
 FROM ${BUN_IMAGE} AS runtime-deps
 WORKDIR /app

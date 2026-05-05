@@ -1,9 +1,4 @@
-import { markdownToCsv } from "@/lib/export/csv";
-import { markdownToDocx } from "@/lib/export/docx";
-import { markdownToHtml } from "@/lib/export/html";
-import { buildObsidianVaultZip, type ObsidianJobInput } from "@/lib/export/obsidian";
-import { markdownToRtf } from "@/lib/export/rtf";
-import { markdownToXlsx } from "@/lib/export/xlsx";
+import type { ObsidianJobInput } from "@/lib/export/obsidian";
 
 export const SUPPORTED_EXPORT_FORMATS = [
   "md",
@@ -85,21 +80,27 @@ export async function renderJobExport(
     return { filename, contentType, body: Buffer.from(stripMarkdown(md), "utf-8") };
   }
   if (format === "html") {
+    const { markdownToHtml } = await import("@/lib/export/html");
     return { filename, contentType, body: Buffer.from(markdownToHtml(md), "utf-8") };
   }
   if (format === "rtf") {
+    const { markdownToRtf } = await import("@/lib/export/rtf");
     return { filename, contentType, body: Buffer.from(markdownToRtf(md), "utf-8") };
   }
   if (format === "csv") {
+    const { markdownToCsv } = await import("@/lib/export/csv");
     return { filename, contentType, body: Buffer.from(markdownToCsv(md), "utf-8") };
   }
   if (format === "docx") {
+    const { markdownToDocx } = await import("@/lib/export/docx");
     return { filename, contentType, body: await markdownToDocx(md) };
   }
   if (format === "xlsx") {
+    const { markdownToXlsx } = await import("@/lib/export/xlsx");
     return { filename, contentType, body: await markdownToXlsx(md) };
   }
   if (format === "obsidian") {
+    const { buildObsidianVaultZip } = await import("@/lib/export/obsidian");
     const vaultInput: ObsidianJobInput = {
       jobId: job.jobId ?? "unknown",
       fileName: job.fileName ?? null,
