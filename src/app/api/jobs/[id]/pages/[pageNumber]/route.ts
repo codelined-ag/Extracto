@@ -81,7 +81,7 @@ export const PATCH = withMutationAuth<{ id: string; pageNumber: string }>(
 
     const job = await db.ocrJob.findFirst({
       where: { id, userId: auth.userId },
-      select: { id: true, metadata: true, status: true, extractedTextLocation: true },
+      select: { id: true, metadata: true, status: true, extractedTextLocation: true, editedAt: true },
     });
     if (!job) throw new ApiRouteError("Job not found", 404);
     if (job.status !== "COMPLETED") {
@@ -130,8 +130,8 @@ export const PATCH = withMutationAuth<{ id: string; pageNumber: string }>(
       pageEdits: nextPageEdits,
     };
 
-    await db.ocrJob.update({
-      where: { id: job.id },
+    const updateResult = await db.ocrJob.updateMany({
+      where: { id: job.id, editedAt: job.editedAt },
       data: {
         extractedText: restitched,
         extractedTextLocation: null,
@@ -141,6 +141,9 @@ export const PATCH = withMutationAuth<{ id: string; pageNumber: string }>(
         editedAt: new Date(),
       },
     });
+    if (updateResult.count === 0) {
+      throw new ApiRouteError("Page was edited concurrently; reload and try again", 409);
+    }
 
     if (job.extractedTextLocation) {
       void deleteResultArtifacts([job.extractedTextLocation]).catch((err) => {

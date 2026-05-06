@@ -123,6 +123,7 @@ async function ingestKey(input: {
 async function pollSource(sourceId: string): Promise<void> {
   if (inFlight.has(sourceId)) return;
   inFlight.add(sourceId);
+  let claimedUserId: string | null = null;
   try {
     const source = await db.watchedS3Source.findFirst({
       where: { id: sourceId, active: true },
@@ -135,6 +136,7 @@ async function pollSource(sourceId: string): Promise<void> {
     const perUser = inFlightPerUser.get(source.userId) ?? 0;
     if (perUser >= MAX_CONCURRENT_SOURCES_PER_USER) return;
     inFlightPerUser.set(source.userId, perUser + 1);
+    claimedUserId = source.userId;
 
     const storedSettings = await getApiSettings(source.userId);
     const inputs = await resolveOcrJobInputs({
@@ -197,11 +199,10 @@ async function pollSource(sourceId: string): Promise<void> {
     if (processed > 0) console.log(`[s3-watcher] ${source.id} ingested ${processed} new objects`);
   } finally {
     inFlight.delete(sourceId);
-    const source = await db.watchedS3Source.findUnique({ where: { id: sourceId }, select: { userId: true } }).catch(() => null);
-    if (source?.userId) {
-      const next = (inFlightPerUser.get(source.userId) ?? 1) - 1;
-      if (next <= 0) inFlightPerUser.delete(source.userId);
-      else inFlightPerUser.set(source.userId, next);
+    if (claimedUserId) {
+      const next = (inFlightPerUser.get(claimedUserId) ?? 1) - 1;
+      if (next <= 0) inFlightPerUser.delete(claimedUserId);
+      else inFlightPerUser.set(claimedUserId, next);
     }
   }
 }

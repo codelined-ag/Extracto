@@ -24,7 +24,7 @@ vi.mock("@/lib/auth/request", () => ({
 
 vi.mock("@/lib/db", () => ({
   db: {
-    ocrJob: { findFirst: vi.fn(), update: vi.fn() },
+    ocrJob: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
   },
 }));
 
@@ -36,7 +36,7 @@ import { db } from "@/lib/db";
 import { GET, PATCH } from "@/app/api/jobs/[id]/pages/[pageNumber]/route";
 
 const mockedFind = db.ocrJob.findFirst as ReturnType<typeof vi.fn>;
-const mockedUpdate = db.ocrJob.update as ReturnType<typeof vi.fn>;
+const mockedUpdate = db.ocrJob.updateMany as ReturnType<typeof vi.fn>;
 
 const makeReq = (init?: RequestInit) =>
   new Request("http://localhost/api/jobs/j1/pages/2", {
@@ -46,7 +46,7 @@ const makeReq = (init?: RequestInit) =>
 
 beforeEach(() => {
   mockedFind.mockReset();
-  mockedUpdate.mockReset();
+  mockedUpdate.mockReset().mockResolvedValue({ count: 1 });
 });
 afterEach(() => vi.clearAllMocks());
 
