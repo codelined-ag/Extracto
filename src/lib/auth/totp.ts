@@ -5,6 +5,23 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { AuthUser } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { decryptAtRest, encryptAtRest, isEncryptedAtRest } from "@/lib/auth/secret-at-rest";
+
+const TOTP_DOMAIN = "totp";
+
+export function encryptTotpSecret(secret: string): string {
+  return encryptAtRest(secret, TOTP_DOMAIN);
+}
+
+function decryptStoredTotpSecret(stored: string | null | undefined): string | null {
+  if (!stored) return null;
+  if (!isEncryptedAtRest(stored)) return stored;
+  try {
+    return decryptAtRest(stored, TOTP_DOMAIN);
+  } catch {
+    return null;
+  }
+}
 
 const ISSUER = "Extracto";
 const RECOVERY_CODE_COUNT = 10;
@@ -35,6 +52,12 @@ export async function generateTotpEnrollment(user: Pick<AuthUser, "email">): Pro
   const qrPngDataUrl = await QRCode.toDataURL(otpauthUrl, { margin: 1, scale: 6 });
   const recoveryCodes = Array.from({ length: RECOVERY_CODE_COUNT }, () => generateRecoveryCode());
   return { secret, otpauthUrl, qrPngDataUrl, recoveryCodes };
+}
+
+export function verifyStoredTotpCode(storedSecret: string, token: string): boolean {
+  const plaintext = decryptStoredTotpSecret(storedSecret);
+  if (!plaintext) return false;
+  return verifyTotpCode(plaintext, token);
 }
 
 export function verifyTotpCode(secret: string, token: string): boolean {
@@ -105,12 +128,17 @@ export async function consumeRecoveryCode(userId: string, supplied: string): Pro
   const next = records.map((record, idx) =>
     idx === matchedIndex ? { ...record, used: true } : record,
   );
-  await db.authUser.update({
-    where: { id: userId },
+  const before = (user?.totpRecoveryCodesHash ?? null) as unknown;
+  const updated = await db.authUser.updateMany({
+    where: {
+      id: userId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      totpRecoveryCodesHash: before as any,
+    },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: { totpRecoveryCodesHash: next as any },
   });
-  return true;
+  return updated.count === 1;
 }
 
 export async function verifyTotpForUser(
@@ -122,7 +150,14 @@ export async function verifyTotpForUser(
     select: { totpSecret: true, totpEnabled: true },
   });
   if (!user || !user.totpEnabled || !user.totpSecret) return null;
-  if (verifyTotpCode(user.totpSecret, supplied)) return "totp";
+  const secret = decryptStoredTotpSecret(user.totpSecret);
+  if (!secret) return null;
+  if (!isEncryptedAtRest(user.totpSecret)) {
+    await db.authUser
+      .update({ where: { id: userId }, data: { totpSecret: encryptTotpSecret(secret) } })
+      .catch(() => undefined);
+  }
+  if (verifyTotpCode(secret, supplied)) return "totp";
   if (await consumeRecoveryCode(userId, supplied)) return "recovery";
   return null;
 }

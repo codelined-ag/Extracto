@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError, parseJsonBody } from "@/lib/api-error";
 import { withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
-import { generateTotpEnrollment, hashRecoveryCodes } from "@/lib/auth/totp";
+import { encryptTotpSecret, generateTotpEnrollment, hashRecoveryCodes } from "@/lib/auth/totp";
 
 interface SetupBody extends Record<string, unknown> {
   force?: unknown;
@@ -40,7 +40,7 @@ export const POST = withMutationAuth("settings:write", async (request: NextReque
     await db.authUser.update({
       where: { id: user.id },
       data: {
-        totpSecret: enrollment.secret,
+        totpSecret: encryptTotpSecret(enrollment.secret),
         totpEnabled: false,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         totpRecoveryCodesHash: recoveryRecords as any,
