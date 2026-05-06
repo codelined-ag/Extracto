@@ -110,8 +110,9 @@ export function FolderPickerDialog({ open, onOpenChange, provider, initialPath, 
 
   const enterFolder = (entry: CloudEntry) => {
     if (entry.kind !== "folder") return;
-    setCrumbs((prev) => [...prev, { id: entry.id, name: entry.name }]);
-    void fetchFolder(entry.id);
+    const navId = provider === "dropbox" ? (entry.path ?? entry.id) : entry.id;
+    setCrumbs((prev) => [...prev, { id: navId, name: entry.name }]);
+    void fetchFolder(navId);
   };
 
   const goToCrumb = (index: number) => {

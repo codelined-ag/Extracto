@@ -5,9 +5,11 @@ import { pollSource } from "@/lib/integrations/watcher";
 const SUPPORTED_EXTS = [".pdf", ".png", ".jpg", ".jpeg", ".webp"];
 const RESTART_DELAY_MS = 30_000;
 const REFRESH_INTERVAL_MS = 60_000;
+const MAX_WORKERS_PER_USER = 25;
 
 interface LongpollWorker {
   sourceId: string;
+  folderPath: string;
   cursor: string | null;
   cancelled: boolean;
 }
@@ -28,7 +30,7 @@ async function workerLoop(worker: LongpollWorker, source: { userId: string; fold
         worker.cursor = seed.cursor;
         const seedHasSupported = seed.entries.some((e) => e[".tag"] === "file" && isSupported(e.name));
         if (seedHasSupported) {
-          await pollSource(worker.sourceId).catch((err) =>
+          void pollSource(worker.sourceId).catch((err) =>
             console.error(`[dropbox-longpoll] seed poll failed for ${worker.sourceId}:`, err),
           );
         }
@@ -46,7 +48,7 @@ async function workerLoop(worker: LongpollWorker, source: { userId: string; fold
       worker.cursor = cursor;
       const hasSupportedFile = newEntries.some((e) => e.kind === "file" && isSupported(e.name));
       if (hasSupportedFile) {
-        await pollSource(worker.sourceId).catch((err) =>
+        void pollSource(worker.sourceId).catch((err) =>
           console.error(`[dropbox-longpoll] poll triggered by longpoll failed for ${worker.sourceId}:`, err),
         );
       }
@@ -65,16 +67,28 @@ export async function refreshLongpollWorkers(): Promise<void> {
     where: { provider: "dropbox", active: true },
     select: { id: true, userId: true, folderPath: true },
   });
-  const liveIds = new Set(sources.map((s) => s.id));
+  const liveById = new Map(sources.map((s) => [s.id, s] as const));
   for (const [id, worker] of workers) {
-    if (!liveIds.has(id)) {
+    const live = liveById.get(id);
+    if (!live || live.folderPath !== worker.folderPath) {
       worker.cancelled = true;
       workers.delete(id);
     }
   }
+  const perUserCount = new Map<string, number>();
+  for (const w of workers.values()) {
+    const live = liveById.get(w.sourceId);
+    if (live) perUserCount.set(live.userId, (perUserCount.get(live.userId) ?? 0) + 1);
+  }
   for (const source of sources) {
     if (workers.has(source.id)) continue;
-    const worker: LongpollWorker = { sourceId: source.id, cursor: null, cancelled: false };
+    const used = perUserCount.get(source.userId) ?? 0;
+    if (used >= MAX_WORKERS_PER_USER) {
+      console.warn(`[dropbox-longpoll] user ${source.userId} hit ${MAX_WORKERS_PER_USER} worker cap, skipping ${source.id}`);
+      continue;
+    }
+    perUserCount.set(source.userId, used + 1);
+    const worker: LongpollWorker = { sourceId: source.id, folderPath: source.folderPath, cursor: null, cancelled: false };
     workers.set(source.id, worker);
     void workerLoop(worker, source).catch((err) => {
       console.error(`[dropbox-longpoll] worker ${source.id} crashed:`, err);

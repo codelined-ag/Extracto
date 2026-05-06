@@ -66,7 +66,8 @@ export async function listCloudFolder(
     const entries = await listGoogleDriveFolder(userId, path || "root");
     return entries.map(mapGoogleDrive);
   }
-  const entries = await listOneDriveFolder(userId, path);
+  const onedrivePath = path === "root" ? "" : path;
+  const entries = await listOneDriveFolder(userId, onedrivePath);
   return entries.map(mapOneDrive);
 }
 

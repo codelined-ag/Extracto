@@ -155,14 +155,19 @@ export interface DriveEntry {
   modifiedTime?: string;
 }
 
+const DRIVE_FOLDER_ID_RE = /^[A-Za-z0-9_-]{10,}$|^root$/;
+
 export async function listGoogleDriveFolder(
   userId: string,
   folderId: string,
 ): Promise<DriveEntry[]> {
   const accessToken = await getValidAccessToken(userId);
   const target = folderId.trim() || "root";
+  if (!DRIVE_FOLDER_ID_RE.test(target)) {
+    throw new Error("Invalid Google Drive folder id");
+  }
   const params = new URLSearchParams({
-    q: `'${target.replace(/'/g, "\\'")}' in parents and trashed = false`,
+    q: `'${target}' in parents and trashed = false`,
     fields: "files(id, name, mimeType, parents, size, modifiedTime)",
     pageSize: "100",
     spaces: "drive",
