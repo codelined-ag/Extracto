@@ -95,6 +95,75 @@ async function fetchAccountLabel(accessToken: string): Promise<string> {
   return json.name?.display_name || json.email || "Dropbox";
 }
 
+export interface DropboxFolderCursor {
+  cursor: string;
+  newEntries: import("@/lib/integrations/dispatch").CloudEntry[];
+}
+
+interface DropboxRawEntry {
+  ".tag": "file" | "folder";
+  id: string;
+  name: string;
+  path_display?: string;
+  path_lower?: string;
+  size?: number;
+  server_modified?: string;
+  client_modified?: string;
+}
+
+function mapRawEntry(e: DropboxRawEntry): import("@/lib/integrations/dispatch").CloudEntry {
+  return {
+    kind: e[".tag"],
+    id: e.id,
+    name: e.name,
+    path: e.path_display ?? e.path_lower ?? "",
+    size: e.size ?? 0,
+    modified: e.server_modified ?? e.client_modified ?? null,
+  };
+}
+
+export async function getInitialDropboxCursor(userId: string, path: string): Promise<{ cursor: string; entries: DropboxRawEntry[] }> {
+  const accessToken = await getValidAccessToken(userId);
+  const res = await fetch("https://api.dropboxapi.com/2/files/list_folder", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ path, recursive: false, include_deleted: false, include_media_info: false }),
+  });
+  if (!res.ok) {
+    throw new Error(`Dropbox list_folder failed: ${res.status} ${(await res.text()).slice(0, 240)}`);
+  }
+  const json = (await res.json()) as { cursor: string; entries: DropboxRawEntry[] };
+  return { cursor: json.cursor, entries: json.entries ?? [] };
+}
+
+export async function dropboxLongpoll(cursor: string, timeoutSeconds = 30): Promise<{ changes: boolean; backoff: number | null }> {
+  const res = await fetch("https://notify.dropboxapi.com/2/files/list_folder/longpoll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cursor, timeout: Math.max(30, Math.min(480, timeoutSeconds)) }),
+    signal: AbortSignal.timeout((timeoutSeconds + 30) * 1000),
+  });
+  if (!res.ok) {
+    throw new Error(`Dropbox longpoll failed: ${res.status}`);
+  }
+  const json = (await res.json()) as { changes: boolean; backoff?: number };
+  return { changes: Boolean(json.changes), backoff: typeof json.backoff === "number" ? json.backoff : null };
+}
+
+export async function continueDropboxCursor(userId: string, cursor: string): Promise<DropboxFolderCursor> {
+  const accessToken = await getValidAccessToken(userId);
+  const res = await fetch("https://api.dropboxapi.com/2/files/list_folder/continue", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ cursor }),
+  });
+  if (!res.ok) {
+    throw new Error(`Dropbox list_folder/continue failed: ${res.status}`);
+  }
+  const json = (await res.json()) as { cursor: string; entries: DropboxRawEntry[] };
+  return { cursor: json.cursor, newEntries: (json.entries ?? []).map(mapRawEntry) };
+}
+
 export async function getValidAccessToken(userId: string): Promise<string> {
   const tokens = await loadIntegrationConnection(userId, "dropbox");
   if (!tokens) {

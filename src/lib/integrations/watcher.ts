@@ -124,7 +124,7 @@ async function ingestEntry(
   return { skipped: false };
 }
 
-async function pollSource(sourceId: string): Promise<void> {
+export async function pollSource(sourceId: string): Promise<void> {
   if (inFlight.has(sourceId)) return;
   inFlight.add(sourceId);
   try {

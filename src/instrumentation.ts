@@ -16,4 +16,7 @@ export async function register() {
   const { startWebhookRetrySweep, startWebhookRetentionSweep } = await import("@/lib/background/webhooks");
   startWebhookRetrySweep();
   startWebhookRetentionSweep();
+
+  const { startLongpollWorkers } = await import("@/lib/integrations/longpoll");
+  startLongpollWorkers();
 }
