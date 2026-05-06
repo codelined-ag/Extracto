@@ -6,6 +6,23 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-05-06
+
+Third hardening pass after a 5-agent gap audit caught second-order issues in v1.3.2 and untouched feature areas.
+
+- TOTP secrets now go through AES-256-GCM at rest with an AUTH_SECRET-derived domain key. Existing plaintext secrets auto-upgrade on first verify. The same envelope encrypts provider API keys in the on-disk settings file so a backup snapshot does not leak OpenAI/OpenRouter/Mistral keys.
+- Recovery-code consume races are closed by an updateMany guard on the JSON column. Two concurrent challenge POSTs with the same code can no longer both succeed.
+- Inline page edit PATCH uses updateMany with the prior editedAt as a precondition, so a lost-update across two tabs surfaces as 409 instead of silently overwriting.
+- Email-change PATCH no longer returns the manual confirmation URL when SMTP is unconfigured. Operators see the link in the server log; users see instructions to recover it.
+- E2E key PUT enforces a 16KB cap on Content-Length and the parsed PEM string.
+- WebhookDelivery prune flips pending rows older than 2 × retention to exhausted with body cleared so a stuck row cannot pin job-result megabytes.
+- Settings cache is now LRU-capped at 500 entries.
+- Folder picker pushes Dropbox entry.path on navigation (was sending the entry id, which 404'd) and Google Drive folder ids are validated against /^[A-Za-z0-9_-]{10,}$|^root$/ before interpolation into the search query.
+- OneDrive watchers created before v1.3.2 with folderPath="root" now resolve correctly to AppFolder root.
+- Dropbox longpoll workers track folderPath and recreate when the user edits the source. pollSource is fire-and-forget so a stuck OCR submission does not pin the worker. Per-user cap of 25 workers.
+- S3 watcher's per-user in-flight counter no longer leaks when the userId lookup in finally throws.
+- SKILL.md has a new operator-only env section for CLOUD_PUSH_ENABLED, WEBHOOK_DELIVERY_RETENTION_DAYS, RETAIN_JOBS_DAYS, LOCAL_WATCH_ROOT, WEBHOOK_ALLOWED_HOSTS, OLLAMA_HOST_FALLBACKS, TRUSTED_PROXY_HEADERS. Compare-diff section is rewritten for the all-pairs contract. Watcher ingestedCount is now in both the SKILL field list and the MCP watchers_list description.
+
 ## [1.3.2] - 2026-05-06
 
 Second hardening pass closing the v1.3.1 nice-to-haves.
