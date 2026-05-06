@@ -858,7 +858,7 @@ server.tool(
 
 server.tool(
   "watchers_list",
-  "List the user's cloud watched folders (Dropbox / Google Drive / OneDrive). Each entry surfaces provider, name, folderPath, model, intervalSeconds, active, lastPolledAt, lastError.",
+  "List the user's cloud watched folders (Dropbox / Google Drive / OneDrive). Each entry surfaces provider, name, folderPath, model, intervalSeconds, active, lastPolledAt, lastError, ingestedCount.",
   {},
   async () => asTextResult(await call("/api/v1/integrations/watchers")),
 );

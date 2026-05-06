@@ -85,7 +85,7 @@ extracto compare run --file ./invoice.pdf --models "mistral-ocr-latest,openai/gp
 extracto compare get <comparison-id>
 ```
 
-`extracto compare run` calls `POST /api/v1/ocr/compare` with the file + 2 to 4 model ids. Returns a `comparisonId` plus the per-model `jobId`s. `extracto compare get` returns each model's job (status, extractedText, processingMs, error if any) and a server-computed word-level diff between the first model's output (baseline) and each other completed job. Diffs are an array of `{ op: "equal"|"insert"|"delete", text }` segments plus a summary `{ equalChars, insertedChars, deletedChars, similarity }`.
+`extracto compare run` calls `POST /api/v1/ocr/compare` with the file + 2 to 4 model ids. Returns a `comparisonId` plus the per-model `jobId`s. `extracto compare get` returns each model's job (status, extractedText, processingMs, error if any) and a server-computed all-pairs diff: one entry per unordered job pair (N(N-1)/2 entries for N models), each with `{ baselineJobId, candidateJobId, segments, summary, truncated? }`. Segments are `{ op: "equal"|"insert"|"delete", text }`; summary is `{ equalChars, insertedChars, deletedChars, similarity }`. The browser dialog lets you click any model to make it the baseline; the reverse-direction lookup flips insert/delete from the cached pair.
 
 ### Get model recommendations from your own history
 
@@ -314,7 +314,7 @@ extracto integrations watchers resume <id>
 extracto integrations watchers delete <id>
 ```
 
-REST: `GET/POST /api/v1/integrations/watchers`, `PATCH/DELETE /api/v1/integrations/watchers/{id}`. MCP: `watchers_list`, `watchers_create`, `watchers_update`, `watchers_delete`, plus `integrations_status`. Sweep cadence is global (30 s); each watcher only polls when its own `intervalSeconds` has elapsed since `lastPolledAt`. Five consecutive list failures auto-pause the watcher and surface `lastError`. The `local` provider sandboxes each user under `LOCAL_WATCH_ROOT/<userId>/` (defaults to `<DATABASE_URL_DIR>/local-watch`); `..` and absolute paths are rejected.
+REST: `GET/POST /api/v1/integrations/watchers`, `PATCH/DELETE /api/v1/integrations/watchers/{id}`. MCP: `watchers_list`, `watchers_create`, `watchers_update`, `watchers_delete`, plus `integrations_status`. Each watcher entry surfaces `provider`, `name`, `folderPath`, `model`, `intervalSeconds`, `active`, `lastPolledAt`, `lastError`, and `ingestedCount` (number of files this source has ingested). Sweep cadence is global (30 s); each watcher only polls when its own `intervalSeconds` has elapsed since `lastPolledAt`. Five consecutive list failures auto-pause the watcher and surface `lastError`. The `local` provider sandboxes each user under `LOCAL_WATCH_ROOT/<userId>/` (defaults to `<DATABASE_URL_DIR>/local-watch`); `..` and absolute paths are rejected.
 
 ### Personal OAuth credentials
 
@@ -354,6 +354,18 @@ extracto onedrive disconnect
 ```
 
 REST: `DELETE /api/v1/integrations/{dropbox|google_drive|onedrive}`. MCP: `integration_disconnect`. Best-effort revokes the OAuth token at the provider before deleting the local row; OneDrive has no per-token revoke API so the token expires by inactivity (~90 days).
+
+## Operator-only env flags
+
+These flags are read at server boot from `docker.env` (or the host process env). They have no REST/MCP/CLI surface.
+
+- `CLOUD_PUSH_ENABLED=1` — opt in to per-source Dropbox longpoll workers. Each active dropbox watcher seeds a cursor, longpolls `notify.dropboxapi.com`, and triggers an immediate poll on change. Off by default; the standard 30-second poll keeps working.
+- `WEBHOOK_DELIVERY_RETENTION_DAYS=30` — how long delivered or exhausted `WebhookDelivery` rows are kept before pruning. Pending rows older than 2 × this value get flipped to exhausted with body cleared. Defaults to 30, capped at 3650.
+- `RETAIN_JOBS_DAYS` — daily sweeper deletes `OcrJob` rows older than this. Unset or 0 disables.
+- `LOCAL_WATCH_ROOT` — root for local-provider watchers. Defaults to `<DATABASE_URL_DIR>/local-watch`. Each user is sandboxed under `<root>/<userId>/`.
+- `WEBHOOK_ALLOWED_HOSTS` — comma-separated allowlist for outbound webhook delivery URLs (advisory layer on top of the SSRF guard).
+- `OLLAMA_HOST_FALLBACKS` — comma-separated additional candidates tried when the configured Ollama URL fails. See CLAUDE.md for the full network-mode story.
+- `TRUSTED_PROXY_HEADERS=1` — trust `X-Forwarded-For` for client IP detection. Only set this when the server is actually behind a reverse proxy you control.
 
 ## Lifecycle commands (no token required)
 

@@ -79,12 +79,14 @@ export const PATCH = withMutationAuth("settings:write", async (request: NextRequ
       });
       mailDelivered = send.delivered;
     }
+    if (!mailDelivered) {
+      console.warn(`[email-change] SMTP not configured; manual confirm URL for user ${user.id} (${newEmail}): ${link}`);
+    }
 
     return NextResponse.json({
       pendingEmail: newEmail,
       expiresAt: expiresAt.toISOString(),
       mailDelivered,
-      ...(mailDelivered ? {} : { confirmUrl: link }),
     });
   } catch (error) {
     return handleApiError(error);

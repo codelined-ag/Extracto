@@ -116,14 +116,14 @@ export function EmailChangeSection({ t }: { t: Translator }) {
               {t("SMTP non configurato sul server.", "SMTP isn't configured on this server.", "SMTP non configuré sur ce serveur.", "SMTP no configurado en este servidor.", "SMTP ist auf diesem Server nicht konfiguriert.")}
             </p>
             <p>
-              {t("Apri questo link per finalizzare manualmente:", "Open this link to finalize manually:", "Ouvre ce lien pour finaliser manuellement :", "Abre este enlace para finalizar manualmente:", "Öffne diesen Link, um manuell abzuschließen:")}
+              {t(
+                "Chiedi all'operatore di configurare SMTP, oppure contatta il proprietario del nuovo indirizzo per recuperare il link di conferma dai log del server.",
+                "Ask the operator to configure SMTP, or contact the owner of the new address — the confirmation link is logged on the server.",
+                "Demande à l'opérateur de configurer SMTP, ou demande au propriétaire de la nouvelle adresse de récupérer le lien dans les logs du serveur.",
+                "Pídele al operador que configure SMTP o que el propietario de la nueva dirección recupere el enlace en los registros del servidor.",
+                "Bitte den Operator, SMTP zu konfigurieren, oder lass den Inhaber der neuen Adresse den Link aus den Server-Logs abrufen.",
+              )}
             </p>
-            <a
-              href={result.confirmUrl}
-              className="font-mono text-[11px] break-all text-primary hover:underline"
-            >
-              {result.confirmUrl}
-            </a>
           </div>
         )}
         <Button variant="outline" size="sm" onClick={() => { setResult(null); setNewEmail(""); }}>
