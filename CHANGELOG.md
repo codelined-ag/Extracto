@@ -6,6 +6,17 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-05-06
+
+Second hardening pass closing the v1.3.1 nice-to-haves.
+
+- E2E key registration refuses non-RSA SPKI keys and any RSA modulus under 2048 bits, with a fallback path for runtimes that hide modulusLength on KeyObject. Error messages are scrubbed so OpenSSL strings do not leak.
+- WebhookDelivery rows in delivered or exhausted state prune every six hours after WEBHOOK_DELIVERY_RETENTION_DAYS (defaults to 30). Pending rows are never touched so the retry queue stays intact.
+- Watcher cards show ingested count and last-checked timestamp so a healthy watcher visibly produces work even when lastError is null.
+- Compare picker hides models from non-configured providers; the diff is now precomputed for every i<j pair and any model header can be clicked to make it the baseline. Reverse-direction lookups flip insert/delete and inserted/deleted counts.
+- New folder picker dialog browses Dropbox / Google Drive / OneDrive folders with breadcrumb navigation. OneDrive AppFolder root resolves correctly when the dispatch sees an empty path.
+- Dropbox longpoll worker (CLOUD_PUSH_ENABLED=1) cuts change-latency to seconds. Drive and OneDrive subscriptions defer until a deployment story for publicly reachable callback URLs is ready.
+
 ## [1.3.1] - 2026-05-06
 
 Hardening pass over the v1.3.0 surface after a 5-agent gap audit.
