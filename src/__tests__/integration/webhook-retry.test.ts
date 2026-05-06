@@ -8,6 +8,7 @@ vi.mock("@/lib/db", () => ({
       update: vi.fn().mockResolvedValue({}),
       create: vi.fn().mockResolvedValue({}),
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
   },
 }));

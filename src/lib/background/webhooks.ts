@@ -527,15 +527,24 @@ export function startWebhookRetrySweep(): void {
   }, RETRY_SWEEP_MS).unref?.();
 }
 
-export async function pruneOldWebhookDeliveries(now: Date = new Date()): Promise<{ deleted: number }> {
-  const cutoff = new Date(now.getTime() - getDeliveryRetentionDays() * 24 * 60 * 60 * 1000);
+export async function pruneOldWebhookDeliveries(now: Date = new Date()): Promise<{ deleted: number; pendingExhausted: number }> {
+  const days = getDeliveryRetentionDays();
+  const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   const result = await db.webhookDelivery.deleteMany({
     where: {
       attemptedAt: { lt: cutoff },
       status: { in: ["delivered", "exhausted"] },
     },
   });
-  return { deleted: result.count };
+  const pendingCutoff = new Date(now.getTime() - days * 2 * 24 * 60 * 60 * 1000);
+  const stale = await db.webhookDelivery.updateMany({
+    where: {
+      status: "pending",
+      attemptedAt: { lt: pendingCutoff },
+    },
+    data: { status: "exhausted", nextRetryAt: null, body: null },
+  });
+  return { deleted: result.count, pendingExhausted: stale.count };
 }
 
 export function startWebhookRetentionSweep(): void {

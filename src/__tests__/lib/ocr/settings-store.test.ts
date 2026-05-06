@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
+process.env.AUTH_SECRET = process.env.AUTH_SECRET ?? "0".repeat(48);
+
 // ---------------------------------------------------------------------------
 // Module-level mocks — must be declared before any imports that use the mocked
 // modules, because vi.mock() is hoisted to the top of the file by Vitest.
@@ -311,7 +313,12 @@ describe("saveApiSettings", () => {
 
     expect(mockedWriteFile).toHaveBeenCalledWith(
       expect.stringMatching(/api-settings[/\\]user-private-mode-test-1\.json$/),
-      expect.stringContaining("sk-secret"),
+      expect.not.stringContaining("sk-secret"),
+      { encoding: "utf8", mode: 0o600 },
+    );
+    expect(mockedWriteFile).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringContaining('"apiKey": "v1:'),
       { encoding: "utf8", mode: 0o600 },
     );
     expect(mockedChmod).toHaveBeenCalledWith(expect.stringMatching(/api-settings$/), 0o700);

@@ -20,13 +20,22 @@ export const GET = withAuth("ocr:read", async (_request: NextRequest, { auth }) 
   });
 });
 
+const MAX_PEM_BYTES = 16_000;
+
 export const PUT = withSessionAuth("mutation", "E2E key", async (request: NextRequest, { auth }) => {
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > MAX_PEM_BYTES) {
+    throw new ApiRouteError(`publicKeyPem payload exceeds ${MAX_PEM_BYTES} bytes`, 413);
+  }
   const raw = await request.json().catch(() => null);
   if (!raw || typeof raw !== "object") {
     throw new ApiRouteError("Invalid JSON payload", 400);
   }
   const body = raw as Record<string, unknown>;
   const pem = typeof body.publicKeyPem === "string" ? body.publicKeyPem.trim() : "";
+  if (pem.length > MAX_PEM_BYTES) {
+    throw new ApiRouteError(`publicKeyPem must be at most ${MAX_PEM_BYTES} characters`, 413);
+  }
   if (!pem.startsWith("-----BEGIN PUBLIC KEY-----")) {
     throw new ApiRouteError("publicKeyPem must be an SPKI PEM-encoded RSA public key", 400);
   }

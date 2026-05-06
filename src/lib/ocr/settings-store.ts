@@ -2,7 +2,20 @@ import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { type ApiProviderSettings, type ClientApiSettings, type ProviderKind, normalizeProvider } from "@/lib/api-types";
+import { decryptAtRest, encryptAtRest, isEncryptedAtRest } from "@/lib/auth/secret-at-rest";
 import { enforceProviderEndpointPolicy } from "@/lib/ocr/endpoint-policy";
+
+const API_KEY_DOMAIN = "provider-api-key";
+
+function decryptStoredApiKey(stored: string): string {
+  if (!stored) return "";
+  if (!isEncryptedAtRest(stored)) return stored;
+  try {
+    return decryptAtRest(stored, API_KEY_DOMAIN);
+  } catch {
+    return "";
+  }
+}
 import {
   getFallbackOllamaHost,
   normalizeHostEndpoint,
@@ -88,7 +101,28 @@ function getDefaultApiSettings(): ApiProviderSettings {
 }
 
 function getSettingsDir(): string { return path.join(getDataRoot(), "api-settings"); }
+
+const SETTINGS_CACHE_MAX = 500;
 const settingsCache = new Map<string, ApiProviderSettings>();
+
+function cachePut(key: string, value: ApiProviderSettings): void {
+  if (settingsCache.has(key)) settingsCache.delete(key);
+  settingsCache.set(key, value);
+  while (settingsCache.size > SETTINGS_CACHE_MAX) {
+    const oldest = settingsCache.keys().next().value;
+    if (typeof oldest !== "string") break;
+    settingsCache.delete(oldest);
+  }
+}
+
+function cacheGet(key: string): ApiProviderSettings | undefined {
+  const v = settingsCache.get(key);
+  if (!v) return undefined;
+  settingsCache.delete(key);
+  settingsCache.set(key, v);
+  return v;
+}
+
 const PRIVATE_DIR_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
 
@@ -127,7 +161,7 @@ export function toClientApiSettings(settings: ApiProviderSettings): ClientApiSet
 
 export async function getApiSettings(userId: string): Promise<ApiProviderSettings> {
   const safeUserId = sanitizeUserId(userId);
-  const cached = settingsCache.get(safeUserId);
+  const cached = cacheGet(safeUserId);
   if (cached) {
     return { ...cached };
   }
@@ -145,8 +179,12 @@ export async function getApiSettings(userId: string): Promise<ApiProviderSetting
       // Falls back to defaults intentionally — policy violations and unknown providers are
       // self-healing for forward-compatibility. Corrupt JSON (above) throws so operators
       // notice file-level problems; invalid-but-parseable settings degrade silently.
-      const normalized = normalizeSettings(parsed as Partial<ApiProviderSettings>);
-      settingsCache.set(safeUserId, normalized);
+      const draft = parsed as Partial<ApiProviderSettings> & { apiKey?: string };
+      if (typeof draft.apiKey === "string") {
+        draft.apiKey = decryptStoredApiKey(draft.apiKey);
+      }
+      const normalized = normalizeSettings(draft);
+      cachePut(safeUserId, normalized);
       return { ...normalized };
     } catch (normalizeErr) {
       console.error(`[settings-store] Settings invalid for user ${safeUserId}, resetting to defaults:`, normalizeErr);
@@ -158,7 +196,7 @@ export async function getApiSettings(userId: string): Promise<ApiProviderSetting
     }
   }
   const normalized = normalizeSettings(getDefaultApiSettings());
-  settingsCache.set(safeUserId, normalized);
+  cachePut(safeUserId, normalized);
   return { ...normalized };
 }
 
@@ -183,12 +221,16 @@ export async function saveApiSettings(
   });
   const settingsPath = getSettingsPath(safeUserId);
   await ensureSettingsDirectory();
-  await writeFile(settingsPath, JSON.stringify(normalized, null, 2), {
+  const onDisk = {
+    ...normalized,
+    apiKey: normalized.apiKey ? encryptAtRest(normalized.apiKey, API_KEY_DOMAIN) : "",
+  };
+  await writeFile(settingsPath, JSON.stringify(onDisk, null, 2), {
     encoding: "utf8",
     mode: PRIVATE_FILE_MODE,
   });
   await chmod(settingsPath, PRIVATE_FILE_MODE);
-  settingsCache.set(safeUserId, normalized);
+  cachePut(safeUserId, normalized);
   return { ...normalized };
 }
 
