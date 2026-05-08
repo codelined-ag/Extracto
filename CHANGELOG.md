@@ -6,6 +6,30 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-05-08
+
+Closes the v1.3.4 hardening audit (High + Medium + Low blocks) plus small v1.4.0 deferred items in one cut. Integrations UX overhaul block and the larger v1.4.0 carry-overs (S3 watcher streaming, FTS5, server-side image preprocessing, KB store provider-aware retry) roll forward to v1.4.1.
+
+- PII redaction now runs at every per-page DB write site, not only at finalize. Per-page records, structured pages, and progress checkpoints no longer hold raw text in OcrJob.metadata while a job is running.
+- Push-subscribe blocks SSRF via a default allowlist (FCM, Mozilla, Apple, Microsoft) overridable through PUSH_ALLOWED_HOSTS. The dispatcher revalidates so existing rows cannot bypass.
+- Webhook signing secret and S3 secretAccessKey are AES-GCM at rest, keyed off AUTH_SECRET, with a backwards-compatible read for existing plaintext rows.
+- Watcher PATCH/DELETE use updateMany/deleteMany scoped on (id, userId) so the WHERE clause enforces ownership atomically.
+- OAuth refresh per (userId, provider) is serialized through an in-process mutex; refresh fetches gain a 15s timeout so a hung upstream cannot wedge concurrent callers.
+- Render errors land in app/error.tsx and app/global-error.tsx fallbacks instead of blanking the workspace.
+- Login and signup run a dummy scrypt on the unknown-email and collision branches to blunt the user-enum side channel.
+- Email change bumps passwordChangedAt so old session tokens fail the pv check. Tokens without a pv claim are no longer grandfathered.
+- Boot-time and 5-minute sweep flips orphaned PROCESSING jobs older than OCR_ORPHAN_JOB_STALE_MS to FAILED with a resubmit message.
+- Webhook delivery body is nulled when status flips to exhausted, not only on delivered.
+- POST /api/v1/webhooks/{id}/rotate-secret and POST /api/v1/keys/{id}/rotate rotate the secret in place; both surface in MCP and the CLI.
+- Webhook test endpoint is per-user rate-limited.
+- MCP gains presets_create, presets_delete, keys_list/create/delete/rotate, metrics_get, webhooks_rotate_secret. ocr_submit settings schema gets piiRedaction. ocr_comparison_get description is corrected to all-pairs.
+- SKILL.md operator-env section is rewritten with the full set of allowlist, lifecycle, auth, search, KB, push, and SMTP flags, plus the OAuth ENV-credentials path.
+- Drag-and-drop applies the same accept filter as the file picker and toasts on rejected items. Settings PUT debounce uses an AbortController. Post-processing model effect preserves a freshly typed selection. OAuth state cookie is namespaced per provider.
+- OAuth state callback compare uses timingSafeEqual. 2FA challenge token carries a single-use jti consumed for its 5m TTL on success. e2e/key PUT enforces the body cap on the raw text, not only Content-Length.
+- Mistral provider retries the next endpoint candidate on network errors and surfaces empty-allowlist failures with a clear message. parsePreviewImageData rejects mime types outside image/* and application/pdf. S3 module-import error expires after five minutes so a transient failure does not disable the result store for the rest of the process.
+- Resumed-page text and persisted pageRecord text are capped at safe limits. PWA service worker calls registration.update() on visibility change. Camera-capture toast deduplicates by errorMessage. Auth page renders a small loading state instead of flashing empty. removeFile computes remaining inside the setFiles callback so selection updates do not read stale state.
+- Compare-polling setTimeout handle is cleared on unmount. OCR, webhook-test, and S3 rate-limit IP keys can be salted via OCR_RATE_LIMIT_IP_SALT for operators behind nested proxies, NATs, or carrier gateways.
+
 ## [1.3.3] - 2026-05-06
 
 Third hardening pass after a 5-agent gap audit caught second-order issues in v1.3.2 and untouched feature areas.
