@@ -457,7 +457,7 @@ async function attemptWebhookDelivery({ webhook, event, body, timestamp, deliver
       status,
       nextRetryAt,
       attemptedAt: new Date(),
-      ...(status !== "delivered" ? { body } : { body: null }),
+      ...(status === "pending" ? { body } : { body: null }),
     };
     if (deliveryId) {
       await db.webhookDelivery
