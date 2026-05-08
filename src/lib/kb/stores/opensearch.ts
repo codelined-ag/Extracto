@@ -1,6 +1,6 @@
 import type { Chunk, VectorStoreAdapter } from "@/lib/kb/types";
 import { VectorStoreError } from "@/lib/kb/stores/error";
-import { fetchWithTimeout } from "@/lib/kb/stores/fetch-with-timeout";
+import { fetchWithRetry } from "@/lib/kb/stores/fetch-with-timeout";
 
 export interface OpenSearchAdapterConfig {
   baseUrl: string;
@@ -52,7 +52,7 @@ export class OpenSearchAdapter implements VectorStoreAdapter {
     const body = lines.join("\n") + "\n";
     const headers: Record<string, string> = { "Content-Type": "application/x-ndjson", Accept: "application/json" };
     this.applyAuth(headers);
-    const resp = await fetchWithTimeout(this.fetchImpl, `${this.base}/_bulk`, {
+    const resp = await fetchWithRetry(this.fetchImpl, `${this.base}/_bulk`, {
       method: "POST",
       headers,
       body,
@@ -108,7 +108,7 @@ export class OpenSearchAdapter implements VectorStoreAdapter {
     const headers: Record<string, string> = { Accept: "application/json" };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     this.applyAuth(headers);
-    return fetchWithTimeout(this.fetchImpl, `${this.base}${path}`, {
+    return fetchWithRetry(this.fetchImpl, `${this.base}${path}`, {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,

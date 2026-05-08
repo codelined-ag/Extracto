@@ -1,6 +1,6 @@
 import type { Chunk, VectorStoreAdapter } from "@/lib/kb/types";
 import { VectorStoreError } from "@/lib/kb/stores/error";
-import { fetchWithTimeout } from "@/lib/kb/stores/fetch-with-timeout";
+import { fetchWithRetry } from "@/lib/kb/stores/fetch-with-timeout";
 
 export interface PineconeAdapterConfig {
   /** The per-index host URL (https://INDEX-PROJ.svc.REGION.pinecone.io). */
@@ -55,7 +55,7 @@ export class PineconeAdapter implements VectorStoreAdapter {
   }
 
   private async req(path: string, body: unknown): Promise<Response> {
-    return fetchWithTimeout(this.fetchImpl, `${this.base}${path}`, {
+    return fetchWithRetry(this.fetchImpl, `${this.base}${path}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

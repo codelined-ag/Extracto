@@ -1,6 +1,6 @@
 import type { Chunk, VectorStoreAdapter } from "@/lib/kb/types";
 import { VectorStoreError } from "@/lib/kb/stores/error";
-import { fetchWithTimeout } from "@/lib/kb/stores/fetch-with-timeout";
+import { fetchWithRetry } from "@/lib/kb/stores/fetch-with-timeout";
 
 export interface MilvusAdapterConfig {
   baseUrl: string;
@@ -78,7 +78,7 @@ export class MilvusAdapter implements VectorStoreAdapter {
     };
     if (this.config.apiKey) headers.Authorization = `Bearer ${this.config.apiKey}`;
     if (this.config.dbName) headers.dbName = this.config.dbName;
-    return fetchWithTimeout(this.fetchImpl, `${this.base}${path}`, {
+    return fetchWithRetry(this.fetchImpl, `${this.base}${path}`, {
       method: "POST",
       headers,
       body: JSON.stringify(body),

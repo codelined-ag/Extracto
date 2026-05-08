@@ -1,6 +1,6 @@
 import type { Chunk, VectorStoreAdapter } from "@/lib/kb/types";
 import { VectorStoreError } from "@/lib/kb/stores/error";
-import { fetchWithTimeout } from "@/lib/kb/stores/fetch-with-timeout";
+import { fetchWithRetry } from "@/lib/kb/stores/fetch-with-timeout";
 
 export interface QdrantAdapterConfig {
   baseUrl: string;
@@ -78,7 +78,7 @@ export class QdrantAdapter implements VectorStoreAdapter {
     const headers: Record<string, string> = { Accept: "application/json" };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     if (this.config.apiKey) headers["api-key"] = this.config.apiKey;
-    return fetchWithTimeout(this.fetchImpl, `${this.base}${path}`, {
+    return fetchWithRetry(this.fetchImpl, `${this.base}${path}`, {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,

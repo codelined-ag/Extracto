@@ -1,6 +1,6 @@
 import type { Chunk, VectorStoreAdapter } from "@/lib/kb/types";
 import { VectorStoreError } from "@/lib/kb/stores/error";
-import { fetchWithTimeout } from "@/lib/kb/stores/fetch-with-timeout";
+import { fetchWithRetry } from "@/lib/kb/stores/fetch-with-timeout";
 
 export interface TypesenseAdapterConfig {
   baseUrl: string;
@@ -115,7 +115,7 @@ export class TypesenseAdapter implements VectorStoreAdapter {
       headers["Content-Type"] = contentType;
       payload = typeof body === "string" ? body : JSON.stringify(body);
     }
-    return fetchWithTimeout(this.fetchImpl, `${this.base}${path}`, { method, headers, body: payload });
+    return fetchWithRetry(this.fetchImpl, `${this.base}${path}`, { method, headers, body: payload });
   }
 
   private async parseError(resp: Response, op: string): Promise<VectorStoreError> {
