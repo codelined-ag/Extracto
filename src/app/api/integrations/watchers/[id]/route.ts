@@ -54,7 +54,14 @@ export const PATCH = withSessionAuth<{ id: string }>(
     }
 
     try {
-      const updated = await db.watchedCloudFolder.update({ where: { id }, data: update });
+      const result = await db.watchedCloudFolder.updateMany({
+        where: { id, userId: auth.userId },
+        data: update,
+      });
+      if (result.count === 0) throw new ApiRouteError("Watcher not found", 404);
+      const updated = await db.watchedCloudFolder.findFirst({
+        where: { id, userId: auth.userId },
+      });
       return NextResponse.json({ watcher: updated });
     } catch (err) {
       if ((err as { code?: string }).code === "P2002") {
@@ -70,9 +77,10 @@ export const DELETE = withSessionAuth<{ id: string }>(
   "Cloud watcher",
   async (_request: NextRequest, { params, auth }) => {
     const { id } = await params;
-    const existing = await db.watchedCloudFolder.findFirst({ where: { id, userId: auth.userId } });
-    if (!existing) throw new ApiRouteError("Watcher not found", 404);
-    await db.watchedCloudFolder.delete({ where: { id } });
+    const result = await db.watchedCloudFolder.deleteMany({
+      where: { id, userId: auth.userId },
+    });
+    if (result.count === 0) throw new ApiRouteError("Watcher not found", 404);
     return NextResponse.json({ id, removed: true });
   },
 );
