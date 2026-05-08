@@ -145,6 +145,7 @@ export function CompareDialog({
   React.useEffect(() => {
     if (!comparisonId) return;
     let cancelled = false;
+    let timerHandle: ReturnType<typeof setTimeout> | null = null;
     let delay = 2000;
     const startedAt = Date.now();
     const MAX_RUN_MS = 12 * 60 * 1000;
@@ -172,10 +173,13 @@ export function CompareDialog({
         return;
       }
       delay = Math.min(30_000, Math.round(delay * 1.4));
-      setTimeout(tick, delay);
+      timerHandle = setTimeout(tick, delay);
     };
     void tick();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (timerHandle) clearTimeout(timerHandle);
+    };
   }, [comparisonId, t, toast]);
 
   const [explicitBaselineId, setExplicitBaselineId] = React.useState<string | null>(null);

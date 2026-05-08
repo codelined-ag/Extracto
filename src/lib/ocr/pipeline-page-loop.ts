@@ -73,13 +73,21 @@ export interface PageLoopDeps {
   pauseAtCheckpoint: (stageMessage: string, eventMessage: string) => Promise<void>;
 }
 
+const PERSIST_PAGE_TEXT_CAP = 16_000;
+
+function capPageRecordText(rec: ReturnType<typeof toPageRecord>): ReturnType<typeof toPageRecord> {
+  if (rec.text.length <= PERSIST_PAGE_TEXT_CAP) return rec;
+  return { ...rec, text: rec.text.slice(0, PERSIST_PAGE_TEXT_CAP) };
+}
+
 export function projectMetadataForPersistence(
   metadata: OcrProgressMetadata,
   pageRecords: ReturnType<typeof toPageRecord>[],
   redact: boolean,
 ): Record<string, unknown> {
+  const cappedRecords = pageRecords.map(capPageRecordText);
   if (!redact) {
-    return { ...metadata, pageRecords };
+    return { ...metadata, pageRecords: cappedRecords };
   }
   const redactedCheckpoints = metadata.checkpoints.map((cp) => ({
     ...cp,
@@ -88,7 +96,7 @@ export function projectMetadataForPersistence(
   return {
     ...metadata,
     checkpoints: redactedCheckpoints,
-    pageRecords: pageRecords.map((rec) => redactJsonValues(rec)),
+    pageRecords: cappedRecords.map((rec) => redactJsonValues(rec)),
   };
 }
 

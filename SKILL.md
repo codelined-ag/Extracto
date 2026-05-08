@@ -356,11 +356,12 @@ extracto presets delete <id>
 extracto api-key list
 extracto api-key create <email> <name>
 extracto api-key revoke <id>
+extracto keys rotate <id>     # REST-based rotate-in-place
 
 extracto metrics
 ```
 
-REST: `GET/POST /api/v1/presets`, `DELETE /api/v1/presets/{id}`; `GET/POST /api/v1/keys`, `DELETE /api/v1/keys/{id}`; `GET /api/v1/metrics`. MCP: `presets_list`, `presets_create`, `presets_delete`, `keys_list`, `keys_create`, `keys_delete`, `metrics_get`.
+REST: `GET/POST /api/v1/presets`, `DELETE /api/v1/presets/{id}`; `GET/POST /api/v1/keys`, `DELETE /api/v1/keys/{id}`, `POST /api/v1/keys/{id}/rotate`; `GET /api/v1/metrics`. MCP: `presets_list`, `presets_create`, `presets_delete`, `keys_list`, `keys_create`, `keys_delete`, `keys_rotate`, `metrics_get`.
 
 ## Disconnect a cloud integration
 

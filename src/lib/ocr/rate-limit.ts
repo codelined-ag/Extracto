@@ -1,7 +1,15 @@
+import { createHash } from "node:crypto";
+
 import { handleApiError, ApiRouteError } from "@/lib/api-error";
 import type { AuthContext } from "@/lib/auth/request";
 import { consumeSharedRateLimit } from "@/lib/rate-limit";
 import type { NextResponse } from "next/server";
+
+function rateLimitClientKey(clientIp: string): string {
+  const salt = process.env.OCR_RATE_LIMIT_IP_SALT?.trim();
+  if (!salt) return clientIp;
+  return createHash("sha256").update(`${salt}:${clientIp}`).digest("hex").slice(0, 24);
+}
 
 export const OCR_RATE_LIMIT_WINDOW_MS = 60_000;
 export const OCR_RATE_LIMIT_MAX = 6;
@@ -13,7 +21,7 @@ export async function enforceOcrSubmitRateLimit(auth: AuthContext, clientIp: str
   const rateLimitKey =
     auth.method === "api-key" && auth.apiKeyId
       ? `ocr:job:key:${auth.apiKeyId}`
-      : `ocr:job:${auth.userId}:${clientIp}`;
+      : `ocr:job:${auth.userId}:${rateLimitClientKey(clientIp)}`;
   const rateLimitMax =
     auth.method === "api-key" && auth.rateLimitPerMinute && auth.rateLimitPerMinute > 0
       ? auth.rateLimitPerMinute
@@ -37,7 +45,7 @@ export async function enforceWebhookTestRateLimit(
   const rateLimitKey =
     auth.method === "api-key" && auth.apiKeyId
       ? `webhook:test:key:${auth.apiKeyId}`
-      : `webhook:test:${auth.userId}:${clientIp}`;
+      : `webhook:test:${auth.userId}:${rateLimitClientKey(clientIp)}`;
   const rateLimit = await consumeSharedRateLimit({
     key: rateLimitKey,
     max: WEBHOOK_TEST_RATE_LIMIT_MAX,
@@ -59,7 +67,7 @@ export async function enforceS3RateLimit(
   const rateLimitKey =
     auth.method === "api-key" && auth.apiKeyId
       ? `s3:${kind}:key:${auth.apiKeyId}`
-      : `s3:${kind}:${auth.userId}:${clientIp}`;
+      : `s3:${kind}:${auth.userId}:${rateLimitClientKey(clientIp)}`;
   const rateLimit = await consumeSharedRateLimit({ key: rateLimitKey, max, windowMs: OCR_RATE_LIMIT_WINDOW_MS });
   if (rateLimit.allowed) return null;
   return handleApiError(

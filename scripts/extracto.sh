@@ -1644,6 +1644,22 @@ cmd_metrics() {
   api_get "/api/v1/metrics"
 }
 
+cmd_keys() {
+  local sub="${1:-}"
+  case "$sub" in
+    list|"")
+      api_get "/api/v1/keys"
+      ;;
+    rotate)
+      [ -n "${2:-}" ] || die "usage: extracto keys rotate <id>"
+      api_post_json "/api/v1/keys/${2}/rotate" "{}"
+      ;;
+    *)
+      die "usage: extracto keys <list|rotate> [args...]"
+      ;;
+  esac
+}
+
 cmd_webhooks() {
   local sub="${1:-list}"
   shift || true
@@ -1945,6 +1961,7 @@ main() {
     integrations) shift; cmd_integrations "$@" ;;
     webhooks)     shift; cmd_webhooks "$@" ;;
     metrics)      shift; cmd_metrics "$@" ;;
+    keys)         shift; cmd_keys "$@" ;;
     -h|--help|help|"")
       print_help
       ;;

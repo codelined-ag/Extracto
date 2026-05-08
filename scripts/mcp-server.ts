@@ -599,6 +599,14 @@ server.tool(
 );
 
 server.tool(
+  "keys_rotate",
+  "Rotate an API key in place. Returns the new plaintext key once; the previous secret is revoked. The id stays stable so dependent callers can update via Authorization: Bearer <new>.",
+  { id: z.string() },
+  async ({ id }) =>
+    asTextResult(await call(`/api/v1/keys/${encodeURIComponent(id)}/rotate`, { method: "POST", body: {} })),
+);
+
+server.tool(
   "metrics_get",
   "Aggregate usage and queue metrics for the caller (job counts, processing time, OCR pages, by-day buckets, by-provider/model).",
   {},
