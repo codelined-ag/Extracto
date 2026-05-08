@@ -23,6 +23,9 @@ export async function register() {
   const { runSecretMigrationOnce } = await import("@/lib/background/secret-migration");
   void runSecretMigrationOnce();
 
+  const { setupOcrJobFts } = await import("@/lib/background/fts5-setup");
+  void setupOcrJobFts();
+
   const { startLongpollWorkers } = await import("@/lib/integrations/longpoll");
   startLongpollWorkers();
 }

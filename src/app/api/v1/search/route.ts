@@ -4,6 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
 import { withAuth } from "@/lib/auth/request";
+import {
+  buildFtsMatchExpression,
+  isFtsAvailable,
+  setupOcrJobFts,
+} from "@/lib/background/fts5-setup";
 import { db } from "@/lib/db";
 import { readResultText } from "@/lib/ocr/result-store";
 
@@ -60,7 +65,76 @@ export const GET = withAuth("search:read", async (request: NextRequest, { auth }
   const rawLimit = Number(searchParams.get("limit") || "20");
   const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(MAX_LIMIT, Math.trunc(rawLimit)) : 20;
 
-  const inlineRows = await db.$queryRaw<SearchRow[]>(Prisma.sql`
+  await setupOcrJobFts();
+  const ftsExpression = isFtsAvailable() ? buildFtsMatchExpression(q) : null;
+
+  const inlineRows = ftsExpression
+    ? await db.$queryRaw<SearchRow[]>(Prisma.sql`
+        SELECT
+          j."id",
+          j."fileName",
+          j."status",
+          j."model",
+          j."createdAt",
+          j."completedAt",
+          substr(
+            j."extractedText",
+            CASE
+              WHEN instr(lower(j."extractedText"), lower(${q})) > ${SNIPPET_RADIUS}
+                THEN instr(lower(j."extractedText"), lower(${q})) - ${SNIPPET_RADIUS}
+              ELSE 1
+            END,
+            ${SNIPPET_RADIUS * 2} + length(${q})
+          ) AS "snippet",
+          CASE
+            WHEN instr(lower(j."extractedText"), lower(${q})) > ${SNIPPET_RADIUS}
+              THEN instr(lower(j."extractedText"), lower(${q})) - ${SNIPPET_RADIUS}
+            ELSE 1
+          END AS "snippetStart",
+          length(j."extractedText") AS "textLength"
+        FROM "OcrJob" j
+        JOIN "OcrJobFts" f ON f.rowid = j.rowid
+        WHERE
+          j."userId" = ${auth.userId}
+          AND j."extractedText" IS NOT NULL
+          AND f."OcrJobFts" MATCH ${ftsExpression}
+        ORDER BY j."createdAt" DESC
+        LIMIT ${limit}
+      `).catch((err) => {
+        console.warn("[search] FTS query failed, falling back:", err);
+        return null;
+      }) ?? await db.$queryRaw<SearchRow[]>(Prisma.sql`
+        SELECT
+          "id",
+          "fileName",
+          "status",
+          "model",
+          "createdAt",
+          "completedAt",
+          substr(
+            "extractedText",
+            CASE
+              WHEN instr(lower("extractedText"), lower(${q})) > ${SNIPPET_RADIUS}
+                THEN instr(lower("extractedText"), lower(${q})) - ${SNIPPET_RADIUS}
+              ELSE 1
+            END,
+            ${SNIPPET_RADIUS * 2} + length(${q})
+          ) AS "snippet",
+          CASE
+            WHEN instr(lower("extractedText"), lower(${q})) > ${SNIPPET_RADIUS}
+              THEN instr(lower("extractedText"), lower(${q})) - ${SNIPPET_RADIUS}
+            ELSE 1
+          END AS "snippetStart",
+          length("extractedText") AS "textLength"
+        FROM "OcrJob"
+        WHERE
+          "userId" = ${auth.userId}
+          AND "extractedText" IS NOT NULL
+          AND instr(lower("extractedText"), lower(${q})) > 0
+        ORDER BY "createdAt" DESC
+        LIMIT ${limit}
+      `)
+    : await db.$queryRaw<SearchRow[]>(Prisma.sql`
     SELECT
       "id",
       "fileName",
