@@ -228,7 +228,11 @@ export default function AuthPage() {
   };
 
   if (!authChecked) {
-    return null;
+    return (
+      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+        <div className="text-sm">{t("Caricamento...","Loading...","Chargement...","Cargando...","Wird geladen...")}</div>
+      </div>
+    );
   }
 
   const submitLabelSignIn = t("Accedi", "Sign in", "Se connecter", "Iniciar sesión", "Anmelden");

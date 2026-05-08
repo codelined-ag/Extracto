@@ -26,9 +26,10 @@ export function PwaRegister() {
       return;
     }
 
+    let registration: ServiceWorkerRegistration | null = null;
     const register = async () => {
       try {
-        await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
       } catch {
         // SW registration failures should not break app usage.
       }
@@ -36,14 +37,20 @@ export function PwaRegister() {
 
     if (document.readyState === "complete") {
       void register();
-      return;
+    } else {
+      const onLoad = () => {
+        void register();
+      };
+      window.addEventListener("load", onLoad);
     }
 
-    const onLoad = () => {
-      void register();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void registration?.update().catch(() => undefined);
+      }
     };
-    window.addEventListener("load", onLoad);
-    return () => window.removeEventListener("load", onLoad);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
   return null;

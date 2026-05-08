@@ -1909,17 +1909,19 @@ export default function ExtractoPage() {
  };
 
  const removeFile = (id: string) => {
- setFiles((prev) => prev.filter((f) => f.id !== id));
+ setFiles((prev) => {
+ const remaining = prev.filter((f) => f.id !== id);
+ if (selectedFileId === id) {
+ setSelectedFileId(remaining[0]?.id || null);
+ }
+ return remaining;
+ });
  setBulkSelectedIds((prev) => {
  if (!prev.has(id)) return prev;
  const next = new Set(prev);
  next.delete(id);
  return next;
  });
- if (selectedFileId === id) {
- const remaining = files.filter((f) => f.id !== id);
- setSelectedFileId(remaining[0]?.id || null);
- }
  };
 
  const clearAllFiles = () => {

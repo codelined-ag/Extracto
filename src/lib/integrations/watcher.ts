@@ -150,6 +150,11 @@ export async function pollSource(sourceId: string): Promise<void> {
     if (perUser >= MAX_CONCURRENT_SOURCES_PER_USER) return;
     inFlightPerUser.set(source.userId, perUser + 1);
 
+    const scrubAuthHeader = (raw: string): string =>
+      raw
+        .replace(/[Bb]earer\s+[A-Za-z0-9._~+/=-]{8,}/g, "Bearer [redacted]")
+        .replace(/"access_?token"\s*:\s*"[^"]+"/gi, '"access_token":"[redacted]"');
+
     let processed = 0;
     let lastError: string | null = null;
     let listFailed = false;
@@ -172,12 +177,12 @@ export async function pollSource(sourceId: string): Promise<void> {
           );
           if (!outcome.skipped) processed += 1;
         } catch (err) {
-          lastError = err instanceof Error ? err.message : String(err);
+          lastError = scrubAuthHeader(err instanceof Error ? err.message : String(err));
           console.error(`[cloud-watcher] ${source.provider}:${entry.id} failed:`, err);
         }
       }
     } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
+      lastError = scrubAuthHeader(err instanceof Error ? err.message : String(err));
       listFailed = true;
       console.error(`[cloud-watcher] list failed for ${sourceId}:`, err);
     }

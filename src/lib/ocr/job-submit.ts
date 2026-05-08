@@ -4,6 +4,7 @@ import { ApiRouteError } from "@/lib/api-error";
 import type { ApiProviderSettings, ProviderKind } from "@/lib/api-types";
 import { db } from "@/lib/db";
 import { dispatchJobWebhooks } from "@/lib/background/webhooks";
+import { MAX_OCR_PAGE_IMAGE_CHARS } from "@/lib/ocr/input-limits";
 import { withOcrJobSlot } from "@/lib/ocr/job-control";
 import { seedPostProcessingMeta } from "@/lib/ocr/job-seed";
 import {
@@ -125,9 +126,12 @@ export function parseCheckpointPages(result: unknown, metadata?: unknown): Proce
         metadata?: unknown;
       };
       if (typeof typed.pageNumber !== "number" || typeof typed.text !== "string") return null;
+      const text = typed.text.length > MAX_OCR_PAGE_IMAGE_CHARS
+        ? typed.text.slice(0, MAX_OCR_PAGE_IMAGE_CHARS)
+        : typed.text;
       return {
         pageNumber: typed.pageNumber,
-        text: typed.text,
+        text,
         structured:
           typed.structured && typeof typed.structured === "object" && !Array.isArray(typed.structured)
             ? (typed.structured as Record<string, unknown>)

@@ -188,7 +188,7 @@ async function pollSource(sourceId: string): Promise<void> {
       where: { id: source.id },
       data: {
         lastPolledAt: new Date(),
-        lastError: shouldDeactivate ? `${lastError} — auto-paused after ${nextFailures} failures` : lastError,
+        lastError: shouldDeactivate ? `${lastError} (auto-paused after ${nextFailures} failures)` : lastError,
         consecutiveFailures: nextFailures,
         ...(shouldDeactivate ? { active: false } : {}),
       },

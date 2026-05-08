@@ -316,14 +316,20 @@ export function CameraCaptureDialog({
     onOpenChange(next);
   };
 
+  const cameraToastShownRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (status === "error") {
-      toast({
-        title: t("Fotocamera non disponibile", "Camera unavailable", "Caméra indisponible", "Cámara no disponible", "Kamera nicht verfügbar"),
-        description: errorMessage,
-        variant: "destructive",
-      });
+    if (status !== "error") {
+      cameraToastShownRef.current = null;
+      return;
     }
+    const key = errorMessage ?? "";
+    if (cameraToastShownRef.current === key) return;
+    cameraToastShownRef.current = key;
+    toast({
+      title: t("Fotocamera non disponibile", "Camera unavailable", "Caméra indisponible", "Cámara no disponible", "Kamera nicht verfügbar"),
+      description: errorMessage,
+      variant: "destructive",
+    });
   }, [status, errorMessage, t, toast]);
 
   const modeLabel = (m: CaptureMode) => {
