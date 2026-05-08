@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
 import { handleApiError } from "@/lib/api-error";
-import { createUser, findUserByEmail, toSafeUser } from "@/lib/auth/credentials";
+import { createUser, findUserByEmail, runDummyPasswordVerify, toSafeUser } from "@/lib/auth/credentials";
 import { consumeSharedRateLimit } from "@/lib/rate-limit";
 import { getClientIpAddress, isTrustedMutationRequest } from "@/lib/request-security";
 import {
@@ -77,6 +77,7 @@ export async function POST(request: NextRequest) {
 
     const existing = await findUserByEmail(email);
     if (existing) {
+      runDummyPasswordVerify(password);
       return badRequest("Email already registered", 409);
     }
 

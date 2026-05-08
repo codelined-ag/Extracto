@@ -12,6 +12,7 @@ vi.mock("@/lib/rate-limit", () => ({
 vi.mock("@/lib/auth/credentials", () => ({
   findUserByEmail: vi.fn(),
   createUser: vi.fn(),
+  runDummyPasswordVerify: vi.fn(),
   toSafeUser: (u: { id: string; email: string; name: string | null }) => ({ id: u.id, email: u.email, name: u.name }),
   normalizeEmail: (e: string) => e.trim().toLowerCase(),
 }));

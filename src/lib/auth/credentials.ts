@@ -40,6 +40,14 @@ export function verifyPassword(password: string, passwordHash: string): boolean 
   return timingSafeEqual(hashBuffer, derivedBuffer);
 }
 
+const DUMMY_SALT = "0".repeat(32);
+const DUMMY_HASH = scryptSync("dummy-password-for-timing", DUMMY_SALT, 64).toString("hex");
+
+export function runDummyPasswordVerify(password: string): void {
+  scryptSync(password, DUMMY_SALT, 64);
+  void DUMMY_HASH;
+}
+
 export async function findUserByEmail(email: string): Promise<AuthUserRecord | null> {
   const normalizedEmail = normalizeEmail(email);
   return await db.authUser.findUnique({

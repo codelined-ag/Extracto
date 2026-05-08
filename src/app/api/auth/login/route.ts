@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { handleApiError } from "@/lib/api-error";
-import { findUserByEmail, toSafeUser, verifyPassword } from "@/lib/auth/credentials";
+import { findUserByEmail, runDummyPasswordVerify, toSafeUser, verifyPassword } from "@/lib/auth/credentials";
 import { consumeSharedRateLimit } from "@/lib/rate-limit";
 import { getClientIpAddress, isTrustedMutationRequest } from "@/lib/request-security";
 import {
@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
 
     const user = await findUserByEmail(email);
     if (!user) {
+      runDummyPasswordVerify(password);
       return badRequest("Invalid credentials", 401);
     }
 
