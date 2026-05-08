@@ -6,6 +6,19 @@ follows [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-05-08
+
+Closes the v1.4.0 carry-over block: integrations UX overhaul, KB store retry, FTS5 search, PII detector improvements, API key edit, cloud-export Dialog, pipeline edge fixes, lazy re-encrypt of legacy plaintext secrets. Server-side image preprocessing (sharp) and S3 watcher streaming were dropped from this cut: sharp wants proper threat-modeling around libvips OOM and a Dockerfile change; streaming gives no real win because the OCR pipeline downstream still needs the full document in memory.
+
+- Heartbeat write filters on status=PROCESSING so a late-landing tick cannot overwrite the parent's COMPLETED state. Each page run checks isOcrJobStopRequested up front so concurrent batches honor stop sooner. markOcrJobRunning invalidates stopRequestCache. extractMarkdownFromJsonLikeText switches to a state-machine scanner that respects backslash-escaped quotes. Document classifier picks the longest non-empty page when page 1 is missing.
+- PATCH /api/v1/keys/{id} edits scope set, custom rate-limit, or display name without revoking the secret. Mirrored in MCP keys_update and CLI extracto keys update. 2FA setup with force:true requires the current account password.
+- New PII detectors: street addresses, person names (title-prefixed), passport numbers, and driver's-license numbers. Phone validation rejects matches whose +XX prefix is not a real ITU country code. DOB regex adds the DD.MM.YYYY (German/EU dot-separated) variant. Passport and DL detectors require an explicit number-context token so phrases like "passport expires" do not trigger.
+- Vector store adapters share a fetchWithRetry that handles 429 (Retry-After honoring), 5xx, and network errors with exponential backoff and jitter, capped at three attempts.
+- Cloud-export window.prompt() pair replaces with a controlled Dialog: folder text input plus format select. Submit button shows a sending state.
+- Integrations panel collapses to one primary CTA per provider, driven by a state machine: not-configured shows Add OAuth credentials, configured-not-connected shows Connect <Provider>, connected shows Disconnect. Credential source renders as a Badge (Server credentials / Your app / Not configured / Connected). ENV-set credentials hide the per-user form by default; an Override option in the meatball menu reveals it. Connect path detects 503/available:false and opens the credentials form inline. Cloud Import dialog adds an inline Connect button when the active tab's provider is not connected. Setup wizard's final step exposes optional Connect Dropbox / Drive / OneDrive shortcuts.
+- Boot-time sweep walks Webhook secrets and S3 secretAccessKey blobs and rewrites legacy plaintext rows with the AES-GCM envelope, idempotent against already-encrypted values.
+- SQLite FTS5 virtual table for OcrJob.extractedText with AFTER INSERT and AFTER UPDATE OF extractedText, fileName triggers (so heartbeat metadata writes do not rebuild the index). Search route prefers MATCH over instr() when FTS is available, falls back if FTS5 is not compiled into the host SQLite.
+
 ## [1.4.0] - 2026-05-08
 
 Closes the v1.3.4 hardening audit (High + Medium + Low blocks) plus small v1.4.0 deferred items in one cut. Integrations UX overhaul block and the larger v1.4.0 carry-overs (S3 watcher streaming, FTS5, server-side image preprocessing, KB store provider-aware retry) roll forward to v1.4.1.
