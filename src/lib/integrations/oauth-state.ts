@@ -2,8 +2,13 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 
 import type { IntegrationProvider } from "@/lib/integrations/types";
 
-export const OAUTH_STATE_COOKIE = "extracto_oauth_state";
 const STATE_TTL_MS = 10 * 60 * 1000;
+
+export const OAUTH_STATE_COOKIE = "extracto_oauth_state";
+
+export function oauthStateCookieName(provider: IntegrationProvider): string {
+  return `extracto_oauth_state_${provider}`;
+}
 
 export interface OAuthStatePayload {
   userId: string;

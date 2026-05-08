@@ -1172,7 +1172,11 @@ export default function ExtractoPage() {
  .filter((model) => normalizeProvider(model.provider) === provider)
  .map((model) => model.id);
  const nextModel = storedModel && providerModelIds.includes(storedModel) ? storedModel :"";
- setPostProcessing((prev) => (prev.model === nextModel ? prev : { ...prev, model: nextModel }));
+ setPostProcessing((prev) => {
+ if (prev.model && providerModelIds.includes(prev.model)) return prev;
+ if (prev.model === nextModel) return prev;
+ return { ...prev, model: nextModel };
+ });
  }, [apiSettings.provider, models]);
 
  React.useEffect(() => {
@@ -1215,14 +1219,19 @@ export default function ExtractoPage() {
 
  React.useEffect(() => {
  if (!ocrSettingsLoadedRef.current) return;
+ const controller = new AbortController();
  const t = setTimeout(() => {
  void fetch("/api/ocr/settings", {
  method:"PUT",
  headers:{"Content-Type":"application/json"},
  body: JSON.stringify(settings),
+ signal: controller.signal,
  }).catch(() => undefined);
  }, 1000);
- return () => clearTimeout(t);
+ return () => {
+ clearTimeout(t);
+ controller.abort();
+ };
  }, [settings]);
 
  // Load saved KB-export defaults once. Failure is silent — the form
@@ -1864,15 +1873,38 @@ export default function ExtractoPage() {
  const handleDrop = async (e: React.DragEvent) => {
  e.preventDefault();
  setIsDragOver(false);
+ const isAccepted = (file: File) => {
+ const name = file.name.toLowerCase();
+ if (file.type.startsWith("image/")) return true;
+ if (file.type === "application/pdf") return true;
+ if (file.type === "application/msword") return true;
+ if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return true;
+ return /\.(pdf|png|jpg|jpeg|webp|gif|bmp|tiff?|heic|heif|doc|docx)$/i.test(name);
+ };
  const collected = await collectDroppedFiles(e.dataTransfer.items);
  if (collected.length > 0) {
+ const accepted = collected.filter(isAccepted);
+ const rejected = collected.length - accepted.length;
+ if (rejected > 0) {
+ toast({ title: t("File ignorati", "Files ignored", "Fichiers ignorés", "Archivos ignorados", "Dateien ignoriert"), description: t(`${rejected} file non supportato(i) sono stati ignorati.`, `${rejected} unsupported file(s) were ignored.`, `${rejected} fichier(s) non pris en charge ont été ignorés.`, `${rejected} archivo(s) no admitidos fueron ignorados.`, `${rejected} nicht unterstützte Datei(en) wurden ignoriert.`) });
+ }
+ if (accepted.length > 0) {
  const dt = new DataTransfer();
- collected.forEach((f) => dt.items.add(f));
+ accepted.forEach((f) => dt.items.add(f));
  handleFiles(dt.files);
+ }
  return;
  }
- if (e.dataTransfer.files.length > 0) {
- handleFiles(e.dataTransfer.files);
+ const raw = Array.from(e.dataTransfer.files);
+ const accepted = raw.filter(isAccepted);
+ const rejected = raw.length - accepted.length;
+ if (rejected > 0) {
+ toast({ title: t("File ignorati", "Files ignored", "Fichiers ignorés", "Archivos ignorados", "Dateien ignoriert"), description: t(`${rejected} file non supportato(i) sono stati ignorati.`, `${rejected} unsupported file(s) were ignored.`, `${rejected} fichier(s) non pris en charge ont été ignorés.`, `${rejected} archivo(s) no admitidos fueron ignorados.`, `${rejected} nicht unterstützte Datei(en) wurden ignoriert.`) });
+ }
+ if (accepted.length > 0) {
+ const dt = new DataTransfer();
+ accepted.forEach((f) => dt.items.add(f));
+ handleFiles(dt.files);
  }
  };
 

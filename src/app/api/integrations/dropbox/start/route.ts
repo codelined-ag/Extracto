@@ -6,7 +6,7 @@ import { buildDropboxAuthUrl } from "@/lib/integrations/dropbox";
 import {
   createCodeVerifier,
   deriveCodeChallenge,
-  OAUTH_STATE_COOKIE,
+  oauthStateCookieName,
   packOAuthState,
 } from "@/lib/integrations/oauth-state";
 import { resolveAppCredentials } from "@/lib/integrations/oauth-app-store";
@@ -24,7 +24,7 @@ export const POST = withSessionAuth("mutation", "Dropbox connect", async (_reque
   const { url } = await buildDropboxAuthUrl({ state, codeChallenge, userId: auth.userId });
 
   const res = NextResponse.json({ authUrl: url });
-  res.cookies.set(OAUTH_STATE_COOKIE, state, {
+  res.cookies.set(oauthStateCookieName("dropbox"), state, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

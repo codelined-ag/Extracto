@@ -4,7 +4,7 @@ import { getAuthCookieName } from "@/lib/auth/token";
 import { verifyActiveSession } from "@/lib/auth/session";
 import { exchangeAuthorizationCode } from "@/lib/integrations/dropbox";
 import {
-  OAUTH_STATE_COOKIE,
+  oauthStateCookieName,
   unpackOAuthState,
 } from "@/lib/integrations/oauth-state";
 import { saveIntegrationConnection } from "@/lib/integrations/store";
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   const code = url.searchParams.get("code");
   const stateRaw = url.searchParams.get("state");
   const error = url.searchParams.get("error");
-  const cookieState = request.cookies.get(OAUTH_STATE_COOKIE)?.value;
+  const cookieState = request.cookies.get(oauthStateCookieName("dropbox"))?.value;
 
   const errorPage = (message: string, status: number) =>
     new NextResponse(`<!doctype html><meta charset="utf-8"><title>Dropbox connect</title><pre>${escapeHtml(message)}</pre>`, {
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   const redirectTo = "/?integration=dropbox&status=connected";
   const res = NextResponse.redirect(new URL(redirectTo, request.url));
-  res.cookies.set(OAUTH_STATE_COOKIE, "", { path: "/", maxAge: 0 });
+  res.cookies.set(oauthStateCookieName("dropbox"), "", { path: "/", maxAge: 0 });
   return res;
 }
 

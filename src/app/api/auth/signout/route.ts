@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthCookieName, shouldUseSecureCookie } from "@/lib/auth/token";
-import { OAUTH_STATE_COOKIE } from "@/lib/integrations/oauth-state";
+import { OAUTH_STATE_COOKIE, oauthStateCookieName } from "@/lib/integrations/oauth-state";
 import { isTrustedMutationRequest } from "@/lib/request-security";
 import { isRequestSecure as checkRequestSecure } from "@/app/api/auth/helpers";
 
@@ -20,14 +20,21 @@ export async function POST(request: NextRequest) {
     path: "/",
     maxAge: 0,
   });
-  response.cookies.set({
-    name: OAUTH_STATE_COOKIE,
-    value: "",
-    httpOnly: true,
-    sameSite: "lax",
-    secure: shouldUseSecureCookie(checkRequestSecure(request)),
-    path: "/",
-    maxAge: 0,
-  });
+  for (const cookieName of [
+    OAUTH_STATE_COOKIE,
+    oauthStateCookieName("dropbox"),
+    oauthStateCookieName("google_drive"),
+    oauthStateCookieName("onedrive"),
+  ]) {
+    response.cookies.set({
+      name: cookieName,
+      value: "",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: shouldUseSecureCookie(checkRequestSecure(request)),
+      path: "/",
+      maxAge: 0,
+    });
+  }
   return response;
 }
