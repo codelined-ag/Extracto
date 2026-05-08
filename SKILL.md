@@ -337,13 +337,30 @@ extracto webhooks list
 extracto webhooks create --url https://example.com/hooks --events job.completed,job.failed
 extracto webhooks update <id> --url https://new.example.com/hooks --active false
 extracto webhooks test <id>
+extracto webhooks rotate-secret <id>
 extracto webhooks deliveries <id> --limit 50
 extracto webhooks delete <id>
 ```
 
-REST: `GET/POST /api/v1/webhooks`, `PATCH/DELETE /api/v1/webhooks/{id}`, `POST /api/v1/webhooks/{id}/test`, `GET /api/v1/webhooks/{id}/deliveries`. MCP: `webhooks_list`, `webhooks_create`, `webhooks_update`, `webhooks_delete`, `webhooks_test`, `webhooks_deliveries`.
+REST: `GET/POST /api/v1/webhooks`, `PATCH/DELETE /api/v1/webhooks/{id}`, `POST /api/v1/webhooks/{id}/test`, `POST /api/v1/webhooks/{id}/rotate-secret`, `GET /api/v1/webhooks/{id}/deliveries`. MCP: `webhooks_list`, `webhooks_create`, `webhooks_update`, `webhooks_delete`, `webhooks_test`, `webhooks_rotate_secret`, `webhooks_deliveries`.
 
-The signing secret is shown once on `create` and never again. Verify the `X-Extracto-Signature: t=<unix>,v1=<hex>` header by computing `HMAC-SHA256(secret, "${t}.${rawBody}")` and timing-safe comparing against `<hex>`. Reject signatures whose timestamp is more than 5 minutes off.
+The signing secret is shown once on `create` (and again on `rotate-secret`) and never afterwards. Verify the `X-Extracto-Signature: t=<unix>,v1=<hex>` header by computing `HMAC-SHA256(secret, "${t}.${rawBody}")` and timing-safe comparing against `<hex>`. Reject signatures whose timestamp is more than 5 minutes off. Webhook signing secrets are encrypted at rest (AES-GCM keyed off `AUTH_SECRET`).
+
+## Output presets, API keys, metrics
+
+```bash
+extracto presets list
+extracto presets create <name> <instruction> [markdown|json]
+extracto presets delete <id>
+
+extracto api-key list
+extracto api-key create <email> <name>
+extracto api-key revoke <id>
+
+extracto metrics
+```
+
+REST: `GET/POST /api/v1/presets`, `DELETE /api/v1/presets/{id}`; `GET/POST /api/v1/keys`, `DELETE /api/v1/keys/{id}`; `GET /api/v1/metrics`. MCP: `presets_list`, `presets_create`, `presets_delete`, `keys_list`, `keys_create`, `keys_delete`, `metrics_get`.
 
 ## Disconnect a cloud integration
 
@@ -359,13 +376,52 @@ REST: `DELETE /api/v1/integrations/{dropbox|google_drive|onedrive}`. MCP: `integ
 
 These flags are read at server boot from `docker.env` (or the host process env). They have no REST/MCP/CLI surface.
 
+Lifecycle / runtime
+- `MIGRATE_ON_START=1` — run `bun run db:push` on container start. Default 1; set 0 to skip schema sync (advanced).
+- `OCR_WORKER_CONCURRENCY` — max concurrent in-process OCR jobs. Default 1.
+- `OCR_ORPHAN_JOB_STALE_MS` — how stale a PROCESSING row must be before the boot/timer sweep flips it to FAILED. Default 1800000 (30m).
+- `RESULT_STORAGE` — `inline` (default) or `s3` to offload large extractedText/result blobs to S3.
+- `MAX_REQUEST_BODY_MB` — request body cap for upload routes.
+
+Auth / signup / sessions
+- `AUTH_SECRET` — required, min 32 chars, signs sessions and gates AES-GCM at-rest.
+- `ALLOW_SIGNUP=1` — allow new account registration. Default 1; set 0 to lock signup on a deployment.
+- `COOKIE_SECURE=true` — secure cookie attribute. Disable only for localhost HTTP installs.
+- `TRUSTED_PROXY_HEADERS=1` — trust `X-Forwarded-For` for client IP detection. Only set this when the server is actually behind a reverse proxy you control.
+
+Outbound network policy (SSRF allowlists)
+- `OLLAMA_ALLOWED_HOSTS` / `MISTRAL_ALLOWED_HOSTS` / `OPENROUTER_ALLOWED_HOSTS` / `OPENAI_COMPAT_ALLOWED_HOSTS` — comma-separated host allowlists for provider endpoints. Empty = block-only-private-hosts.
+- `VECTOR_STORE_ALLOWED_HOSTS` — same shape, governs KB export targets (Chroma, Qdrant, Weaviate, etc.).
+- `S3_ALLOWED_HOSTS` / `S3_ALLOW_LOOPBACK=1` — S3-style endpoint allowlist + opt-in loopback for self-hosted MinIO.
+- `WEBHOOK_ALLOWED_HOSTS` — comma-separated allowlist for outbound webhook delivery URLs (advisory layer on top of the SSRF guard).
+- `PUSH_ALLOWED_HOSTS` — overrides the default push-service allowlist (FCM, Mozilla, Apple, Microsoft). Set when self-hosting a push service.
+- `OLLAMA_HOST_FALLBACKS` — comma-separated additional candidates tried when the configured Ollama URL fails. See CLAUDE.md for the full network-mode story.
+
+Background workers
 - `CLOUD_PUSH_ENABLED=1` — opt in to per-source Dropbox longpoll workers. Each active dropbox watcher seeds a cursor, longpolls `notify.dropboxapi.com`, and triggers an immediate poll on change. Off by default; the standard 30-second poll keeps working.
+- `CLOUD_WATCHER_ENABLED=1` — enable the cloud-folder polling worker (Dropbox / Drive / OneDrive). Default 1.
 - `WEBHOOK_DELIVERY_RETENTION_DAYS=30` — how long delivered or exhausted `WebhookDelivery` rows are kept before pruning. Pending rows older than 2 × this value get flipped to exhausted with body cleared. Defaults to 30, capped at 3650.
 - `RETAIN_JOBS_DAYS` — daily sweeper deletes `OcrJob` rows older than this. Unset or 0 disables.
 - `LOCAL_WATCH_ROOT` — root for local-provider watchers. Defaults to `<DATABASE_URL_DIR>/local-watch`. Each user is sandboxed under `<root>/<userId>/`.
-- `WEBHOOK_ALLOWED_HOSTS` — comma-separated allowlist for outbound webhook delivery URLs (advisory layer on top of the SSRF guard).
-- `OLLAMA_HOST_FALLBACKS` — comma-separated additional candidates tried when the configured Ollama URL fails. See CLAUDE.md for the full network-mode story.
-- `TRUSTED_PROXY_HEADERS=1` — trust `X-Forwarded-For` for client IP detection. Only set this when the server is actually behind a reverse proxy you control.
+- `WATCH_FOLDER` / `WATCH_FOLDER_USER_ID` / `WATCH_FOLDER_INTERVAL_SECONDS` / `WATCH_FOLDER_MIN_AGE_MS` — legacy filesystem watcher (single shared folder). New deployments should use the per-user watcher UI instead.
+
+Search / KB
+- `SEARCH_OFFLOADED_SCAN_LIMIT` — cap on jobs scanned by `instr()` text search. Default 5000.
+- `KB_EXPORT_ENABLED=1` — gate the `/api/v1/export/kb` endpoint and `extracto kb export` CLI.
+
+Metrics / push
+- `METRICS_TOKEN` — bearer token for `/api/v1/metrics` when called outside an auth'd session (e.g. Prometheus scraper).
+- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` — Web Push VAPID keypair. Auto-generated to `<DATABASE_URL_DIR>/.vapid_keys.json` if not set.
+
+SMTP (forgot-password, email change confirmation)
+- `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` — SMTP connection. Forgot-password and email-change features are silently skipped when SMTP is unset.
+
+OAuth app credentials (recommended self-host path; ENV-first)
+- `DROPBOX_CLIENT_ID` / `DROPBOX_CLIENT_SECRET` — Dropbox OAuth app, redirect URI `${EXTRACTO_URL}/api/integrations/dropbox/callback`.
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google OAuth app, redirect URI `${EXTRACTO_URL}/api/integrations/google_drive/callback`.
+- `ONEDRIVE_CLIENT_ID` / `ONEDRIVE_CLIENT_SECRET` — Microsoft OAuth app, redirect URI `${EXTRACTO_URL}/api/integrations/onedrive/callback`.
+
+When ENV creds are set, the integrations panel hides the per-user "Add OAuth app" form by default, exposing only a primary Connect button.
 
 ## Lifecycle commands (no token required)
 

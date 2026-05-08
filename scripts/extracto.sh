@@ -1640,6 +1640,10 @@ cmd_s3() {
   esac
 }
 
+cmd_metrics() {
+  api_get "/api/v1/metrics"
+}
+
 cmd_webhooks() {
   local sub="${1:-list}"
   shift || true
@@ -1702,6 +1706,10 @@ print(json.dumps(out))
       [ -n "${1:-}" ] || die "usage: extracto webhooks test <id>"
       api_post_json "/api/v1/webhooks/${1}/test" "{}"
       ;;
+    rotate-secret)
+      [ -n "${1:-}" ] || die "usage: extracto webhooks rotate-secret <id>"
+      api_post_json "/api/v1/webhooks/${1}/rotate-secret" "{}"
+      ;;
     deliveries)
       [ -n "${1:-}" ] || die "usage: extracto webhooks deliveries <id> [--limit N]"
       local id="$1"; shift
@@ -1715,7 +1723,7 @@ print(json.dumps(out))
       api_get "/api/v1/webhooks/${id}/deliveries?limit=${limit}"
       ;;
     *)
-      die "usage: extracto webhooks <list|create|update|delete|test|deliveries> [args...]"
+      die "usage: extracto webhooks <list|create|update|delete|test|rotate-secret|deliveries> [args...]"
       ;;
   esac
 }
@@ -1936,6 +1944,7 @@ main() {
     onedrive)     shift; cmd_onedrive "$@" ;;
     integrations) shift; cmd_integrations "$@" ;;
     webhooks)     shift; cmd_webhooks "$@" ;;
+    metrics)      shift; cmd_metrics "$@" ;;
     -h|--help|help|"")
       print_help
       ;;

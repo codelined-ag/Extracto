@@ -121,6 +121,12 @@ server.tool(
                 .describe(
                   "How many pages to OCR in parallel. 0 = auto (per-provider sane default: ollama=1, mistral=4, openrouter=4, openai_compat=2). Clamped to 1..16.",
                 ),
+              piiRedaction: z
+                .boolean()
+                .optional()
+                .describe(
+                  "When true, server redacts emails, phone numbers, SSNs, credit cards, IBANs, IPs, URLs, and dates of birth from extracted text and per-page records before persisting. Off by default.",
+                ),
             })
             .partial()
             .optional(),
@@ -252,7 +258,7 @@ server.tool(
 
 server.tool(
   "ocr_comparison_get",
-  "Fetch a comparison by id. Returns each model's job + extractedText, plus a word-level diff between the first (baseline) job and each other completed job.",
+  "Fetch a comparison by id. Returns each model's job + extractedText, plus all-pairs word-level diffs (N(N-1)/2 per comparison).",
   { comparisonId: z.string() },
   async ({ comparisonId }) =>
     asTextResult(
@@ -545,6 +551,61 @@ server.tool(
 );
 
 server.tool(
+  "presets_create",
+  "Create an output preset (named bundle of provider/model/settings/postProcessing).",
+  {
+    name: z.string(),
+    description: z.string().optional(),
+    settings: z.record(z.string(), z.unknown()).optional(),
+    postProcessing: z.record(z.string(), z.unknown()).optional(),
+    provider: z.string().optional(),
+    model: z.string().optional(),
+  },
+  async (input) => asTextResult(await call("/api/v1/presets", { method: "POST", body: input })),
+);
+
+server.tool(
+  "presets_delete",
+  "Delete an output preset by id.",
+  { id: z.string() },
+  async ({ id }) =>
+    asTextResult(await call(`/api/v1/presets/${encodeURIComponent(id)}`, { method: "DELETE" })),
+);
+
+server.tool(
+  "keys_list",
+  "List the caller's API keys (id, label, scopes, createdAt, lastUsedAt). Secrets are never returned.",
+  {},
+  async () => asTextResult(await call("/api/v1/keys")),
+);
+
+server.tool(
+  "keys_create",
+  "Create a new API key. Returns the plaintext key once; store it now.",
+  {
+    label: z.string(),
+    scopes: z.array(z.string()).optional(),
+    rateLimitPerMinute: z.number().int().positive().optional(),
+  },
+  async (input) => asTextResult(await call("/api/v1/keys", { method: "POST", body: input })),
+);
+
+server.tool(
+  "keys_delete",
+  "Revoke an API key by id.",
+  { id: z.string() },
+  async ({ id }) =>
+    asTextResult(await call(`/api/v1/keys/${encodeURIComponent(id)}`, { method: "DELETE" })),
+);
+
+server.tool(
+  "metrics_get",
+  "Aggregate usage and queue metrics for the caller (job counts, processing time, OCR pages, by-day buckets, by-provider/model).",
+  {},
+  async () => asTextResult(await call("/api/v1/metrics")),
+);
+
+server.tool(
   "kb_export",
   "Chunk + embed + push a completed OCR job's text to a vector store. Strategies: fixed (char-window with overlap), sentence (sentence-merge), paragraph (paragraph-merge), hierarchical (markdown-heading-aware with breadcrumb metadata), semantic (embedding-similarity boundary detection — embeds sentences once, splits where consecutive cosine distance exceeds the breakpointPercentile).",
   {
@@ -818,7 +879,7 @@ server.tool(
 
 server.tool(
   "webhooks_update",
-  "Update a webhook. Pass any of active, url, or events to change them. The signing secret cannot be rotated through this tool; delete and recreate to rotate.",
+  "Update a webhook. Pass any of active, url, or events to change them. To rotate the signing secret, use webhooks_rotate_secret.",
   {
     id: z.string(),
     active: z.boolean().optional(),
@@ -843,6 +904,14 @@ server.tool(
   { id: z.string() },
   async ({ id }) =>
     asTextResult(await call(`/api/v1/webhooks/${encodeURIComponent(id)}/test`, { method: "POST", body: {} })),
+);
+
+server.tool(
+  "webhooks_rotate_secret",
+  "Rotate the HMAC signing secret for a webhook. Returns the new plaintext secret once; the previous secret is immediately invalidated. Update the receiver before relying on the new secret.",
+  { id: z.string() },
+  async ({ id }) =>
+    asTextResult(await call(`/api/v1/webhooks/${encodeURIComponent(id)}/rotate-secret`, { method: "POST", body: {} })),
 );
 
 server.tool(
