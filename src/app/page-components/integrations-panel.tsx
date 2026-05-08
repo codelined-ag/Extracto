@@ -98,7 +98,6 @@ export function IntegrationsPanel({ t }: { t: Translator }) {
 
   const onConnect = async (provider: CloudProvider) => {
     setBusyProvider(provider);
-    const grace = setTimeout(() => undefined, 200);
     try {
       const res = await fetch(`/api/integrations/${provider}/start`, { method: "POST" });
       const json = (await res.json().catch(() => ({}))) as { authUrl?: string; error?: string; available?: boolean };
@@ -127,7 +126,6 @@ export function IntegrationsPanel({ t }: { t: Translator }) {
         variant: "destructive",
       });
     } finally {
-      clearTimeout(grace);
       setBusyProvider(null);
     }
   };
@@ -176,7 +174,7 @@ export function IntegrationsPanel({ t }: { t: Translator }) {
           const available = credentialSource !== "none";
           const connection = status?.connections?.find((c) => c.provider === p.id);
           const connected = connectedSet.has(p.id);
-          const showOAuthForm = !connected && (credentialSource === "none" || overrideOAuthFor === p.id);
+          const showOAuthForm = !connected && (credentialSource === "user" || overrideOAuthFor === p.id);
           const busy = busyProvider === p.id;
           return (
             <Card key={p.id}>

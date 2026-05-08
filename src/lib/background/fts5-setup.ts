@@ -44,7 +44,7 @@ export async function setupOcrJobFts(): Promise<{ created: boolean; rebuilt: boo
         END
       `);
       await db.$executeRawUnsafe(`
-        CREATE TRIGGER OcrJob_au_fts AFTER UPDATE ON OcrJob BEGIN
+        CREATE TRIGGER OcrJob_au_fts AFTER UPDATE OF extractedText, fileName ON OcrJob BEGIN
           INSERT INTO OcrJobFts(OcrJobFts, rowid, fileName, extractedText)
           VALUES('delete', old.rowid, old.fileName, old.extractedText);
           INSERT INTO OcrJobFts(rowid, fileName, extractedText)

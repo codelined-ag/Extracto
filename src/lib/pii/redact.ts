@@ -75,11 +75,11 @@ const PATTERNS: PatternEntry[] = [
   },
   {
     kind: "passport",
-    regex: /\b(?:passport|pass(?:port)?\s*(?:no|number|#))[\s:.]*([A-Z0-9]{6,9})\b/gi,
+    regex: /\b(?:passport(?:\s*(?:no\.?|number|#)|\s*[:#])\s*|pass(?:port)?\s*(?:no\.?|number|#)\s*[:.]?\s*)([A-Z][A-Z0-9]{5,8}|\d{6,9})\b/gi,
   },
   {
     kind: "drivers_license",
-    regex: /\b(?:driver(?:'s)?\s+licen[cs]e|driving\s+licen[cs]e|DL)\s*(?:no|number|#)?[\s:.]*([A-Z0-9]{5,15})\b/gi,
+    regex: /\b(?:driver(?:'s)?\s+licen[cs]e|driving\s+licen[cs]e|DL)\s*(?:no\.?|number|#|:)\s*([A-Z][A-Z0-9]{4,14}|\d{5,15})\b/gi,
   },
 ];
 
