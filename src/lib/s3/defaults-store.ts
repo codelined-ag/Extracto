@@ -1,7 +1,20 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { decryptAtRest, encryptAtRest, isEncryptedAtRest } from "@/lib/auth/secret-at-rest";
 import { enforceS3EndpointPolicy } from "@/lib/ocr/endpoint-policy";
+
+const S3_SECRET_DOMAIN = "s3-credentials";
+
+function encryptSecretAccessKey(plaintext: string): string {
+  return plaintext.length > 0 ? encryptAtRest(plaintext, S3_SECRET_DOMAIN) : "";
+}
+
+function decryptSecretAccessKey(stored: string): string {
+  if (!stored) return "";
+  if (!isEncryptedAtRest(stored)) return stored;
+  return decryptAtRest(stored, S3_SECRET_DOMAIN);
+}
 
 export interface S3Defaults {
   bucket: string;
@@ -73,6 +86,9 @@ export async function getS3Defaults(userId: string): Promise<S3Defaults> {
     const stored = await readFile(getDefaultsPath(safe), "utf8");
     const parsed = JSON.parse(stored) as Partial<S3Defaults>;
     const normalized = normalize(parsed);
+    if (normalized.secretAccessKey) {
+      normalized.secretAccessKey = decryptSecretAccessKey(normalized.secretAccessKey);
+    }
     cache.set(safe, normalized);
     return structuredClone(normalized);
   } catch (err: unknown) {
@@ -118,7 +134,11 @@ export async function saveS3Defaults(userId: string, input: SaveS3DefaultsInput)
   const normalized = normalize(merged);
   await ensureDefaultsDirectory();
   const defaultsPath = getDefaultsPath(safe);
-  await writeFile(defaultsPath, JSON.stringify(normalized, null, 2), {
+  const persistable: S3Defaults = {
+    ...normalized,
+    secretAccessKey: encryptSecretAccessKey(normalized.secretAccessKey),
+  };
+  await writeFile(defaultsPath, JSON.stringify(persistable, null, 2), {
     encoding: "utf8",
     mode: PRIVATE_FILE_MODE,
   });

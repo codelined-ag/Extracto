@@ -42,6 +42,7 @@ vi.mock("@/lib/background/webhooks", async () => {
   return {
     ...actual,
     generateWebhookSecret: () => "whsec_fixed_test_secret",
+    encryptWebhookSecret: (plain: string) => `enc:${plain}`,
   };
 });
 

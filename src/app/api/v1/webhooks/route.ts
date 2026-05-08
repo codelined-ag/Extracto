@@ -5,6 +5,7 @@ import { parseJsonBody } from "@/lib/api-error";
 import { withAuth, withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
 import {
+  encryptWebhookSecret,
   generateWebhookSecret,
   isSupportedWebhookEvent,
   serializeEventList,
@@ -87,7 +88,7 @@ export const POST = withMutationAuth("webhooks:write", async (request: NextReque
     data: {
       userId: auth.userId,
       url,
-      secret,
+      secret: encryptWebhookSecret(secret),
       events: serializeEventList(events),
       active: body.active !== false,
     },

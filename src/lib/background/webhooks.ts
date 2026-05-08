@@ -3,8 +3,20 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { lookup as dnsLookup } from "node:dns";
 
+import { decryptAtRest, encryptAtRest, isEncryptedAtRest } from "@/lib/auth/secret-at-rest";
 import { db } from "@/lib/db";
 import { parseAllowlist, resolveAndCheckExternalUrl } from "@/lib/url-safety";
+
+const WEBHOOK_SECRET_DOMAIN = "webhook-secret";
+
+export function encryptWebhookSecret(plaintext: string): string {
+  return encryptAtRest(plaintext, WEBHOOK_SECRET_DOMAIN);
+}
+
+export function decryptWebhookSecret(stored: string): string {
+  if (!isEncryptedAtRest(stored)) return stored;
+  return decryptAtRest(stored, WEBHOOK_SECRET_DOMAIN);
+}
 
 const SUPPORTED_EVENTS = [
   "job.created",
@@ -259,11 +271,12 @@ export async function dispatchJobWebhooks(
   const job = await fetchJobPayload(jobId);
   if (!job || !job.userId) return;
 
-  const webhooks = await db.webhook.findMany({
+  const webhooksRaw = await db.webhook.findMany({
     where: { userId: job.userId, active: true },
     select: { id: true, url: true, secret: true, events: true },
   });
-  if (webhooks.length === 0) return;
+  if (webhooksRaw.length === 0) return;
+  const webhooks = webhooksRaw.map((wh) => ({ ...wh, secret: decryptWebhookSecret(wh.secret) }));
 
   const matching = webhooks.filter((wh) => parseEventList(wh.events).includes(event));
   if (matching.length === 0) return;
@@ -301,10 +314,11 @@ export async function dispatchUserWebhooks(
   event: WebhookEvent,
   payload: Record<string, unknown>,
 ): Promise<void> {
-  const webhooks = await db.webhook.findMany({
+  const webhooksRaw = await db.webhook.findMany({
     where: { userId, active: true },
     select: { id: true, url: true, secret: true, events: true },
   });
+  const webhooks = webhooksRaw.map((wh) => ({ ...wh, secret: decryptWebhookSecret(wh.secret) }));
   const matching = webhooks.filter((wh) => parseEventList(wh.events).includes(event));
   if (matching.length === 0) return;
 
@@ -327,13 +341,14 @@ export async function dispatchTestWebhook(
   userId: string,
   webhookId: string,
 ): Promise<{ ok: boolean; statusCode: number | null; errorMessage: string | null }> {
-  const webhook = await db.webhook.findFirst({
+  const webhookRaw = await db.webhook.findFirst({
     where: { id: webhookId, userId },
     select: { id: true, url: true, secret: true, events: true },
   });
-  if (!webhook) {
+  if (!webhookRaw) {
     return { ok: false, statusCode: null, errorMessage: "Webhook not found" };
   }
+  const webhook = { ...webhookRaw, secret: decryptWebhookSecret(webhookRaw.secret) };
   let events: WebhookEvent[] = [];
   try {
     const parsed = JSON.parse(webhook.events);
@@ -503,7 +518,11 @@ export async function sweepDueWebhookRetries(now: Date = new Date()): Promise<{ 
       if (!isSupportedWebhookEvent(row.event)) continue;
       const timestamp = Math.floor(Date.now() / 1000);
       await attemptWebhookDelivery({
-        webhook: { id: row.webhook.id, url: row.webhook.url, secret: row.webhook.secret },
+        webhook: {
+          id: row.webhook.id,
+          url: row.webhook.url,
+          secret: decryptWebhookSecret(row.webhook.secret),
+        },
         event: row.event,
         body: row.body,
         timestamp,

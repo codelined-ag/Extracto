@@ -4,10 +4,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 let workdir = "";
+const TEST_AUTH_SECRET = "0".repeat(64);
 
 beforeEach(async () => {
   workdir = await mkdtemp(path.join(tmpdir(), "s3-defaults-"));
   vi.stubEnv("DATABASE_URL", `file:${path.join(workdir, "test.db")}`);
+  vi.stubEnv("AUTH_SECRET", TEST_AUTH_SECRET);
   vi.resetModules();
 });
 
