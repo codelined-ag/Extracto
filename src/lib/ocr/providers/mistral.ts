@@ -118,6 +118,13 @@ export async function runMistralOcr(
   let payload: unknown = null;
   let response: Response | null = null;
 
+  if (endpointCandidates.length === 0) {
+    throw new ApiRouteError(
+      "Mistral endpoint blocked by allowlist (MISTRAL_ALLOWED_HOSTS). Update the policy or correct the saved endpoint.",
+      400,
+    );
+  }
+
   for (let index = 0; index < endpointCandidates.length; index++) {
     const candidateEndpoint = endpointCandidates[index];
     endpointUsed = candidateEndpoint;
@@ -146,6 +153,11 @@ export async function runMistralOcr(
     } catch (error) {
       if (error instanceof OcrStopRequestedError) {
         throw error;
+      }
+      const isLastEndpoint = index === endpointCandidates.length - 1;
+      if (!isLastEndpoint) {
+        errors.push(`${candidateEndpoint}: ${errorMessage(error, "network error")}`);
+        continue;
       }
       throw error instanceof ApiRouteError
         ? error

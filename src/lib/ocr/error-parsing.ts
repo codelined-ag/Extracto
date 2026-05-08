@@ -57,9 +57,13 @@ export function parsePreviewImageData(preview: string): PreviewImageData {
     };
   }
 
+  const isAllowedMime = (mt: string): boolean =>
+    /^image\/[\w.+-]+$/i.test(mt) || mt === "application/pdf";
+
   const match = preview.match(/^data:([^;]+);base64,(.*)$/i);
   if (match) {
     const mimeType = match[1]?.trim() || "image/jpeg";
+    if (!isAllowedMime(mimeType)) return { mimeType: "image/jpeg", base64: "", dataUrl: "" };
     const base64 = match[2] || "";
     return {
       mimeType,
@@ -72,6 +76,7 @@ export function parsePreviewImageData(preview: string): PreviewImageData {
     const base64 = preview.slice(preview.indexOf(",") + 1);
     const mimeMatch = preview.match(/^data:([^;,]+)/i);
     const mimeType = mimeMatch?.[1]?.trim() || "image/jpeg";
+    if (!isAllowedMime(mimeType)) return { mimeType: "image/jpeg", base64: "", dataUrl: "" };
     return {
       mimeType,
       base64,

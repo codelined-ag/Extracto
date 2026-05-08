@@ -17,10 +17,13 @@ function getS3Config() {
 }
 
 let s3Client: import("@aws-sdk/client-s3").S3Client | null = null;
-let s3LoadError: Error | null = null;
+let s3LoadError: { error: Error; at: number } | null = null;
+const S3_LOAD_ERROR_TTL_MS = 5 * 60 * 1000;
 
 async function getS3Client() {
-  if (s3LoadError) throw s3LoadError;
+  if (s3LoadError && Date.now() - s3LoadError.at < S3_LOAD_ERROR_TTL_MS) {
+    throw s3LoadError.error;
+  }
   if (s3Client) return s3Client;
   const cfg = getS3Config();
   try {
@@ -41,10 +44,14 @@ async function getS3Client() {
           }
         : {}),
     });
+    s3LoadError = null;
     return s3Client;
   } catch (error) {
-    s3LoadError = error instanceof Error ? error : new Error(String(error));
-    throw s3LoadError;
+    s3LoadError = {
+      error: error instanceof Error ? error : new Error(String(error)),
+      at: Date.now(),
+    };
+    throw s3LoadError.error;
   }
 }
 
