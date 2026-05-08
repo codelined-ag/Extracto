@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
         pendingEmail: null,
         emailChangeTokenHash: null,
         emailChangeExpiresAt: null,
+        passwordChangedAt: new Date(),
       },
     });
 

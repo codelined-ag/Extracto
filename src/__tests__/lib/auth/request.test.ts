@@ -248,11 +248,14 @@ describe("authenticateRequest with invalid / revoked Bearer token", () => {
 describe("authenticateRequest with valid session cookie", () => {
   it("returns AuthContext with method:'session' and WILDCARD_SCOPE", async () => {
     mockExtractBearerToken.mockReturnValue(null);
+    const matchedAt = new Date("2026-02-01T00:00:00Z");
     mockVerifySessionToken.mockResolvedValue({
       userId: "session-user-1",
       email: "user@example.com",
+      pv: matchedAt.getTime(),
       exp: 9999999999,
     });
+    mockDb.authUser.findUnique.mockResolvedValue({ passwordChangedAt: matchedAt });
 
     const req = makeRequest({
       cookieName: "estracto_session",
@@ -268,7 +271,7 @@ describe("authenticateRequest with valid session cookie", () => {
     expect(ctx!.rateLimitPerMinute).toBeNull();
   });
 
-  it("does NOT query authUser when token has no pv claim (legacy token grandfathered)", async () => {
+  it("rejects tokens without a pv claim (no legacy grandfathering)", async () => {
     mockVerifySessionToken.mockResolvedValue({
       userId: "session-user-1",
       email: "user@example.com",
@@ -277,7 +280,7 @@ describe("authenticateRequest with valid session cookie", () => {
     const req = makeRequest({ cookieName: "estracto_session", cookieValue: "legacy.token" });
     const ctx = await authenticateRequest(req);
 
-    expect(ctx).not.toBeNull();
+    expect(ctx).toBeNull();
     expect(mockDb.authUser.findUnique).not.toHaveBeenCalled();
   });
 
@@ -455,6 +458,7 @@ describe("authenticateMutation", () => {
     mockVerifySessionToken.mockResolvedValue({
       userId: "session-user-2",
       email: "user@example.com",
+      pv: 1,
       exp: 9999999999,
     });
     mockIsTrustedMutationRequest.mockReturnValue(true);
@@ -477,6 +481,7 @@ describe("authenticateMutation", () => {
     mockVerifySessionToken.mockResolvedValue({
       userId: "session-user-3",
       email: "user@example.com",
+      pv: 1,
       exp: 9999999999,
     });
     mockIsTrustedMutationRequest.mockReturnValue(false);
@@ -514,7 +519,7 @@ describe("authenticateMutation", () => {
 describe("withAuth higher-order wrapper", () => {
   function setupSessionAuth() {
     mockExtractBearerToken.mockReturnValue(null);
-    mockVerifySessionToken.mockResolvedValue({ userId: "u1" });
+    mockVerifySessionToken.mockResolvedValue({ userId: "u1", pv: 1 });
     mockGetAuthCookieName.mockReturnValue("estracto_session");
   }
 
@@ -593,7 +598,7 @@ describe("withAuth higher-order wrapper", () => {
 describe("withMutationAuth higher-order wrapper", () => {
   function setupSessionAuth() {
     mockExtractBearerToken.mockReturnValue(null);
-    mockVerifySessionToken.mockResolvedValue({ userId: "u1" });
+    mockVerifySessionToken.mockResolvedValue({ userId: "u1", pv: 1 });
     mockGetAuthCookieName.mockReturnValue("estracto_session");
   }
 
@@ -658,7 +663,7 @@ describe("withMutationAuth higher-order wrapper", () => {
 describe("withSessionAuth (read mode)", () => {
   it("calls handler when session-authenticated", async () => {
     mockExtractBearerToken.mockReturnValue(null);
-    mockVerifySessionToken.mockResolvedValue({ userId: "u1" });
+    mockVerifySessionToken.mockResolvedValue({ userId: "u1", pv: 1 });
     mockGetAuthCookieName.mockReturnValue("estracto_session");
     const handler = vi.fn(async () => new Response("ok"));
     const wrapped = withSessionAuth("read", "API keys", handler);
@@ -707,7 +712,7 @@ describe("withSessionAuth (read mode)", () => {
 describe("withSessionAuth (mutation mode)", () => {
   it("returns 200 when session + trusted origin", async () => {
     mockExtractBearerToken.mockReturnValue(null);
-    mockVerifySessionToken.mockResolvedValue({ userId: "u1" });
+    mockVerifySessionToken.mockResolvedValue({ userId: "u1", pv: 1 });
     mockGetAuthCookieName.mockReturnValue("estracto_session");
     mockIsTrustedMutationRequest.mockReturnValue(true);
     const handler = vi.fn(async () => new Response("ok"));
@@ -743,7 +748,7 @@ describe("withSessionAuth (mutation mode)", () => {
 
   it("returns 403 when session origin untrusted (CSRF guard)", async () => {
     mockExtractBearerToken.mockReturnValue(null);
-    mockVerifySessionToken.mockResolvedValue({ userId: "u1" });
+    mockVerifySessionToken.mockResolvedValue({ userId: "u1", pv: 1 });
     mockGetAuthCookieName.mockReturnValue("estracto_session");
     mockIsTrustedMutationRequest.mockReturnValue(false);
     const handler = vi.fn();

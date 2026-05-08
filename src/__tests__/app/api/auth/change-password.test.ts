@@ -46,6 +46,9 @@ vi.mock("@/lib/db", () => ({
       findFirst: vi.fn().mockResolvedValue(null),
       update: vi.fn(),
     },
+    authUser: {
+      findUnique: vi.fn().mockResolvedValue({ passwordChangedAt: new Date(0) }),
+    },
   },
 }));
 
@@ -81,7 +84,7 @@ function makeReq(body: unknown, opts: { cookie?: string; bearer?: string } = {})
   });
 }
 
-const VALID_SESSION = { userId: "u1", email: "a@b.co", name: "A" };
+const VALID_SESSION = { userId: "u1", email: "a@b.co", name: "A", pv: 1 };
 const VALID_USER = {
   id: "u1",
   email: "a@b.co",

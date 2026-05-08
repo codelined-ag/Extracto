@@ -6,7 +6,6 @@ export const DEFAULT_PUSH_ALLOWED_HOSTS: string[] = [
   "web.push.apple.com",
   ".push.apple.com",
   ".notify.windows.com",
-  ".windows.com",
 ];
 
 export function resolvePushHostAllowlist(): string[] {

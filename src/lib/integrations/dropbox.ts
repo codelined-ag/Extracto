@@ -209,6 +209,7 @@ async function refreshAccessToken(refreshToken: string, userId: string): Promise
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
+    signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
     const text = await res.text();

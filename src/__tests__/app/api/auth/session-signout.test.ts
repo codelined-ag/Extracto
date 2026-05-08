@@ -56,15 +56,17 @@ describe("GET /api/auth/session", () => {
   });
 
   it("returns 401 when token is valid but user no longer exists", async () => {
-    mockedVerify.mockResolvedValueOnce({ userId: "u1", email: "x", name: "x" });
+    mockedVerify.mockResolvedValueOnce({ userId: "u1", email: "x", name: "x", pv: 1 });
     mockedFindUser.mockResolvedValueOnce(null);
     const res = await SESSION(makeReq("estracto_session=t"));
     expect(res.status).toBe(401);
   });
 
   it("returns 200 + user payload when both token and user are valid", async () => {
-    mockedVerify.mockResolvedValueOnce({ userId: "u1", email: "a@b.co", name: "A" });
-    mockedFindUser.mockResolvedValueOnce({ id: "u1", email: "a@b.co", name: "A" });
+    mockedVerify.mockResolvedValueOnce({ userId: "u1", email: "a@b.co", name: "A", pv: 1 });
+    mockedFindUser
+      .mockResolvedValueOnce({ passwordChangedAt: new Date(0) })
+      .mockResolvedValueOnce({ id: "u1", email: "a@b.co", name: "A" });
     const res = await SESSION(makeReq("estracto_session=t"));
     expect(res.status).toBe(200);
     const body = await res.json();

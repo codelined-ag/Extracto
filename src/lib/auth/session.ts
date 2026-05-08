@@ -7,14 +7,14 @@ export async function verifyActiveSession(
   const payload = await verifySessionToken(token);
   if (!payload) return null;
 
-  if (typeof payload.pv === "number") {
-    const user = await db.authUser.findUnique({
-      where: { id: payload.userId },
-      select: { passwordChangedAt: true },
-    });
-    if (!user || user.passwordChangedAt.getTime() > payload.pv) {
-      return null;
-    }
+  if (typeof payload.pv !== "number") return null;
+
+  const user = await db.authUser.findUnique({
+    where: { id: payload.userId },
+    select: { passwordChangedAt: true },
+  });
+  if (!user || user.passwordChangedAt.getTime() > payload.pv) {
+    return null;
   }
 
   return payload;
