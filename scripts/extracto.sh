@@ -1654,8 +1654,32 @@ cmd_keys() {
       [ -n "${2:-}" ] || die "usage: extracto keys rotate <id>"
       api_post_json "/api/v1/keys/${2}/rotate" "{}"
       ;;
+    update)
+      [ -n "${2:-}" ] || die "usage: extracto keys update <id> [--name NAME] [--scopes a,b,c] [--rate-limit N|none]"
+      local id="$2"; shift 2
+      local body="{}"
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --name)
+            body="$(printf '%s' "$body" | jq --arg v "$2" '. + {name:$v}')"
+            shift 2 ;;
+          --scopes)
+            body="$(printf '%s' "$body" | jq --arg v "$2" '. + {scopes: ($v | split(","))}')"
+            shift 2 ;;
+          --rate-limit)
+            if [ "$2" = "none" ]; then
+              body="$(printf '%s' "$body" | jq '. + {rateLimitPerMinute: null}')"
+            else
+              body="$(printf '%s' "$body" | jq --argjson v "$2" '. + {rateLimitPerMinute: $v}')"
+            fi
+            shift 2 ;;
+          *) die "unknown keys update flag: $1" ;;
+        esac
+      done
+      api_patch_json "/api/v1/keys/${id}" "$body"
+      ;;
     *)
-      die "usage: extracto keys <list|rotate> [args...]"
+      die "usage: extracto keys <list|rotate|update> [args...]"
       ;;
   esac
 }

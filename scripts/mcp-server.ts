@@ -607,6 +607,19 @@ server.tool(
 );
 
 server.tool(
+  "keys_update",
+  "Update an existing API key's name, scopes, or rateLimitPerMinute without revoking it. Pass any subset of fields to change. Pass rateLimitPerMinute=null to clear a custom limit.",
+  {
+    id: z.string(),
+    name: z.string().optional(),
+    scopes: z.array(z.string()).optional(),
+    rateLimitPerMinute: z.union([z.number().int().positive(), z.null()]).optional(),
+  },
+  async ({ id, ...rest }) =>
+    asTextResult(await call(`/api/v1/keys/${encodeURIComponent(id)}`, { method: "PATCH", body: rest })),
+);
+
+server.tool(
   "metrics_get",
   "Aggregate usage and queue metrics for the caller (job counts, processing time, OCR pages, by-day buckets, by-provider/model).",
   {},
