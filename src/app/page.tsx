@@ -100,6 +100,7 @@ import { S3SettingsSection } from "@/app/page-components/s3-settings-section";
 import { WatchersSection } from "@/app/page-components/watchers-section";
 import { TemplatesSection } from "@/app/page-components/templates-section";
 import { IntegrationsPanel } from "@/app/page-components/integrations-panel";
+import { CloudExportDialog } from "@/app/page-components/cloud-export-dialog";
 import { CloudImportDialog } from "@/app/page-components/cloud-import-dialog";
 import { CompareDialog } from "@/app/page-components/compare-dialog";
 import { RecommendationsDialog } from "@/app/page-components/recommendations-dialog";
@@ -1677,7 +1678,13 @@ export default function ExtractoPage() {
    return () => { cancelled = true; };
  }, [apiSettingsOpen]);
 
- const exportFileToCloud = async (file: ProcessingFile, provider: "dropbox" | "google_drive" | "onedrive") => {
+ const [cloudExportDialog, setCloudExportDialog] = React.useState<{
+ open: boolean;
+ provider: "dropbox" | "google_drive" | "onedrive";
+ file: ProcessingFile | null;
+ }>({ open: false, provider: "dropbox", file: null });
+
+ const exportFileToCloud = (file: ProcessingFile, provider: "dropbox" | "google_drive" | "onedrive") => {
  if (!file.jobId) {
  toast({
  title: t("Nessun jobId","Missing jobId","jobId manquant","Falta jobId","jobId fehlt"),
@@ -1711,20 +1718,13 @@ export default function ExtractoPage() {
  });
  return;
  }
- const folderPlaceholder = provider === "dropbox" ? "/Extracto" : "root";
- const folder = window.prompt(
- t(
- provider === "dropbox" ? "Cartella Dropbox (es. /Extracto)" : provider === "google_drive" ? "ID cartella Google Drive (root o un id)" : "ID cartella OneDrive (root o un id)",
- provider === "dropbox" ? "Dropbox folder (e.g. /Extracto)" : provider === "google_drive" ? "Google Drive folder ID (root or an id)" : "OneDrive folder ID (root or an id)",
- ),
- folderPlaceholder,
- );
- if (folder === null) return;
- const format = window.prompt(
- t("Formato (md, json, txt, html, docx, rtf, csv, xlsx, obsidian, zip)","Format (md, json, txt, html, docx, rtf, csv, xlsx, obsidian, zip)"),
- "md",
- );
- if (!format) return;
+ setCloudExportDialog({ open: true, provider, file });
+ };
+
+ const submitCloudExport = async (folder: string, format: string) => {
+ const file = cloudExportDialog.file;
+ const provider = cloudExportDialog.provider;
+ if (!file?.jobId) return;
  try {
  const resp = await fetch(`/api/integrations/${provider}/push`, {
  method:"POST",
@@ -3421,6 +3421,15 @@ export default function ExtractoPage() {
         defaultModel={selectedModel || ""}
         connected={cloudConnected}
         t={t}
+      />
+
+      <CloudExportDialog
+        open={cloudExportDialog.open}
+        onOpenChange={(open) => setCloudExportDialog((prev) => ({ ...prev, open }))}
+        provider={cloudExportDialog.provider}
+        fileName={cloudExportDialog.file?.file?.name}
+        t={t}
+        onSubmit={submitCloudExport}
       />
 
       <CompareDialog
