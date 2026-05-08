@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { resolvePushHostAllowlist, validatePushEndpoint } from "@/lib/push/endpoint-policy";
 import { getVapidKeys, webpush } from "@/lib/push/vapid";
 
 export interface PushPayload {
@@ -27,8 +28,14 @@ export async function dispatchPushToUser(userId: string, payload: PushPayload): 
 
   const body = JSON.stringify(payload);
   const stale: string[] = [];
+  const allowlist = resolvePushHostAllowlist();
   await Promise.all(
     subs.map(async (sub) => {
+      const policy = validatePushEndpoint(sub.endpoint, allowlist);
+      if (!policy.ok) {
+        stale.push(sub.id);
+        return;
+      }
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },

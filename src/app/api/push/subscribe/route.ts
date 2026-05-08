@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiRouteError, parseJsonBody } from "@/lib/api-error";
 import { withAuth, withMutationAuth } from "@/lib/auth/request";
 import { db } from "@/lib/db";
+import { resolvePushHostAllowlist, validatePushEndpoint } from "@/lib/push/endpoint-policy";
 import { getPublicVapidKey } from "@/lib/push/vapid";
 
 interface SubscribeBody extends Record<string, unknown> {
@@ -33,6 +34,10 @@ export const POST = withMutationAuth("settings:write", async (request: NextReque
   }
   if (endpoint.length > 1024 || p256dh.length > 256 || authKey.length > 128) {
     throw new ApiRouteError("subscription field too long", 400);
+  }
+  const policy = validatePushEndpoint(endpoint, resolvePushHostAllowlist());
+  if (!policy.ok) {
+    throw new ApiRouteError(policy.reason ?? "endpoint host is not an allowed push service", 400);
   }
   const userAgent = typeof body.userAgent === "string" ? body.userAgent.slice(0, 200) : null;
 
