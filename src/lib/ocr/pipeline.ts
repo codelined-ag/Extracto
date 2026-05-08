@@ -21,6 +21,7 @@ import { getOllamaCandidatesForOcr } from "@/lib/ocr/ollama-dispatch";
 import { extractAnchorsForPages } from "@/lib/ocr/pdf-anchoring-helper";
 import {
   computeDegenerateRetryBudget,
+  projectMetadataForPersistence,
   runOcrPages,
   type OrchestratorState,
 } from "@/lib/ocr/pipeline-page-loop";
@@ -142,11 +143,22 @@ async function persistFailedJob(
   metadata: OcrProgressMetadata,
   usedOllamaModels: Set<string>,
 ): Promise<void> {
+  let metadataForDb: unknown = metadata;
+  if (input.settingsPayload.piiRedaction) {
+    const { redactPii } = await import("@/lib/pii/redact");
+    metadataForDb = {
+      ...metadata,
+      checkpoints: metadata.checkpoints.map((cp) => ({
+        ...cp,
+        previewText: redactPii(cp.previewText).redactedText,
+      })),
+    };
+  }
   await db.ocrJob.update({
     where: { id: input.jobId },
     data: {
       status: OcrJobStatus.FAILED,
-      metadata: toJsonValue(metadata),
+      metadata: toJsonValue(metadataForDb),
       errorMessage: errorText,
       completedAt: new Date(),
       processingMs: Date.now() - input.startedAtMs,
@@ -236,7 +248,13 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       where: { id: input.jobId },
       data: {
         status: OcrJobStatus.QUEUED,
-        metadata: toJsonValue({ ...state.latestMetadata, pageRecords: state.pageRecords }),
+        metadata: toJsonValue(
+          projectMetadataForPersistence(
+            state.latestMetadata,
+            state.pageRecords,
+            Boolean(input.settingsPayload.piiRedaction),
+          ),
+        ),
         processingMs: Date.now() - input.startedAtMs,
       },
     });
@@ -272,6 +290,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
         input.settingsPayload.documentPreset === "form",
       pageConcurrency: input.settingsPayload.pageConcurrency,
       autoRetryMaxAttempts: input.settingsPayload.autoRetryMaxAttempts,
+      piiRedactionEnabled: Boolean(input.settingsPayload.piiRedaction),
       startIndex,
       snapshot: snapshotMetadata,
       ocrPct,
@@ -296,11 +315,20 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
     const documentType = firstPageRecord
       ? classifyDocumentType(firstPageRecord.text)
       : { kind: "generic" as const, confidence: 0 };
+    const piiRedactionOn = Boolean(input.settingsPayload.piiRedaction);
+    const piiModule = piiRedactionOn ? await import("@/lib/pii/redact") : null;
+    const finalPageResults = piiModule
+      ? (state.partialPageResults.map((p) => piiModule.redactJsonValues(p)) as typeof state.partialPageResults)
+      : state.partialPageResults;
+    const finalStructuredPages = piiModule
+      ? (state.partialStructuredPages.map((p) => piiModule.redactJsonValues(p)) as typeof state.partialStructuredPages)
+      : state.partialStructuredPages;
+
     const extractedMetadata: Record<string, unknown> = {
       ocrModel: input.ocrModel,
       inferenceModel: input.model,
       pageCount: input.inputPreviews.length,
-      pageResults: state.partialPageResults,
+      pageResults: finalPageResults,
       ...(Object.keys(documentMeta).length > 0 ? { document: documentMeta } : {}),
       ...(documentType.confidence > 0 ? { documentType } : {}),
     };
@@ -320,8 +348,8 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
     let rawExtractionText = extractedMarkdown;
     extractedMetadata.postProcessing = postProcessing.postProcessingForExtractedMetadata;
 
-    if (input.settingsPayload.piiRedaction) {
-      const { redactPii, redactJsonValues } = await import("@/lib/pii/redact");
+    if (piiModule) {
+      const { redactPii, redactJsonValues } = piiModule;
       const finalRedaction = redactPii(finalMarkdown);
       finalMarkdown = finalRedaction.redactedText;
       rawExtractionText = redactPii(rawExtractionText).redactedText;
@@ -343,7 +371,7 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       structured: {
         markdown: finalMarkdown,
         rawMarkdown: rawExtractionText,
-        pages: state.partialStructuredPages,
+        pages: finalStructuredPages,
         ...(postProcessedText
           ? {
               postProcessingOutput:
@@ -373,7 +401,15 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
       progressPct: 100,
       etaSeconds: 0,
     });
-    extractedMetadata.progress = state.latestMetadata;
+    extractedMetadata.progress = piiModule
+      ? {
+          ...state.latestMetadata,
+          checkpoints: state.latestMetadata.checkpoints.map((cp) => ({
+            ...cp,
+            previewText: piiModule.redactPii(cp.previewText).redactedText,
+          })),
+        }
+      : state.latestMetadata;
 
     await persistCompletedJob(input, finalMarkdown, result, extractedMetadata, state.usedOllamaModels);
   } catch (error) {

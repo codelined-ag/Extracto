@@ -20,6 +20,7 @@ import {
   toStructuredPagePayload,
   type ProcessedPageOutput,
 } from "@/lib/ocr/pipeline-result-builder";
+import { redactPii, redactJsonValues } from "@/lib/pii/redact";
 import { detectDegenerate } from "@/lib/ocr/degenerate-detection";
 import { detectPageLanguage } from "@/lib/ocr/language-detection";
 import { runProviderOcr } from "@/lib/ocr/provider-dispatch";
@@ -65,10 +66,34 @@ export interface PageLoopDeps {
   documentPresetExpectsJson?: boolean;
   pageConcurrency?: number;
   autoRetryMaxAttempts?: number;
+  piiRedactionEnabled?: boolean;
   startIndex: number;
   snapshot: (snap: ProgressSnapshotInput) => OcrProgressMetadata;
   ocrPct: () => number;
   pauseAtCheckpoint: (stageMessage: string, eventMessage: string) => Promise<void>;
+}
+
+export function projectMetadataForPersistence(
+  metadata: OcrProgressMetadata,
+  pageRecords: ReturnType<typeof toPageRecord>[],
+  redact: boolean,
+): Record<string, unknown> {
+  if (!redact) {
+    return { ...metadata, pageRecords };
+  }
+  const redactedCheckpoints = metadata.checkpoints.map((cp) => ({
+    ...cp,
+    previewText: redactPii(cp.previewText).redactedText,
+  }));
+  return {
+    ...metadata,
+    checkpoints: redactedCheckpoints,
+    pageRecords: pageRecords.map((rec) => redactJsonValues(rec)),
+  };
+}
+
+function persistedExtractedText(text: string, redact: boolean): string {
+  return redact ? redactPii(text).redactedText : text;
 }
 
 export interface PageLoopResult {
@@ -309,7 +334,13 @@ export async function runOcrPages(
     await db.ocrJob.update({
       where: { id: deps.jobId },
       data: {
-        metadata: toJsonValue({ ...state.latestMetadata, pageRecords: state.pageRecords }),
+        metadata: toJsonValue(
+          projectMetadataForPersistence(
+            state.latestMetadata,
+            state.pageRecords,
+            Boolean(deps.piiRedactionEnabled),
+          ),
+        ),
       },
     });
 
@@ -322,8 +353,17 @@ export async function runOcrPages(
         await db.ocrJob.update({
           where: { id: deps.jobId },
           data: {
-            extractedText: state.extractedTextSoFar,
-            metadata: toJsonValue({ ...state.latestMetadata, pageRecords: state.pageRecords }),
+            extractedText: persistedExtractedText(
+              state.extractedTextSoFar,
+              Boolean(deps.piiRedactionEnabled),
+            ),
+            metadata: toJsonValue(
+              projectMetadataForPersistence(
+                state.latestMetadata,
+                state.pageRecords,
+                Boolean(deps.piiRedactionEnabled),
+              ),
+            ),
           },
         });
         continue;
