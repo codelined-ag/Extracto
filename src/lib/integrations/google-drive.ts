@@ -8,6 +8,7 @@ import {
   loadIntegrationConnection,
   updateIntegrationTokens,
 } from "@/lib/integrations/store";
+import { withTokenLock } from "@/lib/integrations/token-lock";
 
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -91,22 +92,24 @@ async function fetchAccountLabel(accessToken: string): Promise<string> {
 }
 
 export async function getValidAccessToken(userId: string): Promise<string> {
-  const tokens = await loadIntegrationConnection(userId, "google_drive");
-  if (!tokens) {
-    throw new Error("Google Drive is not connected for this user");
-  }
-  if (!tokens.expiresAt || Date.now() < tokens.expiresAt) {
-    return tokens.accessToken;
-  }
-  if (!tokens.refreshToken) {
-    throw new Error("Google Drive access token expired and no refresh token is available");
-  }
-  const refreshed = await refreshAccessToken(tokens.refreshToken, userId);
-  await updateIntegrationTokens(userId, "google_drive", {
-    accessToken: refreshed.accessToken,
-    expiresAt: refreshed.expiresAt,
+  return withTokenLock(userId, "google_drive", async () => {
+    const tokens = await loadIntegrationConnection(userId, "google_drive");
+    if (!tokens) {
+      throw new Error("Google Drive is not connected for this user");
+    }
+    if (!tokens.expiresAt || Date.now() < tokens.expiresAt) {
+      return tokens.accessToken;
+    }
+    if (!tokens.refreshToken) {
+      throw new Error("Google Drive access token expired and no refresh token is available");
+    }
+    const refreshed = await refreshAccessToken(tokens.refreshToken, userId);
+    await updateIntegrationTokens(userId, "google_drive", {
+      accessToken: refreshed.accessToken,
+      expiresAt: refreshed.expiresAt,
+    });
+    return refreshed.accessToken;
   });
-  return refreshed.accessToken;
 }
 
 export async function revokeGoogleToken(token: string): Promise<void> {

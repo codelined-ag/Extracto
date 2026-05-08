@@ -8,6 +8,7 @@ import {
   loadIntegrationConnection,
   updateIntegrationTokens,
 } from "@/lib/integrations/store";
+import { withTokenLock } from "@/lib/integrations/token-lock";
 
 const AUTHORITY = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
@@ -87,23 +88,25 @@ async function fetchAccountLabel(accessToken: string): Promise<string> {
 }
 
 export async function getValidAccessToken(userId: string): Promise<string> {
-  const tokens = await loadIntegrationConnection(userId, "onedrive");
-  if (!tokens) {
-    throw new Error("OneDrive is not connected for this user");
-  }
-  if (!tokens.expiresAt || Date.now() < tokens.expiresAt) {
-    return tokens.accessToken;
-  }
-  if (!tokens.refreshToken) {
-    throw new Error("OneDrive access token expired and no refresh token is available");
-  }
-  const refreshed = await refreshAccessToken(tokens.refreshToken, userId);
-  await updateIntegrationTokens(userId, "onedrive", {
-    accessToken: refreshed.accessToken,
-    refreshToken: refreshed.refreshToken ?? tokens.refreshToken,
-    expiresAt: refreshed.expiresAt,
+  return withTokenLock(userId, "onedrive", async () => {
+    const tokens = await loadIntegrationConnection(userId, "onedrive");
+    if (!tokens) {
+      throw new Error("OneDrive is not connected for this user");
+    }
+    if (!tokens.expiresAt || Date.now() < tokens.expiresAt) {
+      return tokens.accessToken;
+    }
+    if (!tokens.refreshToken) {
+      throw new Error("OneDrive access token expired and no refresh token is available");
+    }
+    const refreshed = await refreshAccessToken(tokens.refreshToken, userId);
+    await updateIntegrationTokens(userId, "onedrive", {
+      accessToken: refreshed.accessToken,
+      refreshToken: refreshed.refreshToken ?? tokens.refreshToken,
+      expiresAt: refreshed.expiresAt,
+    });
+    return refreshed.accessToken;
   });
-  return refreshed.accessToken;
 }
 
 async function refreshAccessToken(refreshToken: string, userId: string): Promise<{

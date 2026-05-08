@@ -8,6 +8,7 @@ import {
   loadIntegrationConnection,
   updateIntegrationTokens,
 } from "@/lib/integrations/store";
+import { withTokenLock } from "@/lib/integrations/token-lock";
 
 const AUTH_URL = "https://www.dropbox.com/oauth2/authorize";
 const TOKEN_URL = "https://api.dropboxapi.com/oauth2/token";
@@ -165,22 +166,24 @@ export async function continueDropboxCursor(userId: string, cursor: string): Pro
 }
 
 export async function getValidAccessToken(userId: string): Promise<string> {
-  const tokens = await loadIntegrationConnection(userId, "dropbox");
-  if (!tokens) {
-    throw new Error("Dropbox is not connected for this user");
-  }
-  if (!tokens.expiresAt || Date.now() < tokens.expiresAt) {
-    return tokens.accessToken;
-  }
-  if (!tokens.refreshToken) {
-    throw new Error("Dropbox access token expired and no refresh token is available");
-  }
-  const refreshed = await refreshAccessToken(tokens.refreshToken, userId);
-  await updateIntegrationTokens(userId, "dropbox", {
-    accessToken: refreshed.accessToken,
-    expiresAt: refreshed.expiresAt,
+  return withTokenLock(userId, "dropbox", async () => {
+    const tokens = await loadIntegrationConnection(userId, "dropbox");
+    if (!tokens) {
+      throw new Error("Dropbox is not connected for this user");
+    }
+    if (!tokens.expiresAt || Date.now() < tokens.expiresAt) {
+      return tokens.accessToken;
+    }
+    if (!tokens.refreshToken) {
+      throw new Error("Dropbox access token expired and no refresh token is available");
+    }
+    const refreshed = await refreshAccessToken(tokens.refreshToken, userId);
+    await updateIntegrationTokens(userId, "dropbox", {
+      accessToken: refreshed.accessToken,
+      expiresAt: refreshed.expiresAt,
+    });
+    return refreshed.accessToken;
   });
-  return refreshed.accessToken;
 }
 
 export async function revokeDropboxToken(accessToken: string): Promise<void> {
