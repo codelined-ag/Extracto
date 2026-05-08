@@ -167,9 +167,29 @@ export function CloudImportDialog({
           {PROVIDERS.map((p) => (
             <TabsContent key={p.id} value={p.id} className="space-y-3">
               {!connected[p.id] ? (
-                <p className="text-sm text-muted-foreground p-4">
-                  {t("Account non connesso. Apri Impostazioni → Integrazioni.","Account not connected. Open Settings → Integrations.","Compte non connecté. Ouvrez Paramètres → Intégrations.","Cuenta no conectada. Abre Ajustes → Integraciones.","Konto nicht verbunden. Öffne Einstellungen → Integrationen.")}
-                </p>
+                <div className="space-y-3 p-4">
+                  <p className="text-sm text-muted-foreground">
+                    {t("Account non connesso.","Account not connected.","Compte non connecté.","Cuenta no conectada.","Konto nicht verbunden.")}
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/integrations/${p.id}/start`, { method: "POST" });
+                        const json = (await res.json().catch(() => ({}))) as { authUrl?: string; error?: string };
+                        if (!res.ok || !json.authUrl) {
+                          alert(json.error || `Connect failed (${res.status})`);
+                          return;
+                        }
+                        window.location.href = json.authUrl;
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : String(err));
+                      }
+                    }}
+                  >
+                    {t(`Connetti ${p.label}`, `Connect ${p.label}`, `Connecter ${p.label}`, `Conectar ${p.label}`, `${p.label} verbinden`)}
+                  </Button>
+                </div>
               ) : (
                 <>
                   <div className="flex items-center gap-2">

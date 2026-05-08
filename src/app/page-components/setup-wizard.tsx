@@ -246,6 +246,64 @@ export function SetupWizard({
                 "Jetzt zeigen wir dir kurz, wo alles ist.",
               )}
             </p>
+            <div className="rounded-md border bg-secondary/30 p-3 space-y-2">
+              <p className="text-xs font-medium">
+                {t(
+                  "Vuoi importare da un cloud? (opzionale)",
+                  "Want to pull files from a cloud? (optional)",
+                  "Importer depuis un cloud ? (optionnel)",
+                  "¿Importar desde la nube? (opcional)",
+                  "Aus einem Cloud-Speicher importieren? (optional)",
+                )}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: "dropbox", label: "Dropbox" },
+                  { id: "google_drive", label: "Google Drive" },
+                  { id: "onedrive", label: "OneDrive" },
+                ].map((p) => (
+                  <Button
+                    key={p.id}
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/integrations/${p.id}/start`, { method: "POST" });
+                        const json = (await res.json().catch(() => ({}))) as { authUrl?: string; available?: boolean };
+                        if (!res.ok || !json.authUrl) {
+                          alert(
+                            json.available === false
+                              ? t(
+                                  "Le credenziali OAuth non sono configurate. Aggiungile in Impostazioni → Integrazioni.",
+                                  "OAuth credentials not configured. Add them in Settings → Integrations.",
+                                  "Identifiants OAuth non configurés. Ajoute-les dans Paramètres → Intégrations.",
+                                  "Credenciales OAuth no configuradas. Añádelas en Ajustes → Integraciones.",
+                                  "OAuth-Daten fehlen. Ergänze sie unter Einstellungen → Integrationen.",
+                                )
+                              : "Connect failed",
+                          );
+                          return;
+                        }
+                        window.location.href = json.authUrl;
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : String(err));
+                      }
+                    }}
+                  >
+                    {t(`Connetti ${p.label}`, `Connect ${p.label}`, `Connecter ${p.label}`, `Conectar ${p.label}`, `${p.label} verbinden`)}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground/80">
+                {t(
+                  "Si può fare anche dopo, da Impostazioni → Integrazioni.",
+                  "You can also do this later from Settings → Integrations.",
+                  "Tu peux aussi le faire plus tard, depuis Paramètres → Intégrations.",
+                  "También puedes hacerlo después desde Ajustes → Integraciones.",
+                  "Geht auch später unter Einstellungen → Integrationen.",
+                )}
+              </p>
+            </div>
           </div>
         )}
 

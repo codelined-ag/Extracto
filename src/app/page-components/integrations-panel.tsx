@@ -1,10 +1,18 @@
 "use client";
 
 import * as React from "react";
-import { Cloud, Folder, Plug, Trash2, Plus, Pause, Play, RefreshCw } from "lucide-react";
+import { Cloud, Folder, Loader2, MoreHorizontal, Plug, Trash2, Plus, Pause, Play, RefreshCw } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -86,11 +94,29 @@ export function IntegrationsPanel({ t }: { t: Translator }) {
     [status],
   );
 
+  const [overrideOAuthFor, setOverrideOAuthFor] = React.useState<CloudProvider | null>(null);
+
   const onConnect = async (provider: CloudProvider) => {
     setBusyProvider(provider);
+    const grace = setTimeout(() => undefined, 200);
     try {
       const res = await fetch(`/api/integrations/${provider}/start`, { method: "POST" });
-      const json = (await res.json().catch(() => ({}))) as { authUrl?: string; error?: string };
+      const json = (await res.json().catch(() => ({}))) as { authUrl?: string; error?: string; available?: boolean };
+      if (res.status === 503 || json.available === false) {
+        toast({
+          title: t("Manca la configurazione OAuth", "OAuth credentials not set", "Identifiants OAuth non configurés", "Faltan credenciales OAuth", "OAuth-Daten fehlen"),
+          description: t(
+            "Aggiungi le credenziali OAuth o imposta le variabili d'ambiente del provider per collegare l'account.",
+            "Add OAuth credentials or set the provider env vars to connect this account.",
+            "Ajoute des identifiants OAuth ou définis les variables d'environnement du fournisseur.",
+            "Añade credenciales OAuth o define las variables de entorno del proveedor.",
+            "Hinterlege OAuth-Daten oder setze die Anbieter-Umgebungsvariablen.",
+          ),
+          variant: "destructive",
+        });
+        setOverrideOAuthFor(provider);
+        return;
+      }
       if (!res.ok || !json.authUrl) throw new Error(json.error || `Connect failed (${res.status})`);
       // eslint-disable-next-line react-hooks/immutability
       window.location.href = json.authUrl;
@@ -101,6 +127,7 @@ export function IntegrationsPanel({ t }: { t: Translator }) {
         variant: "destructive",
       });
     } finally {
+      clearTimeout(grace);
       setBusyProvider(null);
     }
   };
@@ -145,67 +172,99 @@ export function IntegrationsPanel({ t }: { t: Translator }) {
       <div className="grid gap-2">
         {PROVIDERS.map((p) => {
           const oauthApp = status?.oauthApp?.[p.id];
-          const available = oauthApp ? oauthApp.source !== "none" : status?.available?.[p.id];
+          const credentialSource = oauthApp?.source ?? "none";
+          const available = credentialSource !== "none";
           const connection = status?.connections?.find((c) => c.provider === p.id);
           const connected = connectedSet.has(p.id);
+          const showOAuthForm = !connected && (credentialSource === "none" || overrideOAuthFor === p.id);
+          const busy = busyProvider === p.id;
           return (
             <Card key={p.id}>
-              <CardContent className="p-3 flex flex-col gap-2">
+              <CardContent className="p-3 flex flex-col gap-3">
                 <div className="flex items-center gap-3">
                   <Cloud className="size-4 text-muted-foreground" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium">{p.label}</div>
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{p.label}</span>
+                      {connected ? (
+                        <Badge variant="default" className="text-[10px]">
+                          {t("Connesso", "Connected", "Connecté", "Conectado", "Verbunden")}
+                        </Badge>
+                      ) : credentialSource === "server" ? (
+                        <Badge variant="secondary" className="text-[10px]">
+                          {t("Credenziali server", "Server credentials", "Identifiants serveur", "Credenciales del servidor", "Server-Daten")}
+                        </Badge>
+                      ) : credentialSource === "user" ? (
+                        <Badge variant="outline" className="text-[10px]">
+                          {t(`Tua app (…${oauthApp?.clientIdLast4 ?? "????"})`, `Your app (…${oauthApp?.clientIdLast4 ?? "????"})`)}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px]">
+                          {t("Non configurato", "Not configured", "Non configuré", "Sin configurar", "Nicht konfiguriert")}
+                        </Badge>
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground truncate">
                       {connected
                         ? connection?.accountLabel || t("Connesso", "Connected", "Connecté", "Conectado", "Verbunden")
-                        : oauthApp?.source === "user"
-                          ? t(`OAuth app personale (…${oauthApp.clientIdLast4})`, `Your OAuth app (…${oauthApp.clientIdLast4})`)
-                          : oauthApp?.source === "server"
-                            ? t("OAuth app del server", "Server OAuth app", "Application OAuth du serveur", "Aplicación OAuth del servidor", "Server-OAuth-App")
-                            : t("Aggiungi le tue credenziali OAuth per collegarti", "Add your OAuth credentials to connect", "Ajoutez vos identifiants OAuth pour connecter", "Añade tus credenciales OAuth para conectar", "Eigene OAuth-Daten hinzufügen, um zu verbinden")}
+                        : credentialSource === "none"
+                          ? t("Aggiungi credenziali OAuth o imposta le env del provider per collegare.", "Add OAuth credentials or set provider env vars to connect.", "Ajoute des identifiants OAuth ou les variables d'environnement du fournisseur.", "Añade credenciales OAuth o define las env del proveedor.", "OAuth-Daten oder Anbieter-Env setzen, um zu verbinden.")
+                          : t("Pronto a collegare l'account.", "Ready to connect.", "Prêt à connecter.", "Listo para conectar.", "Bereit zum Verbinden.")}
                     </div>
                   </div>
                   {connected ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => void onDisconnect(p.id)}
-                      disabled={busyProvider === p.id}
-                    >
-                      <Trash2 className="size-3.5 mr-1.5" />
-                      {t("Disconnetti", "Disconnect", "Déconnecter", "Desconectar", "Trennen")}
-                    </Button>
+                    <ProviderActions
+                      primary={
+                        <Button size="sm" variant="ghost" onClick={() => void onDisconnect(p.id)} disabled={busy}>
+                          {busy ? <Loader2 className="size-3.5 mr-1.5 animate-spin" /> : <Trash2 className="size-3.5 mr-1.5" />}
+                          {t("Disconnetti", "Disconnect", "Déconnecter", "Desconectar", "Trennen")}
+                        </Button>
+                      }
+                      menu={
+                        <DropdownMenuItem
+                          onSelect={() => setOverrideOAuthFor(overrideOAuthFor === p.id ? null : p.id)}
+                        >
+                          {credentialSource === "user"
+                            ? t("Modifica OAuth app", "Edit OAuth app", "Modifier OAuth app", "Editar OAuth app", "OAuth-App bearbeiten")
+                            : t("Sostituisci con la tua app", "Override with your app", "Remplacer par ton app", "Sustituir con tu app", "Mit eigener App überschreiben")}
+                        </DropdownMenuItem>
+                      }
+                    />
                   ) : available ? (
-                    <Button
-                      size="sm"
-                      onClick={() => void onConnect(p.id)}
-                      disabled={busyProvider === p.id}
-                    >
-                      <Plug className="size-3.5 mr-1.5" />
-                      {t("Connetti", "Connect", "Connecter", "Conectar", "Verbinden")}
-                    </Button>
+                    <ProviderActions
+                      primary={
+                        <Button size="sm" onClick={() => void onConnect(p.id)} disabled={busy}>
+                          {busy ? <Loader2 className="size-3.5 mr-1.5 animate-spin" /> : <Plug className="size-3.5 mr-1.5" />}
+                          {t(`Connetti ${p.label}`, `Connect ${p.label}`, `Connecter ${p.label}`, `Conectar ${p.label}`, `${p.label} verbinden`)}
+                        </Button>
+                      }
+                      menu={
+                        <DropdownMenuItem onSelect={() => setOverrideOAuthFor(overrideOAuthFor === p.id ? null : p.id)}>
+                          {credentialSource === "user"
+                            ? t("Modifica OAuth app", "Edit OAuth app", "Modifier OAuth app", "Editar OAuth app", "OAuth-App bearbeiten")
+                            : t("Sostituisci con la tua app", "Override with your app", "Remplacer par ton app", "Sustituir con tu app", "Mit eigener App überschreiben")}
+                        </DropdownMenuItem>
+                      }
+                    />
                   ) : (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        const target = document.querySelector(`[data-oauth-config="${p.id}"]`) as HTMLElement | null;
-                        if (!target) return;
-                        const addBtn = Array.from(target.querySelectorAll("button"))
-                          .find((b) => /OAuth app/i.test(b.textContent ?? "")) as HTMLButtonElement | undefined;
-                        addBtn?.click();
-                        target.scrollIntoView({ behavior: "smooth", block: "center" });
-                      }}
-                    >
+                    <Button size="sm" onClick={() => setOverrideOAuthFor(p.id)}>
                       <Plug className="size-3.5 mr-1.5" />
-                      {t("Aggiungi credenziali", "Add credentials", "Ajouter les identifiants", "Añadir credenciales", "Anmeldedaten hinzufügen")}
+                      {t("Aggiungi credenziali OAuth", "Add OAuth credentials", "Ajouter les identifiants OAuth", "Añadir credenciales OAuth", "OAuth-Daten hinzufügen")}
                     </Button>
                   )}
                 </div>
-                {!connected ? (
-                  <div data-oauth-config={p.id}>
-                    <OAuthAppConfig provider={p.id} t={t} onChanged={refresh} hasUserCreds={oauthApp?.source === "user"} />
-                  </div>
+                {showOAuthForm ? (
+                  <OAuthAppConfig
+                    provider={p.id}
+                    t={t}
+                    onChanged={async () => {
+                      setOverrideOAuthFor(null);
+                      await refresh();
+                    }}
+                    onCancel={() => setOverrideOAuthFor(null)}
+                    hasUserCreds={credentialSource === "user"}
+                    forceOpen={overrideOAuthFor === p.id}
+                  />
                 ) : null}
               </CardContent>
             </Card>
@@ -219,6 +278,28 @@ export function IntegrationsPanel({ t }: { t: Translator }) {
         connections={connectedSet}
         onChange={refresh}
       />
+    </div>
+  );
+}
+
+function ProviderActions({ primary, menu }: { primary: React.ReactNode; menu: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {primary}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="icon" variant="ghost" aria-label="More actions">
+            <MoreHorizontal className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {menu}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => window.open("https://extracto.help/integrations", "_blank")}>
+            Provider docs
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -505,19 +586,30 @@ function OAuthAppConfig({
   provider,
   t,
   onChanged,
+  onCancel,
   hasUserCreds,
+  forceOpen = false,
 }: {
   provider: CloudProvider;
   t: Translator;
   onChanged: () => Promise<void>;
+  onCancel?: () => void;
   hasUserCreds: boolean;
+  forceOpen?: boolean;
 }) {
   const { toast } = useToast();
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = React.useState(forceOpen);
   const [clientId, setClientId] = React.useState("");
   const [clientSecret, setClientSecret] = React.useState("");
   const [redirectUri, setRedirectUri] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    if (forceOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setOpen(true);
+    }
+  }, [forceOpen]);
 
   const fetchInfo = React.useCallback(async () => {
     try {
@@ -610,7 +702,7 @@ function OAuthAppConfig({
         <Input type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} autoComplete="off" />
       </div>
       <div className="flex justify-end gap-2">
-        <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
+        <Button size="sm" variant="ghost" onClick={() => { setOpen(false); onCancel?.(); }} disabled={busy}>
           {t("Annulla", "Cancel", "Annuler", "Cancelar", "Abbrechen")}
         </Button>
         <Button size="sm" onClick={() => void onSave()} disabled={busy}>
