@@ -8,40 +8,71 @@ follows [SemVer](https://semver.org/).
 
 ## [1.4.1] - 2026-05-08
 
-Closes the v1.4.0 carry-over block: integrations UX overhaul, KB store retry, FTS5 search, PII detector improvements, API key edit, cloud-export Dialog, pipeline edge fixes, lazy re-encrypt of legacy plaintext secrets. Server-side image preprocessing (sharp) and S3 watcher streaming were dropped from this cut: sharp wants proper threat-modeling around libvips OOM and a Dockerfile change; streaming gives no real win because the OCR pipeline downstream still needs the full document in memory.
+Closes the v1.4.0 carry-over block.
 
-- Heartbeat write filters on status=PROCESSING so a late-landing tick cannot overwrite the parent's COMPLETED state. Each page run checks isOcrJobStopRequested up front so concurrent batches honor stop sooner. markOcrJobRunning invalidates stopRequestCache. extractMarkdownFromJsonLikeText switches to a state-machine scanner that respects backslash-escaped quotes. Document classifier picks the longest non-empty page when page 1 is missing.
-- PATCH /api/v1/keys/{id} edits scope set, custom rate-limit, or display name without revoking the secret. Mirrored in MCP keys_update and CLI extracto keys update. 2FA setup with force:true requires the current account password.
-- New PII detectors: street addresses, person names (title-prefixed), passport numbers, and driver's-license numbers. Phone validation rejects matches whose +XX prefix is not a real ITU country code. DOB regex adds the DD.MM.YYYY (German/EU dot-separated) variant. Passport and DL detectors require an explicit number-context token so phrases like "passport expires" do not trigger.
-- Vector store adapters share a fetchWithRetry that handles 429 (Retry-After honoring), 5xx, and network errors with exponential backoff and jitter, capped at three attempts.
-- Cloud-export window.prompt() pair replaces with a controlled Dialog: folder text input plus format select. Submit button shows a sending state.
-- Integrations panel collapses to one primary CTA per provider, driven by a state machine: not-configured shows Add OAuth credentials, configured-not-connected shows Connect <Provider>, connected shows Disconnect. Credential source renders as a Badge (Server credentials / Your app / Not configured / Connected). ENV-set credentials hide the per-user form by default; an Override option in the meatball menu reveals it. Connect path detects 503/available:false and opens the credentials form inline. Cloud Import dialog adds an inline Connect button when the active tab's provider is not connected. Setup wizard's final step exposes optional Connect Dropbox / Drive / OneDrive shortcuts.
-- Boot-time sweep walks Webhook secrets and S3 secretAccessKey blobs and rewrites legacy plaintext rows with the AES-GCM envelope, idempotent against already-encrypted values.
-- SQLite FTS5 virtual table for OcrJob.extractedText with AFTER INSERT and AFTER UPDATE OF extractedText, fileName triggers (so heartbeat metadata writes do not rebuild the index). Search route prefers MATCH over instr() when FTS is available, falls back if FTS5 is not compiled into the host SQLite.
+- Heartbeat metadata write is gated to status=PROCESSING so a late tick cannot overwrite COMPLETED.
+- Each page run checks the stop flag before starting, so concurrent batches honor stop sooner.
+- markOcrJobRunning invalidates the stop-request cache.
+- JSON-in-text extractor uses a state-machine scanner so escaped quotes don't truncate markdown.
+- Document classifier falls back to the longest non-empty page when page 1 is missing.
+- PATCH /api/v1/keys/{id} edits scope, rate-limit, or name in place; mirrored in MCP and CLI.
+- 2FA setup with force:true now requires the current account password.
+- Adds PII detectors for street addresses, person names, passport numbers, and driver's-license numbers.
+- Phone validator rejects +prefix matches whose country code is not a real ITU code.
+- DOB regex picks up the DD.MM.YYYY (German/EU) variant.
+- Vector store adapters share a fetchWithRetry with Retry-After honoring, exponential backoff, and a 3-attempt cap.
+- Cloud-export window.prompt() pair becomes a controlled Dialog with folder input and format select.
+- Integrations panel renders one primary CTA per provider via a state machine.
+- Credential source renders as a Badge instead of muted prose.
+- ENV-set OAuth credentials hide the per-user form by default; meatball menu has an explicit Override.
+- Connect path detects 503/available:false and opens the OAuth credentials form inline.
+- Cloud Import dialog adds an inline Connect button when the active tab's provider is not connected.
+- Setup wizard's final step exposes optional Connect Dropbox / Drive / OneDrive shortcuts.
+- Boot-time sweep re-encrypts legacy plaintext webhook signing secrets and S3 secretAccessKey blobs at rest.
+- SQLite FTS5 virtual table backs OcrJob full-text search, with AFTER UPDATE gated on extractedText/fileName so heartbeats don't rebuild the index.
+- Search route prefers MATCH over instr() when FTS is available and falls back when it is not.
 
 ## [1.4.0] - 2026-05-08
 
-Closes the v1.3.4 hardening audit (High + Medium + Low blocks) plus small v1.4.0 deferred items in one cut. Integrations UX overhaul block and the larger v1.4.0 carry-overs (S3 watcher streaming, FTS5, server-side image preprocessing, KB store provider-aware retry) roll forward to v1.4.1.
+Closes the v1.3.4 hardening audit (High + Medium + Low blocks) in one cut.
 
-- PII redaction now runs at every per-page DB write site, not only at finalize. Per-page records, structured pages, and progress checkpoints no longer hold raw text in OcrJob.metadata while a job is running.
-- Push-subscribe blocks SSRF via a default allowlist (FCM, Mozilla, Apple, Microsoft) overridable through PUSH_ALLOWED_HOSTS. The dispatcher revalidates so existing rows cannot bypass.
-- Webhook signing secret and S3 secretAccessKey are AES-GCM at rest, keyed off AUTH_SECRET, with a backwards-compatible read for existing plaintext rows.
-- Watcher PATCH/DELETE use updateMany/deleteMany scoped on (id, userId) so the WHERE clause enforces ownership atomically.
-- OAuth refresh per (userId, provider) is serialized through an in-process mutex; refresh fetches gain a 15s timeout so a hung upstream cannot wedge concurrent callers.
-- Render errors land in app/error.tsx and app/global-error.tsx fallbacks instead of blanking the workspace.
+- PII redaction now runs at every per-page DB write site, not only at finalize.
+- Push-subscribe blocks SSRF via a default allowlist (FCM, Mozilla, Apple, Microsoft) overridable through PUSH_ALLOWED_HOSTS.
+- Webhook signing secret and S3 secretAccessKey are encrypted at rest with AES-GCM keyed off AUTH_SECRET.
+- Watcher PATCH/DELETE switch to updateMany/deleteMany scoped on (id, userId) so the WHERE clause enforces ownership atomically.
+- OAuth refresh per (userId, provider) is serialized through an in-process mutex.
+- OAuth refresh fetches now have a 15s timeout so a hung upstream cannot wedge concurrent callers.
+- Render errors fall through to app/error.tsx and app/global-error.tsx instead of blanking the workspace.
 - Login and signup run a dummy scrypt on the unknown-email and collision branches to blunt the user-enum side channel.
-- Email change bumps passwordChangedAt so old session tokens fail the pv check. Tokens without a pv claim are no longer grandfathered.
-- Boot-time and 5-minute sweep flips orphaned PROCESSING jobs older than OCR_ORPHAN_JOB_STALE_MS to FAILED with a resubmit message.
+- Email change bumps passwordChangedAt so old session tokens fail the pv check.
+- Tokens without a pv claim are no longer grandfathered.
+- Boot-time and 5-minute sweeps flip orphaned PROCESSING jobs older than OCR_ORPHAN_JOB_STALE_MS to FAILED.
 - Webhook delivery body is nulled when status flips to exhausted, not only on delivered.
-- POST /api/v1/webhooks/{id}/rotate-secret and POST /api/v1/keys/{id}/rotate rotate the secret in place; both surface in MCP and the CLI.
+- POST /api/v1/webhooks/{id}/rotate-secret rotates the signing secret in place.
+- POST /api/v1/keys/{id}/rotate rotates an API key in place.
 - Webhook test endpoint is per-user rate-limited.
-- MCP gains presets_create, presets_delete, keys_list/create/delete/rotate, metrics_get, webhooks_rotate_secret. ocr_submit settings schema gets piiRedaction. ocr_comparison_get description is corrected to all-pairs.
-- SKILL.md operator-env section is rewritten with the full set of allowlist, lifecycle, auth, search, KB, push, and SMTP flags, plus the OAuth ENV-credentials path.
-- Drag-and-drop applies the same accept filter as the file picker and toasts on rejected items. Settings PUT debounce uses an AbortController. Post-processing model effect preserves a freshly typed selection. OAuth state cookie is namespaced per provider.
-- OAuth state callback compare uses timingSafeEqual. 2FA challenge token carries a single-use jti consumed for its 5m TTL on success. e2e/key PUT enforces the body cap on the raw text, not only Content-Length.
-- Mistral provider retries the next endpoint candidate on network errors and surfaces empty-allowlist failures with a clear message. parsePreviewImageData rejects mime types outside image/* and application/pdf. S3 module-import error expires after five minutes so a transient failure does not disable the result store for the rest of the process.
-- Resumed-page text and persisted pageRecord text are capped at safe limits. PWA service worker calls registration.update() on visibility change. Camera-capture toast deduplicates by errorMessage. Auth page renders a small loading state instead of flashing empty. removeFile computes remaining inside the setFiles callback so selection updates do not read stale state.
-- Compare-polling setTimeout handle is cleared on unmount. OCR, webhook-test, and S3 rate-limit IP keys can be salted via OCR_RATE_LIMIT_IP_SALT for operators behind nested proxies, NATs, or carrier gateways.
+- MCP gains presets_create, presets_delete, keys_list/create/delete/rotate, metrics_get, webhooks_rotate_secret.
+- ocr_submit settings schema accepts piiRedaction.
+- ocr_comparison_get description corrected to all-pairs.
+- SKILL.md operator-env section rewritten with the full set of allowlist, lifecycle, auth, search, KB, push, and SMTP flags.
+- Drag-and-drop applies the same accept filter as the file picker and toasts on rejected items.
+- Settings PUT debounce now uses an AbortController so rapid changes don't race last-write-wins.
+- Post-processing model effect preserves a freshly typed selection.
+- OAuth state cookie is namespaced per provider.
+- OAuth state callback compare uses timingSafeEqual.
+- 2FA challenge token carries a single-use jti consumed for its 5m TTL on success.
+- e2e/key PUT enforces the body cap on the raw text, not only Content-Length.
+- Mistral provider retries the next endpoint candidate on network errors.
+- Mistral surfaces empty-allowlist failures with a clear message.
+- parsePreviewImageData rejects mime types outside image/* and application/pdf.
+- S3 module-import error expires after five minutes so a transient failure does not disable the result store.
+- Resumed-page text and persisted pageRecord text are capped at safe limits.
+- PWA service worker calls registration.update() on visibility change.
+- Camera-capture toast deduplicates by errorMessage.
+- Auth page renders a small loading state instead of flashing empty.
+- removeFile computes remaining inside the setFiles callback so selection updates don't read stale state.
+- Compare-polling setTimeout handle is cleared on unmount.
+- OCR, webhook-test, and S3 rate-limit IP keys can be salted via OCR_RATE_LIMIT_IP_SALT.
 
 ## [1.3.3] - 2026-05-06
 
