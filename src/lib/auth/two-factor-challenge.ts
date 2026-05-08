@@ -1,12 +1,29 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const CHALLENGE_TTL_SECONDS = 5 * 60;
 const KIND = "2fa_challenge" as const;
+
+const consumedJtis = new Map<string, number>();
+
+function pruneConsumed(now: number): void {
+  for (const [jti, exp] of consumedJtis) {
+    if (exp <= now) consumedJtis.delete(jti);
+  }
+}
+
+export function consumeTwoFactorChallengeJti(jti: string, expSeconds: number): boolean {
+  const now = Math.floor(Date.now() / 1000);
+  if (consumedJtis.size > 1000) pruneConsumed(now);
+  if (consumedJtis.has(jti)) return false;
+  consumedJtis.set(jti, expSeconds);
+  return true;
+}
 
 export interface TwoFactorChallengePayload {
   userId: string;
   email: string;
   exp: number;
+  jti: string;
   kind: typeof KIND;
 }
 
@@ -31,6 +48,7 @@ export function createTwoFactorChallengeToken(input: { userId: string; email: st
   const claims: TwoFactorChallengePayload = {
     ...input,
     exp: Math.floor(Date.now() / 1000) + CHALLENGE_TTL_SECONDS,
+    jti: randomBytes(16).toString("hex"),
     kind: KIND,
   };
   const payloadEncoded = base64UrlEncode(JSON.stringify(claims));

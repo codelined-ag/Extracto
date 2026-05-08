@@ -5,6 +5,7 @@ import { verifyActiveSession } from "@/lib/auth/session";
 import { exchangeAuthorizationCode } from "@/lib/integrations/onedrive";
 import {
   oauthStateCookieName,
+  timingSafeStateCompare,
   unpackOAuthState,
 } from "@/lib/integrations/oauth-state";
 import { saveIntegrationConnection } from "@/lib/integrations/store";
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     });
 
   if (error) return errorPage(`Microsoft returned an error: ${error}`, 400);
-  if (!code || !stateRaw || !cookieState || stateRaw !== cookieState) {
+  if (!code || !stateRaw || !cookieState || !timingSafeStateCompare(stateRaw, cookieState)) {
     return errorPage("Invalid OAuth state. Please retry from Settings.", 400);
   }
   const payload = unpackOAuthState(cookieState);

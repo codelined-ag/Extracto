@@ -10,7 +10,7 @@ import {
   getSessionMaxAgeSeconds,
   shouldUseSecureCookie,
 } from "@/lib/auth/token";
-import { verifyTwoFactorChallengeToken } from "@/lib/auth/two-factor-challenge";
+import { consumeTwoFactorChallengeJti, verifyTwoFactorChallengeToken } from "@/lib/auth/two-factor-challenge";
 import { verifyTotpForUser } from "@/lib/auth/totp";
 import { badRequest, isRequestSecure, tooManyRequests } from "@/app/api/auth/helpers";
 
@@ -58,6 +58,10 @@ export async function POST(request: NextRequest) {
     const verified = await verifyTotpForUser(claims.userId, code);
     if (!verified) {
       return badRequest("Invalid verification code", 401);
+    }
+
+    if (!consumeTwoFactorChallengeJti(claims.jti, claims.exp)) {
+      return badRequest("Challenge already used. Sign in again.", 401);
     }
 
     const user = await findUserById(claims.userId);

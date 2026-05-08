@@ -10,6 +10,14 @@ export function oauthStateCookieName(provider: IntegrationProvider): string {
   return `extracto_oauth_state_${provider}`;
 }
 
+export function timingSafeStateCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const aBuf = Buffer.from(a, "utf-8");
+  const bBuf = Buffer.from(b, "utf-8");
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
+
 export interface OAuthStatePayload {
   userId: string;
   provider: IntegrationProvider;

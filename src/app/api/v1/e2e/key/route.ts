@@ -27,7 +27,16 @@ export const PUT = withSessionAuth("mutation", "E2E key", async (request: NextRe
   if (Number.isFinite(contentLength) && contentLength > MAX_PEM_BYTES) {
     throw new ApiRouteError(`publicKeyPem payload exceeds ${MAX_PEM_BYTES} bytes`, 413);
   }
-  const raw = await request.json().catch(() => null);
+  const text = await request.text().catch(() => "");
+  if (text.length > MAX_PEM_BYTES) {
+    throw new ApiRouteError(`publicKeyPem payload exceeds ${MAX_PEM_BYTES} bytes`, 413);
+  }
+  let raw: unknown;
+  try {
+    raw = text ? JSON.parse(text) : null;
+  } catch {
+    raw = null;
+  }
   if (!raw || typeof raw !== "object") {
     throw new ApiRouteError("Invalid JSON payload", 400);
   }
