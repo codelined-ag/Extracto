@@ -119,6 +119,9 @@ async function runOnePage(
   deps: PageLoopDeps,
   index: number,
 ): Promise<PageRunSuccess> {
+  if (await isOcrJobStopRequested(deps.jobId)) {
+    throw new OcrStopRequestedError();
+  }
   const pagePreview = deps.inputPreviews[index];
   const pageNumber = deps.pageNumbers?.[index] ?? index + 1;
   const startedAt = Date.now();

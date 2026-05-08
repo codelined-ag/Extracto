@@ -123,8 +123,8 @@ export async function runPostProcessingStage(
     if (heartbeatCancelled) return;
     state.latestMetadata = snap;
     try {
-      await db.ocrJob.update({
-        where: { id: deps.jobId },
+      await db.ocrJob.updateMany({
+        where: { id: deps.jobId, status: "PROCESSING" },
         data: { metadata: toJsonValue(snap) },
       });
     } catch { /* heartbeat write failures are non-fatal */ }

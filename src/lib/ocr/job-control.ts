@@ -8,6 +8,7 @@ const STOP_REQUEST_CACHE_TTL_MS = 1_000;
 
 export function markOcrJobRunning(jobId: string): void {
   ocrRunningJobs.add(jobId);
+  stopRequestCache.delete(jobId);
 }
 
 export function clearOcrJobRunning(jobId: string): void {

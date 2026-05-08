@@ -304,7 +304,12 @@ export async function processOcrJobInBackground(input: ProcessOcrJobInput): Prom
     }
 
     const pageScopedText = formatPageScopedText(state.pageOutputs);
-    const firstPageRecord = state.pageRecords.find((p) => p.pageNumber === 1) ?? state.pageRecords[0];
+    const firstPageRecord =
+      state.pageRecords.find((p) => p.pageNumber === 1) ??
+      [...state.pageRecords]
+        .filter((p) => typeof p.text === "string" && p.text.trim().length > 0)
+        .sort((a, b) => (b.text?.length ?? 0) - (a.text?.length ?? 0))[0] ??
+      state.pageRecords[0];
     const firstPageLanguage =
       typeof firstPageRecord?.metadata?.language === "string"
         ? (firstPageRecord.metadata.language as string)

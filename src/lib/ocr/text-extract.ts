@@ -65,12 +65,12 @@ export function extractMarkdownFromJsonLikeText(raw: string): string | null {
     return null;
   }
 
-  const fieldMatch = /^"([\s\S]*?)"\s*(?:,\s*"[\w$-]+"\s*:|\}\s*$)/u.exec(valueSlice);
-  if (!fieldMatch?.[1]) {
+  const rawValue = scanJsonStringValue(valueSlice);
+  if (rawValue === null) {
     return null;
   }
 
-  const decoded = fieldMatch[1]
+  const decoded = rawValue
     .replace(/\\r\\n/g, "\n")
     .replace(/\\n/g, "\n")
     .replace(/\\t/g, "\t")
@@ -79,4 +79,24 @@ export function extractMarkdownFromJsonLikeText(raw: string): string | null {
     .trim();
 
   return decoded || null;
+}
+
+function scanJsonStringValue(input: string): string | null {
+  if (input[0] !== "\"") return null;
+  let escapeNext = false;
+  for (let i = 1; i < input.length; i++) {
+    const ch = input[i];
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escapeNext = true;
+      continue;
+    }
+    if (ch === "\"") {
+      return input.slice(1, i);
+    }
+  }
+  return null;
 }
