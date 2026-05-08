@@ -20,6 +20,9 @@ export async function register() {
   const { startOrphanJobSweep } = await import("@/lib/background/orphan-jobs");
   startOrphanJobSweep();
 
+  const { runSecretMigrationOnce } = await import("@/lib/background/secret-migration");
+  void runSecretMigrationOnce();
+
   const { startLongpollWorkers } = await import("@/lib/integrations/longpoll");
   startLongpollWorkers();
 }
