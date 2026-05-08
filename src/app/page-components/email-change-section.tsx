@@ -118,7 +118,7 @@ export function EmailChangeSection({ t }: { t: Translator }) {
             <p>
               {t(
                 "Chiedi all'operatore di configurare SMTP, oppure contatta il proprietario del nuovo indirizzo per recuperare il link di conferma dai log del server.",
-                "Ask the operator to configure SMTP, or contact the owner of the new address — the confirmation link is logged on the server.",
+                "Ask the operator to configure SMTP, or contact the owner of the new address. The confirmation link is logged on the server.",
                 "Demande à l'opérateur de configurer SMTP, ou demande au propriétaire de la nouvelle adresse de récupérer le lien dans les logs du serveur.",
                 "Pídele al operador que configure SMTP o que el propietario de la nueva dirección recupere el enlace en los registros del servidor.",
                 "Bitte den Operator, SMTP zu konfigurieren, oder lass den Inhaber der neuen Adresse den Link aus den Server-Logs abrufen.",

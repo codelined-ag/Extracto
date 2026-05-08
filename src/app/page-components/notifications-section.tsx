@@ -144,7 +144,7 @@ export function NotificationsSection({ t }: NotificationsSectionProps) {
             "Get notified when a long job finishes, even with the tab closed.",
             "Soyez notifié à la fin d'un job long, même quand l'onglet est fermé.",
             "Recibe una notificación al terminar un job largo, incluso con la pestaña cerrada.",
-            "Erhalte eine Benachrichtigung, wenn ein langer Job endet — auch bei geschlossenem Tab.",
+            "Erhalte eine Benachrichtigung, wenn ein langer Job endet, auch bei geschlossenem Tab.",
           )}
         </p>
       </header>

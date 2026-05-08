@@ -149,7 +149,7 @@ const SCOPE_HINTS: Record<string, [string, string, string, string, string]> = {
 };
 
 function formatDate(value: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   try {
     return new Date(value).toLocaleString();
   } catch {
