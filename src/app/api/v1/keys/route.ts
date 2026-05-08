@@ -112,7 +112,7 @@ export const POST = withSessionAuth("mutation", "API keys", async (request: Next
     {
       key: { ...created, scopes, plaintext },
       warning:
-        "Store this key now — it will not be shown again. Use it as Authorization: Bearer <key>.",
+        "Store this key now. It will not be shown again. Use it as Authorization: Bearer <key>.",
     },
     { status: 201 }
   );

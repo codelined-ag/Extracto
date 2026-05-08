@@ -75,7 +75,7 @@ export class OpenSearchAdapter implements VectorStoreAdapter {
           if (failures.length >= 3) break;
         }
       }
-      const summary = failures.length > 0 ? ` — ${failures.join("; ")}` : "";
+      const summary = failures.length > 0 ? `: ${failures.join("; ")}` : "";
       const failingCount = (json.items ?? []).filter((i) => Object.values(i)[0]?.error).length;
       throw new VectorStoreError(
         "opensearch",

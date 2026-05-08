@@ -615,7 +615,7 @@ server.tool(
 
 server.tool(
   "kb_export",
-  "Chunk + embed + push a completed OCR job's text to a vector store. Strategies: fixed (char-window with overlap), sentence (sentence-merge), paragraph (paragraph-merge), hierarchical (markdown-heading-aware with breadcrumb metadata), semantic (embedding-similarity boundary detection — embeds sentences once, splits where consecutive cosine distance exceeds the breakpointPercentile).",
+  "Chunk + embed + push a completed OCR job's text to a vector store. Strategies: fixed (char-window with overlap), sentence (sentence-merge), paragraph (paragraph-merge), hierarchical (markdown-heading-aware with breadcrumb metadata), semantic (embedding-similarity boundary detection: embeds sentences once, splits where consecutive cosine distance exceeds the breakpointPercentile).",
   {
     jobId: z.string(),
     collectionName: z.string(),
@@ -875,7 +875,7 @@ server.tool(
 
 server.tool(
   "webhooks_create",
-  "Register a new webhook. Returns a one-time HMAC signing secret in the response. Save it now — it is not shown again. The receiver must verify the X-Extracto-Signature header (t=<unix>,v1=<hex>) using HMAC-SHA256 of `${timestamp}.${body}` with the secret.",
+  "Register a new webhook. Returns a one-time HMAC signing secret in the response. Save it now; it is not shown again. The receiver must verify the X-Extracto-Signature header (t=<unix>,v1=<hex>) using HMAC-SHA256 of `${timestamp}.${body}` with the secret.",
   {
     url: z.string().url(),
     events: z.array(z.enum(["job.created", "job.completed", "job.failed", "watcher.ingested"])).min(1),

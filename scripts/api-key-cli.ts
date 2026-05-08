@@ -91,7 +91,7 @@ async function cmdCreate(
     select: { id: true, name: true, prefix: true, createdAt: true },
   });
 
-  console.log("API key created. Store it now — it will not be shown again.");
+  console.log("API key created. Store it now. It will not be shown again.");
   console.log(`  id:        ${created.id}`);
   console.log(`  user:      ${user.email}`);
   console.log(`  name:      ${created.name}`);

@@ -99,7 +99,7 @@ export const POST = withMutationAuth("webhooks:write", async (request: NextReque
     {
       webhook: { ...created, events, secret },
       warning:
-        "Store this signing secret now — it will not be shown again. Verify deliveries with the X-Extracto-Signature header.",
+        "Store this signing secret now. It will not be shown again. Verify deliveries with the X-Extracto-Signature header.",
     },
     { status: 201 }
   );
