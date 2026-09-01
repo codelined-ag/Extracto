@@ -60,7 +60,7 @@
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.5.0",
     "web-push": "^3.6.7",
-    "zod": "4.4.1"
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.4",
@@ -81,6 +81,6 @@
     "vitest": "^4.1.11"
   },
   "overrides": {
-    "zod": "4.3.5"
+    "zod": "4.5.4"
   }
 }
